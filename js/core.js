@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.3.1';
+  Opus.VERSION = '1.4.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -77,7 +77,7 @@
       deleted: { workouts: {} }, // { id: when } workouts deleted on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
-        tabs: ['today', 'food', 'train', 'money', 'home'],
+        tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
         hidden: [],
         rest: {},          // overrides by type, seconds
         sound: true,

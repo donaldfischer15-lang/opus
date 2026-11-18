@@ -21,7 +21,7 @@
     const U = Opus.ui;
     const bar = document.getElementById('tabbar');
     bar.innerHTML = '<div class="in" role="tablist">' + enabledTabs().map(id =>
-      '<button class="tab' + (id === current ? ' on' : '') + '" role="tab" aria-selected="' + (id === current) + '" data-tab="' + id + '" type="button">' +
+      '<button class="tab' + (id === current ? ' on' : '') + (id !== current && registry[id].badge && registry[id].badge() ? ' new' : '') + '" role="tab" aria-selected="' + (id === current) + '" data-tab="' + id + '" type="button">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true">' + (U.I[registry[id].icon] || '') + '</svg>' + registry[id].title + '</button>').join('') + '</div>';
     bar.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { if (b.dataset.tab === current) { window.scrollTo({ top: 0, behavior: 'smooth' }); } else go(b.dataset.tab); });
   }

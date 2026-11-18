@@ -1052,7 +1052,7 @@ window.OPUS_EXAMPLE_PLAN = {
       "goal": "I write clearly",
       "sentences": 5,
       "prompts": [
-        "Explain one thing you did at work yesterday to someone who has never been on a job site.",
+        "Explain how something you use every day works, to someone who has never seen it.",
         "Describe a place you know well in five sentences.",
         "What is one thing you want to be true by spring? Say why.",
         "Teach the steps of a task you know well.",
@@ -1072,3 +1072,39 @@ window.OPUS_EXAMPLE_PLAN = {
     ]
   }
 };
+
+/* Example Growth page, shown only with the example plan. Cassius writes the real one (growth.json). */
+window.OPUS_EXAMPLE_GROWTH = (function () {
+  const k = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  return {
+    format: 'opus-growth', version: 1, updated: new Date().toISOString(),
+    energy: { text: 'You don’t have to feel ready to begin. Start the hard thing small, and let it make you ready.', from: null, date: k(0) },
+    creed: { lines: ['I keep my word, first of all to myself.', 'I do the hard thing before the easy one.', 'I protect the people in my care.'] },
+    lesson: {
+      date: k(0), subject: 'Philosophy and how to live', title: 'What is up to you', minutes: 4,
+      body: 'Epictetus opens his handbook with one line: some things are within our power and some are not.\n\nYour judgments, your effort and your choices are yours. Other people’s opinions, the weather and the past are not.\n\nThe whole skill is sorting, quickly and honestly, which pile a worry belongs in. Then you spend your strength only on the first pile.\n\n- **In your power:** what you do next, how you answer, what you practice.\n- **Not in your power:** how others take it, what already happened.',
+      question: 'Name one thing you worried about this week. Which pile does it belong in, and what is the one part of it you can act on?'
+    },
+    prompt: { date: k(0), text: 'Describe a decision you made this week as if you were explaining it to a younger brother.' },
+    prompts: [
+      { id: 'p1', text: 'Describe a decision you made this week as if you were explaining it to a younger brother.' },
+      { id: 'p2', text: 'Argue for something you believe in five sentences. Then argue against it in five.' },
+      { id: 'p3', text: 'Explain how one everyday machine works, from the first step to the last.' }
+    ],
+    subjects: [
+      { id: 'philosophy', name: 'Philosophy and how to live', now: 'The Stoics: what is up to you', next: 'Aristotle on habits' },
+      { id: 'logic', name: 'Logic and argument', now: 'What makes an argument valid', next: 'Common fallacies' },
+      { id: 'science', name: 'Science and how things work', now: 'Energy: where it comes from', next: 'How engines turn heat into motion' }
+    ],
+    reading: [
+      { id: 'enchiridion', title: 'The Enchiridion', author: 'Epictetus', status: 'reading', pages: 60, why: 'Short, plain and practical. It is the base for the lessons this month.' },
+      { id: 'meditations', title: 'Meditations', author: 'Marcus Aurelius', status: 'next', pages: 250, why: 'A ruler’s private notes on doing his duty well.' }
+    ],
+    lessons: [
+      { date: k(1), subject: 'Logic and argument', title: 'Claims need reasons', body: 'An argument is a claim plus the reasons for it. If you can’t say the reasons, you have an opinion, not an argument.', question: 'Write one claim you believe and the two best reasons for it.', takeaway: 'Ask of every claim: what are the reasons?' }
+    ],
+    notes: [
+      { date: k(1), text: 'Good work this week. Your sentences are getting shorter and clearer. Keep the point first.' }
+    ]
+  };
+})();

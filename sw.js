@@ -1,9 +1,9 @@
 /* Opus service worker: keeps the app working offline. Bump VERSION when files change. */
-const VERSION = 'opus-1.3.1';
+const VERSION = 'opus-1.4.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js',
-  'js/tabs/today.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/settings.js', 'js/sync.js',
+  'js/tabs/today.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/growth.js', 'js/tabs/settings.js', 'js/sync.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 self.addEventListener('install', e => {

@@ -3,16 +3,18 @@
   It lets Grok read the owner's private opus-data repo and save two files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
     - grok.json  (Grok's outbox: money weeks, weigh-ins, balances, workouts)
+    - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, reading, notes)
   It never writes logs.json or anything else.
 
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
     ACCESS_KEY    a long random string; the helper only answers at https://<worker>/<ACCESS_KEY>/mcp
-  One plain variable:
+  Plain variables (optional):
     REPO          donaldfischer15-lang/opus-data   (default below)
+    TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -128,11 +130,74 @@ function mergeOutbox(cur, add) {
   return { out, report, any };
 }
 
+/* ---------- the Growth page (Cassius) ---------- */
+const G_LISTS = { lessons: 'date', notes: 'date', prompts: 'id', reading: 'id', subjects: 'id' };
+const G_CAP = { lessons: 120, notes: 60, prompts: 40, reading: 60, subjects: 12 };
+const G_ONE = ['energy', 'creed', 'lesson', 'prompt'];
+const slug = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+function blankGrowth() { return { format: 'opus-growth', version: 1, updated: null, energy: null, creed: { lines: [] }, lesson: null, prompt: null, prompts: [], subjects: [], reading: [], lessons: [], notes: [] }; }
+function mergeGrowth(old, add, today) {
+  const out = Object.assign(blankGrowth(), isObj(old) && old.format === 'opus-growth' ? old : {});
+  const done = [], bad = [];
+  for (const k of Object.keys(add)) {
+    const v = add[k];
+    if (G_ONE.includes(k)) {
+      if (v === null) { out[k] = k === 'creed' ? { lines: [] } : null; done.push(k + ' cleared'); continue; }
+      if (k === 'creed') {
+        const lines = Array.isArray(v) ? v : isObj(v) && Array.isArray(v.lines) ? v.lines : null;
+        if (!lines || !lines.every(x => typeof x === 'string')) { bad.push('creed needs { "lines": ["...", "..."] }'); continue; }
+        out.creed = { lines: lines.map(x => x.trim()).filter(Boolean).slice(0, 20) }; done.push('creed'); continue;
+      }
+      const o = typeof v === 'string' ? { text: v } : v;
+      if (!isObj(o)) { bad.push(k + ' must be an object'); continue; }
+      const e = Object.assign({}, o); if (!isDate(e.date)) e.date = today;
+      if ((k === 'energy' || k === 'prompt') && !(typeof e.text === 'string' && e.text.trim())) { bad.push(k + ' needs "text"'); continue; }
+      if (k === 'energy' && !('from' in e)) e.from = null;
+      if (k === 'lesson') {
+        if (!(typeof e.title === 'string' && e.title.trim()) || typeof e.body !== 'string') { bad.push('lesson needs "title" and "body"'); continue; }
+        const prev = out.lesson;
+        if (isObj(prev) && prev.title && prev.date !== e.date) { out.lessons = (out.lessons || []).filter(x => x.date !== prev.date).concat([prev]); done.push('yesterday\'s lesson filed in lessons'); }
+      }
+      out[k] = e; done.push(k); continue;
+    }
+    if (G_LISTS[k]) {
+      const key = G_LISTS[k];
+      if (!Array.isArray(v)) { bad.push(k + ' must be a list'); continue; }
+      let list = Array.isArray(out[k]) ? out[k].slice() : [];
+      let n = 0;
+      for (const raw of v) {
+        let e = typeof raw === 'string' && k === 'prompts' ? { text: raw } : raw;
+        if (!isObj(e)) { bad.push('a ' + k + ' entry is not an object'); continue; }
+        e = Object.assign({}, e);
+        if (key === 'id' && !e.id) e.id = slug(e.title || e.name || e.text);
+        if (key === 'date' && !isDate(e.date)) e.date = today;
+        if (!e[key]) { bad.push('a ' + k + ' entry has no ' + key); continue; }
+        // notes can share a date: they are told apart by date + what they are on
+        const same = x => k === 'notes' ? x.date === e.date && (x.on || '') === (e.on || '') : x[key] === e[key];
+        if (e.delete === true) { const before = list.length; list = list.filter(x => !same(x)); if (list.length < before) n++; continue; }
+        const i = list.findIndex(same);
+        if (i >= 0) list[i] = e; else list.push(e);
+        n++;
+      }
+      if (key === 'date') list.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      out[k] = list.slice(-G_CAP[k]);
+      done.push(n + ' ' + k);
+      continue;
+    }
+    if (['format', 'version', 'updated'].includes(k)) continue;
+    bad.push('"' + k + '" is not a Growth section (use energy, creed, lesson, prompt, prompts, subjects, reading, lessons, notes)');
+  }
+  out.format = 'opus-growth'; out.version = 1; out.updated = new Date().toISOString();
+  return { out, done, bad };
+}
+
 /* ---------- tools ---------- */
-const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json' };
+const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json' };
 const TOOLS = [
-  { name: 'read_opus_file', description: 'Read one file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, what the owner logged on the phone (read only). "outbox" is grok.json, entries you added that Opus copies into the logs.',
-    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox'] } }, required: ['file'] } },
+  { name: 'read_opus_file', description: 'Read one file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, what the owner logged on the phone (read only). "outbox" is grok.json, entries you added that Opus copies into the logs. "growth" is growth.json, the Growth page that Cassius (the teacher) fills in.',
+    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth'] } }, required: ['file'] } },
+  { name: 'update_growth', description: 'Save to the Growth page (growth.json), the teacher\'s page in Opus. Send only the sections you change, as in GUIDE.md section 5. energy, creed, lesson and prompt are replaced whole (a missing "date" becomes today; a new lesson files the old one in "lessons"). prompts, subjects, reading, lessons and notes are lists: an entry with the same key replaces the old one (prompts, subjects and reading by "id"; lessons by "date"; notes by "date" and "on"), new ones are added, and { key, "delete": true } removes one. Never invent facts about the owner.',
+    inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Read the plan first and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
   { name: 'add_to_outbox', description: 'Add or correct entries the owner asked you to log: money weeks, weigh-ins, debt balance snapshots or workouts, in the grok.json format from GUIDE.md section 4. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
@@ -145,9 +210,9 @@ async function callTool(name, args, env) {
   const G = gh(env);
   args = args || {};
   if (name === 'read_opus_file') {
-    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs or outbox.', true);
+    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox or growth.', true);
     const r = await G.get(f);
-    if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : ''));
+    if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Use update_growth to start it.' : ''));
     return text(r.text);
   }
   if (name === 'save_plan') {
@@ -178,6 +243,18 @@ async function callTool(name, args, env) {
     await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, 'Grok: ' + change);
     return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' Skipped:\n- ' + report.bad.join('\n- ') : '') + ' Opus copies them in the next time the owner opens it.');
   }
+  if (name === 'update_growth') {
+    let add; try { add = parseMaybe(args.sections); } catch (e) { return text('The sections are not valid JSON: ' + e.message, true); }
+    if (!isObj(add) || !Object.keys(add).length) return text('sections must be an object like { "energy": { "text": "..." } }.', true);
+    const cur = await G.get(FILES.growth);
+    let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) { old = null; } }
+    let today; try { today = new Intl.DateTimeFormat('en-CA', { timeZone: env.TIME_ZONE || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { today = new Date().toISOString().slice(0, 10); }
+    const { out, done, bad } = mergeGrowth(old, add, typeof args.today === 'string' && isDate(args.today) ? args.today : today);
+    if (!done.length) return text('Nothing saved.' + (bad.length ? ' Problems:\n- ' + bad.join('\n- ') : ''), true);
+    const change = String(args.change || 'growth').replace(/\s+/g, ' ').slice(0, 100);
+    await G.put(FILES.growth, JSON.stringify(out, null, 2) + '\n', cur.sha, 'Cassius: ' + change);
+    return text('Saved to the Growth page: ' + done.join(', ') + '.' + (bad.length ? ' Skipped:\n- ' + bad.join('\n- ') : '') + ' The owner sees it the next time Opus opens.');
+  }
   return text('Unknown tool ' + name, true);
 }
 
@@ -188,7 +265,7 @@ async function handleRpc(msg, env) {
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return err(-32600, 'Invalid request');
   if (id === undefined) return null; // a notification: nothing to answer
-  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"). Save plan changes with save_plan and things you log with add_to_outbox. You can never change logs.json.' });
+  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"). Save plan changes with save_plan, things you log with add_to_outbox, and the Growth page with update_growth. You can never change logs.json.' });
   if (method === 'ping') return ok({});
   if (method === 'tools/list') return ok({ tools: TOOLS });
   if (method === 'tools/call') {

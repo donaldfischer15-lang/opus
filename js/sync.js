@@ -17,7 +17,7 @@
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store;
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
-  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md' };
+  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json' };
 
   const ls = {
     get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -56,7 +56,9 @@
     ['money.weeks', w => w.weekEnding],
     ['money.balances', w => w.date],
     ['reviews', r => r.weekOf],
-    ['writing', w => w.date]
+    ['writing', w => (w.kind ? w.date + ':' + w.kind : w.date)],
+    ['reading', r => r.id],
+    ['kept', k => k.date]
   ];
   const SETS = ['checks', 'groceries', 'prep'];
   function logsOf(d) {
@@ -252,8 +254,24 @@
   async function run(opts) {
     opts = opts || {};
     const local = Store.data;
-    const [rp, rl, rg] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok)]);
+    const [rp, rl, rg, rgw] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok), getFile(F.growth)]);
     const notes = [];
+
+    // Cassius's growth page (read only: only Cassius writes growth.json)
+    if (!rgw.missing) {
+      let g = null;
+      try { g = parseJSON(rgw.text); } catch (e) { problem('growth', 'growth.json is not valid JSON, so the Growth page kept what it had. Ask Cassius to fix it.'); }
+      if (g) {
+        if (g.format !== 'opus-growth') problem('growth', 'growth.json should have "format": "opus-growth", so the Growth page kept what it had.');
+        else {
+          problem('growth', null);
+          if (!eq(g, local.growth)) {
+            local.growth = g; applying = true; Store.save(true); applying = false;
+            S.refreshLater = true;
+          }
+        }
+      }
+    }
 
     // plan
     let R = null, planBroken = null;
@@ -395,7 +413,10 @@
     window.addEventListener('online', () => { if (cfg && cfg.token) sync({ quiet: true }); });
     window.addEventListener('offline', () => { if (cfg && cfg.token) setStatus('offline'); });
     // a sync that waited for an open sheet runs once the sheet closes
-    setInterval(() => { if (S.waiting && !Opus.ui.topSheet() && !S.busy) { S.waiting = false; sync({ quiet: false }); } }, 3000);
+    setInterval(() => {
+      if (S.waiting && !Opus.ui.topSheet() && !S.busy) { S.waiting = false; sync({ quiet: false }); }
+      if (S.refreshLater && !Opus.ui.topSheet()) { S.refreshLater = false; try { Opus.renderBar(); Opus.refresh(); } catch (e) {} }
+    }, 3000);
   });
 
   /* ---------- connect, disconnect, undo ---------- */

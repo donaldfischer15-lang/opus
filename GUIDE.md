@@ -4,13 +4,14 @@ Opus is a personal phone app (a home-screen web app). It reads **one plan file**
 
 ## Where the data lives
 
-The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Opus pulls it every time it opens and pushes the phone's logs back. Four files sit at the top of the repo:
+The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Opus pulls it every time it opens and pushes the phone's logs back. Five files sit at the top of the repo:
 
 | file | who writes it | what it is |
 |---|---|---|
 | `plan.json` | **you** and the app | the plan (section 1). Edit it in place. |
 | `logs.json` | **only the app** | everything logged on the phone (section 3). Read it, never edit it. |
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
+| `growth.json` | **only the teacher** (Cassius) | the Growth page: today's words, the lesson, prompts, creed, reading, notes (section 5). The app only reads it. |
 | `GUIDE.md` | the app | this guide. |
 
 If the owner hasn't set up the repo, or your connector can't write files, use the paste route instead: reply with the whole file in one code block and the owner pastes it into Opus (Settings › Plan › Import plan, or Money › Weekly money import).
@@ -199,7 +200,7 @@ The app previews the block and lists any problems before saving.
 | key | shape |
 |---|---|
 | `plan` | the plan file above (backup only) |
-| `checks` | `{ "2026-11-24": ["breakfast", "home:trash", "workout", ...] }` items checked off each day |
+| `checks` | `{ "2026-11-24": ["breakfast", "home:trash", "workout", ...] }` items checked off each day. `"growth-lesson"` on a date = the owner marked that day's lesson as learned. |
 | `workouts` | `[{ "id", "workout": "lower-a", "name", "date", "started", "finished", "sets": [{ "ex", "weight", "reps", "at", "pr" }], "conditioning": true, "warmup": [...], "cooldown": [...], "note": "..." }]` (`warmup` and `cooldown` list the items ticked; `pr` true = new best estimated 1-rep max; `workout` is `"free"` for a session built on the spot; `catchUp` true = logged afterwards, so it has no real duration) |
 | `active` | a workout in progress, or `null` (backup only) |
 | `weights` | `[{ "date", "lb" }]` |
@@ -208,7 +209,9 @@ The app previews the block and lists any problems before saving.
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
 | `reviews` | `[{ "weekOf", "worked", "slipped", "change", "saved" }]` |
-| `writing` | `[{ "date", "text", "words", "sentences", "prompt" }]` |
+| `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; no `kind` = the day's writing practice) |
+| `reading` | `[{ "id", "page", "date", "done" }]` the owner's page in each book from `growth.json` `reading` (`done` true = finished) |
+| `kept` | `[{ "date", "text", "from" }]` the Growth words the owner chose to keep |
 | `deleted` | `{ "workouts": { "<id>": "<when>" } }` workouts the owner deleted, so they stay deleted |
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
@@ -245,6 +248,36 @@ Put only new or corrected entries here. You may replace the whole file each time
 - If the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
 - A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
 - Same rules as everywhere: plain numbers, `null` or leave the line out when unknown, nothing invented.
+
+---
+
+## 5. The Growth page (`growth.json`, `"format": "opus-growth"`)
+
+The Growth tab is the teacher's page. The teacher (Cassius) fills it in; the owner reads it, writes, and marks progress, which goes in `logs.json`. Through the Opus helper, save it with **`update_growth`**, sending only the sections you change. Read the current page with `read_opus_file` and `"file": "growth"`.
+
+```json
+{
+  "format": "opus-growth", "version": 1, "updated": "2026-11-24T07:30:00Z",
+  "energy":  { "text": "Start the hard thing small.", "from": null, "date": "2026-11-24" },
+  "creed":   { "lines": ["I keep my word.", "I do the hard thing first."] },
+  "lesson":  { "date": "2026-11-24", "subject": "Logic and argument", "title": "Claims need reasons", "minutes": 4,
+               "body": "Paragraphs split by a blank line.\n\n- lists start with a dash\n\n> a quote starts with >\n\n**bold** and *italic* work.",
+               "question": "One question for the owner to answer in writing." },
+  "prompt":  { "date": "2026-11-24", "text": "Today's writing prompt." },
+  "prompts": [ { "id": "door", "text": "A prompt for other days." } ],
+  "subjects":[ { "id": "logic", "name": "Logic and argument", "now": "What makes an argument valid", "next": "Common fallacies" } ],
+  "reading": [ { "id": "enchiridion", "title": "The Enchiridion", "author": "Epictetus", "status": "reading", "pages": 60, "why": "One line on why this book." } ],
+  "lessons": [ { "date": "2026-11-23", "subject": "...", "title": "...", "body": "...", "question": "...", "takeaway": "One line to remember." } ],
+  "notes":   [ { "date": "2026-11-24", "text": "An honest note on the owner's writing.", "on": "writing:2026-11-24" } ]
+}
+```
+- **energy** sits at the top of the page: one short piece of positive energy for the day, motivational or just good. If it is a quote, `from` names who said it, and it must be real and worded right. Leave `from` null when the words are yours.
+- **lesson** is today's lesson. When a new one arrives on a new date, the old one moves into `lessons` by itself. `minutes` is optional (the app works it out). `takeaway` is optional.
+- **prompt** is today's writing prompt; it comes first in the owner's writing sheet on that date. `prompts` are for the other days.
+- **reading** `status` is `reading`, `next` or `done`. The owner logs the page they're on (logs `reading`).
+- **notes**: a note with `"on": "writing:<date>"` or `"on": "lesson:<date>"` shows under that piece of writing; a note with no `on` shows under *From Cassius*. Read the owner's writing in `logs.json` before you comment on it.
+- Lists are matched by key: `prompts`, `subjects` and `reading` by `id`; `lessons` by `date`; `notes` by `date` and `on`. Same key again replaces an entry, `{ "id": "door", "delete": true }` removes one. The helper keeps the last 120 lessons and 60 notes.
+- Change `creed`, `subjects` and `reading` only when you and the owner have talked it through. Never invent facts about the owner.
 
 ---
 
