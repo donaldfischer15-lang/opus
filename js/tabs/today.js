@@ -80,17 +80,18 @@
       const sec = h('<div class="sec" data-part="' + part + '"><div class="sh"><span class="r">' + numerals[part] + '</span><span class="t">' + Plan.partLabel(part, d) + '</span><span class="c num"></span></div><div class="card"></div></div>');
       const card = sec.querySelector('.card');
       for (const it of its) {
-        const flow = !!FLOW[it.kind];
-        const row = h('<div class="row tap' + (Plan.isChecked(d, it.id) ? ' done' : '') + '" data-id="' + U.esc(it.id) + '" role="checkbox" aria-checked="' + Plan.isChecked(d, it.id) + '" tabindex="0">' +
+        const meal = it.kind === 'meal' && it.meal && Opus.food && Opus.food.eatSheet, flow = !!FLOW[it.kind] || meal;
+        const ate = meal && Plan.isChecked(d, it.id) ? Opus.food.eatenLine(d, it) : null;
+        const row = h('<div class="row tap' + (Plan.isChecked(d, it.id) ? ' done' : '') + (ate ? ' part' : '') + '" data-id="' + U.esc(it.id) + '" role="checkbox" aria-checked="' + Plan.isChecked(d, it.id) + '" tabindex="0">' +
           '<button class="ck" type="button" aria-label="Mark done">' + ui.CK + '</button>' +
-          '<span class="tx"><b>' + U.esc(it.title) + '</b>' + (it.detail ? '<small>' + U.esc(it.detail) + '</small>' : '') + '</span>' +
+          '<span class="tx"><b>' + U.esc(it.title) + '</b>' + (ate || it.detail ? '<small>' + U.esc(ate || it.detail) + '</small>' : '') + '</span>' +
           '<span class="tm num">' + (it.time ? U.fmtTime(it.time) : '') + '</span>' + (flow ? ui.icon('chev', 'chev ico') : '') + '</div>');
         const toggle = () => {
           const on = !Plan.isChecked(d, it.id); Plan.setChecked(d, it.id, on);
           row.setAttribute('aria-checked', on); ui.buzz(on ? 12 : 6); refreshInPlace(v);
         };
         row.querySelector('.ck').onclick = e => { e.stopPropagation(); toggle(); };
-        row.onclick = () => (flow ? openFlow(it, () => refreshInPlace(v)) : toggle());
+        row.onclick = () => (meal ? Opus.food.eatSheet(d, it) : flow ? openFlow(it, () => refreshInPlace(v)) : toggle());
         row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); } };
         card.appendChild(row);
       }

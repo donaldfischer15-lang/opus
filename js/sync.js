@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
-  const HELPER = '1.3.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.4.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -61,15 +61,20 @@
     ['reviews', r => r.weekOf],
     ['writing', w => (w.kind ? w.date + ':' + w.kind : w.date)],
     ['reading', r => r.id],
-    ['kept', k => k.date]
+    ['kept', k => k.date],
+    ['eaten', e => e.id]
   ];
+  const TOMBS = ['workouts', 'eaten']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
+  /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
+  const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));
   const SETS = ['checks', 'groceries', 'prep'];
   function logsOf(d) {
     const o = { format: 'opus-logs', version: 1 };
     for (const k of SETS) o[k] = d[k] || {};
     o.money = {};
     for (const [p] of KEYED) setp(o, p, getp(d, p) || []);
-    o.deleted = { workouts: ((d.deleted || {}).workouts) || {} };
+    o.deleted = tombsOf(d);
     o.prefs = prefsOf(d);
     return o;
   }
@@ -95,9 +100,9 @@
   /* keyed lists: same rule. Both changed the same entry: this phone wins. */
   function mergeKeyed(b, l, r, key, tomb) {
     const mb = new Map((b || []).map(x => [key(x), x])), ml = new Map(), out = [];
-    for (const x of l || []) { const k = key(x); if (k == null) { out.push(x); continue; } if (tomb && tomb[k]) continue; ml.set(k, x); out.push(x); }
+    for (const x of l || []) { const k = key(x); if (k == null) { out.push(x); continue; } if (buried(tomb, k, x)) continue; ml.set(k, x); out.push(x); }
     for (const R of r || []) {
-      const k = key(R); if (k == null || (tomb && tomb[k])) continue;
+      const k = key(R); if (k == null || buried(tomb, k, R)) continue;
       const L = ml.get(k), B = mb.get(k);
       if (L) { if (!eq(L, R) && eq(B, L)) out[out.indexOf(L)] = R; continue; }
       if (B && eq(B, R)) continue; // removed on this phone, unchanged there: stays removed
@@ -107,10 +112,14 @@
   }
   function mergeLogs(B, L, R) {
     const o = { format: 'opus-logs', version: 1, money: {} };
-    const tomb = Object.assign({}, ((R || {}).deleted || {}).workouts, ((L || {}).deleted || {}).workouts);
-    o.deleted = { workouts: tomb };
+    o.deleted = {};
+    for (const t of TOMBS) { // both sides' removals; the later time wins
+      const a = tombsOf(R)[t], b = tombsOf(L)[t], m = Object.assign({}, a);
+      for (const [k, v] of Object.entries(b)) if (!m[k] || String(v) > String(m[k])) m[k] = v;
+      o.deleted[t] = m;
+    }
     for (const k of SETS) o[k] = mergeSetMap(B && B[k], L[k], R && R[k]);
-    for (const [p, key] of KEYED) setp(o, p, mergeKeyed(B && getp(B, p), getp(L, p), R && getp(R, p), key, p === 'workouts' ? tomb : null));
+    for (const [p, key] of KEYED) setp(o, p, mergeKeyed(B && getp(B, p), getp(L, p), R && getp(R, p), key, TOMBS.includes(p) ? o.deleted[p] : null));
     o.prefs = (L && L.prefs) || (R && R.prefs) || {};
     return o;
   }
@@ -119,8 +128,8 @@
     if (!R) return 0;
     let n = 0;
     for (const [p, key] of KEYED) {
-      const keep = new Set((getp(M, p) || []).map(key)), tomb = p === 'workouts' ? (M.deleted || {}).workouts || {} : {};
-      for (const x of getp(R, p) || []) { const k = key(x); if (k != null && !keep.has(k) && !tomb[k]) n++; }
+      const keep = new Set((getp(M, p) || []).map(key)), tomb = TOMBS.includes(p) ? tombsOf(M)[p] : {};
+      for (const x of getp(R, p) || []) { const k = key(x); if (k != null && !keep.has(k) && !buried(tomb, k, x)) n++; }
     }
     return n;
   }
@@ -157,7 +166,8 @@
     ['money.weeks', w => w.weekEnding, w => isDate(w.weekEnding) && (w.paycheck == null || num(w.paycheck)) && ['spent', 'bills', 'debtPayments', 'balances'].every(k => w[k] == null || (Array.isArray(w[k]) && w[k].every(x => isObj(x) && num(x.amount))))],
     ['money.balances', w => w.date, w => isDate(w.date) && isObj(w.debts)],
     ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free)) && (c.held == null || (Array.isArray(c.held) && c.held.every(x => isObj(x) && num(x.amount)))) && (c.accounts == null || (Array.isArray(c.accounts) && c.accounts.every(x => isObj(x) && num(x.amount))))],
-    ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)]
+    ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)],
+    ['eaten', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.name === 'string' && !!e.name.trim() && (e.amount == null || num(e.amount)) && (e.macros == null || (isObj(e.macros) && ['kcal', 'protein', 'carbs', 'fat'].every(k => e.macros[k] == null || num(e.macros[k]))))]
   ];
   /* a money week from Grok does what a pasted one does: fills in debt balances and keeps a balance snapshot */
   function moneyWeekSideEffects(d, w) {
@@ -177,11 +187,12 @@
       const list = getp(d, p) || []; setp(d, p, list);
       for (const x of getp(g, p) || []) {
         const k = isObj(x) ? key(x) : null;
-        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' ? 'id' : 'date')); continue; }
+        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' || p === 'eaten' ? 'id' : 'date')); continue; }
         const i = list.findIndex(y => key(y) === k);
-        if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; } continue; }
+        if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
         const it = Object.assign({}, x, { by: 'grok' });
+        if (p === 'eaten') { if (it.item == null) it.extra = true; if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString(); if (it.macros && it.macros.estimate == null) it.macros = Object.assign({ estimate: true }, it.macros); }
         if (p === 'money.cash') { // cash on hand: the newest reading wins, whoever made it
           if (!it.at) it.at = i < 0 ? new Date().toISOString() : list[i].by === 'grok' ? list[i].at : ''; // no time from Grok: never beats a reading you made
           if (i < 0) { list.push(it); r.added++; }
@@ -496,7 +507,10 @@
       '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs. Change one part at a time with update_plan_section (for example section "money.debts"), keep every id, and change only what I ask for or what clearly needs it.',
       '- Long files come in parts; ask for the next part, or read one section (like "money") at a time. The "sync" section of my logs says when Opus last synced and what it took from your outbox.',
       '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
-      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, or my cash on hand.',
+      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, my cash on hand, or food I ate that is not a planned meal.',
+      '- Meals have parts (4 eggs, 1 banana) with macros for each. When I change a meal, change its parts, serving, macros, ingredients and prep together with update_plan_section section "food".',
+      '- Keep Opus current without being asked: whenever something comes up in any chat that belongs in Opus (a bill, a debt, a payday, a meal change, a weight, food I ate), save it right away, then tell me in one line what you saved. Don’t save guesses; ask me for the one missing detail.',
+      '- When I say "Sync Opus", follow "Keeping Opus current" in the guide: check what Opus picked up, save my cash and money week, fill the blanks you can, apply changes I asked for, then tell me what you saved and what only I can answer.',
       '- Free cash is the top of my Money tab: cash I can use now that isn’t needed for bills or anything else before payday. Whenever you look at my accounts, add a "money.cash" entry with today’s date, the time, my cash, and every amount that has to come out before payday (with due dates), as GUIDE.md section 4 shows.',
       '- Never invent numbers. Leave out anything you don’t know.',
       '- After each change, tell me in one line what you saved.',

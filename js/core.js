@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.6.0';
+  Opus.VERSION = '1.7.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -74,7 +74,8 @@
       prep: {},            // { weekStartKey: ['step text', ...] done }
       reviews: [],         // [{ weekOf, worked, slipped, change, saved }]
       writing: [],         // [{ date, text, words, sentences }]
-      deleted: { workouts: {} }, // { id: when } workouts deleted on purpose, so a sync doesn't bring them back
+      eaten: [],           // what was actually eaten: part of a planned meal, a meal skipped, or something extra
+      deleted: { workouts: {}, eaten: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
         tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
@@ -112,6 +113,7 @@
       for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
       for (const k of Object.keys(base.settings)) if (d.settings[k] === undefined) d.settings[k] = base.settings[k];
       if (!d.money.weeks) d.money.weeks = []; if (!d.money.balances) d.money.balances = [];
+      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten']) if (!d.deleted[k]) d.deleted[k] = {};
       const shipped = window.OPUS_PRELOADED_PLAN || window.OPUS_EXAMPLE_PLAN;
       if (!d.plan) d.plan = U.clone(shipped);
       else if (shipped && d.plan.name === shipped.name && (Number(shipped.rev) || 1) > (Number(d.plan.rev) || 1)) d.plan = upgradePlan(d.plan, shipped);
@@ -219,20 +221,58 @@
       for (const m of this.weekMeals(d)) for (const s of (m.prep || [])) out.push({ meal: m.name, text: s });
       return out;
     },
-    /* macros: per serving on each meal; a day adds the meals its routine eats */
-    macros(m) { const x = m && m.macros; if (!x) return null; const o = {}; for (const k of ['kcal', 'protein', 'carbs', 'fat']) o[k] = x[k] == null || x[k] === '' ? null : Number(x[k]); o.estimate = x.estimate !== false; return o; },
+    /* macros: per serving on each meal. A meal can list its parts (4 eggs, 1 banana), each with its own
+       macros; then the meal is the sum of its parts. A day adds the meals its routine eats, and when
+       you log what you actually ate (part of a meal, a meal skipped, something extra), that wins. */
+    MK: ['kcal', 'protein', 'carbs', 'fat'],
+    partsOf(m) {
+      if (!m) return [];
+      if (Array.isArray(m.parts) && m.parts.length) return m.parts.map(p => ({ name: p.name, amount: p.amount == null ? 1 : Number(p.amount), unit: p.unit || '', macros: p.macros || null }));
+      // no parts written yet: read them off the serving line ("4 large eggs, 1 banana"), without macros
+      return String(m.serving || '').split(/,\s*(?![^()]*\))|\s+and\s+(?=\d)/).map(t => t.trim()).filter(Boolean).map(t => {
+        const x = t.match(/^(\d+(?:\.\d+)?|[½¼¾])\s*(g|kg|oz|lb|ml|cups?|tbsp|tsp)?\b\s*(.*)$/i);
+        if (!x) return { name: t, amount: 1, unit: '', macros: null };
+        const n = { '½': .5, '¼': .25, '¾': .75 }[x[1]] || Number(x[1]);
+        return { name: x[3] || t, amount: n, unit: (x[2] || '').toLowerCase(), macros: null };
+      });
+    },
+    sumMacros(list) {
+      const o = { kcal: 0, protein: 0, carbs: 0, fat: 0, estimate: false };
+      for (const x of list) { if (!x) continue; for (const k of this.MK) o[k] += Number(x[k]) || 0; if (x.estimate !== false) o.estimate = true; }
+      for (const k of this.MK) o[k] = Math.round(o[k] * 10) / 10;
+      return o;
+    },
+    scaleMacros(x, f) { if (!x) return null; const o = { estimate: x.estimate !== false }; for (const k of this.MK) o[k] = x[k] == null || x[k] === '' ? null : Math.round(Number(x[k]) * f * 10) / 10; return o; },
+    macros(m) {
+      if (!m) return null;
+      const ps = Array.isArray(m.parts) ? m.parts : [];
+      if (ps.length && ps.every(p => p.macros && p.macros.kcal != null)) return this.sumMacros(ps.map(p => p.macros));
+      const x = m.macros; if (!x) return null; const o = {}; for (const k of this.MK) o[k] = x[k] == null || x[k] === '' ? null : Number(x[k]); o.estimate = x.estimate !== false; return o;
+    },
+    eatenOn(d) { const k = typeof d === 'string' ? d : U.key(d); return ((Store.data || {}).eaten || []).filter(e => e.date === k); },
+    eatenEntry(d, itemId) { const k = (typeof d === 'string' ? d : U.key(d)) + ':' + itemId; return ((Store.data || {}).eaten || []).find(e => e.id === k) || null; },
     dayMacros(d, eatenOnly) {
-      const out = { kcal: 0, protein: 0, carbs: 0, fat: 0, meals: 0, missing: 0, estimate: false };
+      const out = { kcal: 0, protein: 0, carbs: 0, fat: 0, meals: 0, missing: 0, estimate: false, extras: 0, unknown: 0, partial: 0 };
+      const add = x => { for (const k of this.MK) out[k] += Number(x[k]) || 0; if (x.estimate !== false) out.estimate = true; };
       for (const it of this.itemsFor(d)) {
         if (it.kind !== 'meal' || !it.meal) continue;
+        out.meals++;
         if (eatenOnly && !this.isChecked(d, it.id)) continue;
-        const x = this.macros(it.meal); out.meals++;
+        const e = eatenOnly ? this.eatenEntry(d, it.id) : null;
+        if (e && !e.skipped && e.macros) { add(e.macros); out.partial++; continue; }
+        const x = this.macros(it.meal);
         if (!x || x.kcal == null) { out.missing++; continue; }
-        for (const k of ['kcal', 'protein', 'carbs', 'fat']) out[k] += x[k] || 0;
-        if (x.estimate) out.estimate = true;
+        add(x);
+      }
+      if (eatenOnly) for (const e of this.eatenOn(d)) {
+        if (!e.extra) continue;
+        out.extras++;
+        if (!e.macros || e.macros.kcal == null) { out.unknown++; continue; }
+        add(e.macros);
       }
       return out;
     },
+    library() { const f = this.p.food || {}; return Array.isArray(f.library) ? f.library : []; },
     /* training */
     workoutFor(d) {
       const t = this.p.training || {}; const id = (t.schedule || {})[U.dayKey(d)];
@@ -355,6 +395,22 @@
       if (!m.name) errors.push('meal "' + id + '" needs a "name".');
       (m.ingredients || []).forEach(g => { if (!g.item) errors.push('meal "' + id + '" has an ingredient without "item".'); });
       if (m.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = m.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '": macros.' + k + ' should be a number (or null).'); }
+      if (m.parts != null) {
+        if (!Array.isArray(m.parts)) errors.push('meal "' + id + '": parts should be a list.');
+        else m.parts.forEach((pt, i) => {
+          if (!pt || !pt.name) errors.push('meal "' + id + '", part ' + (i + 1) + ' needs a "name".');
+          else if (pt.amount != null && !(Number(pt.amount) > 0)) errors.push('meal "' + id + '", part "' + pt.name + '": amount should be a number above 0.');
+          if (pt && pt.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = pt.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '", part "' + pt.name + '": macros.' + k + ' should be a number (or null).'); }
+        });
+      }
+    }
+    if (f.library != null) {
+      if (!Array.isArray(f.library)) errors.push('food.library should be a list of foods.');
+      else f.library.forEach((x, i) => {
+        if (!x || !x.name) errors.push('food.library item ' + (i + 1) + ' needs a "name".');
+        else if (x.amount != null && !(Number(x.amount) > 0)) errors.push('food.library "' + x.name + '": amount should be a number above 0.');
+        if (x && x.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = x.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('food.library "' + x.name + '": macros.' + k + ' should be a number (or null).'); }
+      });
     }
     const t = p.training || {}, ex = t.exercises || {}, wo = t.workouts || {};
     for (const [d, id] of Object.entries(t.schedule || {})) {

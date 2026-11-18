@@ -40,6 +40,29 @@ If the owner hasn't set up the repo, or your connector can't write files, use th
 6. **Say what you changed**, in a line, after each change: which file and what.
 7. Times are 24-hour `"HH:MM"`. Days are `sun mon tue wed thu fri sat`.
 
+## Keeping Opus current
+
+The owner should never have to tell you something twice, or tell you to save it. Two habits keep Opus up to date.
+
+**1. Save as you go, without being asked.** Whenever something comes up in any chat that belongs in Opus, save it right away with the opus tools, then say in one line what you saved (for example: "Saved to Opus: phone bill is now $95, due the 12th."). This covers:
+
+- a bill, a debt, a balance, an interest rate, a payday or a due date (plan `money`)
+- a change to meals, portions, macros or saved foods (plan `food`)
+- a change to workouts, exercises, starting weights or the schedule (plan `training`)
+- a new home job or a change to one (plan `home`)
+- a weigh-in, a meal or food eaten, a workout done, or today's cash (the outbox, section 4)
+
+Don't save guesses. If one detail is missing (an amount, a date), save what you know with `null` for the rest and ask for just that detail. If the owner is only thinking out loud ("maybe I'll drop Spotify"), ask before you change anything.
+
+**2. "Sync Opus".** When the owner says **Sync Opus** (or "update Opus"), do all of this, in order, then report:
+
+1. Read `logs` section `sync` and the outbox. If `sync.outbox.updated` doesn't match the outbox's `updated`, Opus hasn't picked up your last entries yet. Say so and don't send them again.
+2. Read the `plan` and the logs since your last sync (`since`). Note anything the owner logged that changes the plan (for example a debt balance that moved, or a meal that keeps getting skipped).
+3. If you can see the owner's accounts: save today's Free cash (`money.cash`), and last week's money block (`money.weeks`) if it isn't in the logs yet.
+4. Fill every blank (`null`) in the plan that you can answer from the owner's own words or accounts, with `update_plan_section`.
+5. Apply any change the owner asked for since your last sync that isn't in the plan yet.
+6. Report in a few short lines: what you saved, then **what only the owner can answer**, as a short list of questions.
+
 ## How changes meet
 
 - The owner may change the plan on the phone while you change it in GitHub (for example a debt balance, a meal's macros, or an exercise added in the logger). Opus merges both, part by part. When the same value was changed in both places, **your copy in GitHub wins**, and the owner can undo the whole update from Settings › Sync.
@@ -111,16 +134,26 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
       "how": "one line on what it is",
       "serving": "6 oz cooked chicken thigh, 1 cup rice, 1 cup broccoli",
       "macros": { "kcal": 580, "protein": 49, "carbs": 53, "fat": 17, "estimate": true },
+      "parts": [
+        { "name": "Chicken thigh, cooked", "amount": 170, "unit": "g", "macros": { "kcal": 354, "protein": 42, "carbs": 0, "fat": 19, "estimate": true } },
+        { "name": "Rice, cooked", "amount": 1, "unit": "cup", "macros": { "kcal": 205, "protein": 4, "carbs": 45, "fat": 0.4, "estimate": true } },
+        { "name": "Broccoli", "amount": 1, "unit": "cup", "macros": { "kcal": 31, "protein": 2.6, "carbs": 6, "fat": 0.3, "estimate": true } }
+      ],
       "prep": ["prep step", "prep step"],
       "ingredients": [ { "item": "Chicken thighs", "qty": "3 lb", "section": "Meat" } ]
     }
-  }
+  },
+  "library": [
+    { "name": "Greek yogurt cup", "amount": 1, "unit": "cup", "macros": { "kcal": 140, "protein": 15, "carbs": 10, "fat": 4, "estimate": false } }
+  ]
 }
 ```
 - The same meals are eaten all week. Week 1 of the rotation begins the Sunday of `rotation.start`, then the weeks repeat in order.
 - **Ingredient amounts are for the whole week** (one batch). The grocery list merges the same `item` across meals and groups by `section` in `sections` order.
 - Every meal id used in `rotation.weeks` must exist in `meals`.
 - **`macros` are per serving** (one serving as eaten, described in `serving`): `kcal`, then `protein`, `carbs`, `fat` in grams. Set `"estimate": true` when the numbers come from standard nutrition values, `false` when they come from the owner's labels. Use `null` for anything unknown. The app adds up the meals on Today and shows how much has been eaten so far. When you change a meal's ingredients or portion, update its `serving` and `macros` too.
+- **`parts`** are the pieces of one serving, so the owner can tick off only what was eaten (just the banana) or change an amount (150 g of chicken, not 200). Each part has `name`, `amount` (a number), `unit` (`"g"`, `"cup"`, `"tbsp"`, or `""` for a count like 4 eggs) and `macros` **for that amount**. When every part has macros, the meal's macros are their sum, so keep `macros` equal to that sum. Keep part names stable: what was eaten is logged by part name. When you change a meal, change its `parts`, `serving`, `macros`, `ingredients` and `prep` together, and save the whole `food` section (or `food.meals`) with `update_plan_section`.
+- **`library`** is the owner's saved foods: things the owner eats outside the plan (a yogurt cup, a protein bar). Each has `name`, `amount`, `unit` and `macros` for that amount. They show as one-tap choices in Food › Add food, and Opus scales the macros when the amount changes. Add to it when the owner mentions a food they eat often; they can add to it on the phone too.
 
 ### training
 ```json
@@ -229,7 +262,8 @@ The app previews the block and lists any problems before saving.
 | `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; no `kind` = the day's writing practice) |
 | `reading` | `[{ "id", "page", "date", "done" }]` the owner's page in each book from `growth.json` `reading` (`done` true = finished) |
 | `kept` | `[{ "date", "text", "from" }]` the Growth words the owner chose to keep |
-| `deleted` | `{ "workouts": { "<id>": "<when>" } }` workouts the owner deleted, so they stay deleted |
+| `eaten` | what was actually eaten, when it differs from the plan. **A planned meal:** `{ "id": "<date>:<routine item id>", "date", "item", "meal", "name", "parts": [{ "name", "unit", "planned", "ate", "macros" }], "macros", "at" }` (part of it was eaten, or more or less; `macros` is what was eaten), or the same with `"skipped": true` (not eaten). A planned meal that is ticked in `checks` with no entry here was eaten as planned. **Something extra:** `{ "id", "date", "extra": true, "name", "amount", "unit", "slot", "macros", "at" }` (`macros` may be `null`; `slot` is breakfast, lunch, snack or dinner). |
+| `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" } }` workouts and food entries the owner removed, so they stay removed |
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
 Entries that came from you carry `"by": "grok"`.
@@ -241,6 +275,9 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | they did this on the phone | read it in |
 |---|---|
 | ticked a meal, a routine item, a home job or the lesson | `logs.json` `checks` |
+| ate only part of a meal, more or less of it, or skipped it | `logs.json` `eaten` (by meal and part) |
+| added food that wasn't in the plan | `logs.json` `eaten` (`"extra": true`) |
+| saved a food to "my foods" | `plan.json` `food.library` |
 | logged a workout or a set | `logs.json` `workouts` |
 | weighed in | `logs.json` `weights` |
 | entered cash on hand (Money › Free cash › Update it myself) | `logs.json` `money.cash` |
@@ -256,7 +293,7 @@ You never need the owner to repeat something they entered in Opus. It is all her
 
 ## 4. Your outbox (`grok.json`, `"format": "opus-grok"`)
 
-The outbox has exactly five sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
+The outbox has exactly six sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
 
 Put only new or corrected entries here. You may replace the whole file each time; Opus copies each entry into the logs once and keeps it, even after you take it out of this file.
 
@@ -284,7 +321,8 @@ Put only new or corrected entries here. You may replace the whole file each time
     ]
   },
   "weights": [ { "date": "2026-11-27", "lb": 188.4 } ],
-  "workouts": []
+  "workouts": [],
+  "eaten": [ { "id": "grok-2026-11-27-shake", "date": "2026-11-27", "name": "Protein shake", "amount": 1, "unit": "scoop", "slot": "snack", "macros": { "kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5, "estimate": false } } ]
 }
 ```
 - **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
@@ -293,7 +331,8 @@ Put only new or corrected entries here. You may replace the whole file each time
   - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
   - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
   - Update it whenever you look at their accounts, and at least once a day if you can.
-- Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a workout by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
+- **Food the owner tells you they ate (`eaten`)** shows on Food › Today as something extra and counts in the day's totals. Give each a made-up `id` (e.g. `"grok-2026-11-27-shake"`), `date` and `name`; add `amount`, `unit`, `slot` and `macros` when you know them (`null` when you don't). If it is a planned meal eaten as planned, don't log it here; the owner ticks it on the phone.
+- Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.
 - Except for cash readings: if the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
 - A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
@@ -335,7 +374,11 @@ Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
 
 ## Good requests to expect
 
-- "Swap Week B dinner for something with ground beef." With the helper: read section `food`, change it, save with `update_plan_section` section `food`. Edit `food.meals` and `food.rotation`, keep ingredient amounts weekly.
+- "Sync Opus." Do the steps under *Keeping Opus current*, then report what you saved and what only the owner can answer.
+- "Swap Week B dinner for something with ground beef." With the helper: read section `food`, change it, save with `update_plan_section` section `food`. Edit `food.meals` (with the new meal's `parts`, `serving`, `macros`, `ingredients` and `prep`) and `food.rotation`, keep ingredient amounts weekly.
+- "Breakfast is 3 eggs now, not 4." Change that meal's egg part (`amount` and its `macros`), then its `serving` and `macros` sum, and the weekly egg `qty` in `ingredients`.
+- "I had a protein shake after the gym." Add it to the outbox `eaten`. If they have it often, also add it to `food.library`.
+- "What did I actually eat this week?" Read `checks` and `eaten` since Sunday; planned meals ticked with no `eaten` entry were eaten as planned.
 - "Move Upper A to Wednesday." Change `training.schedule`.
 - "Bump my protein at lunch." Change the lunch meal's ingredients and portion, then its `serving` and `macros`.
 - "I can't get to 8 on squats; make the range 5 to 7." Change that block's `reps`.

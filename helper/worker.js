@@ -2,7 +2,7 @@
   Opus helper for Grok: a tiny MCP server that runs free on Cloudflare Workers.
   It lets Grok read the owner's private opus-data repo and save two files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
-    - grok.json  (Grok's outbox: money weeks, weigh-ins, balances, workouts)
+    - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten)
     - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, reading, notes)
   It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
   when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
@@ -15,7 +15,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -45,6 +45,22 @@ Plan.validate = function (p) {
     if (!m.name) errors.push('meal "' + id + '" needs a "name".');
     (m.ingredients || []).forEach(g => { if (!g.item) errors.push('meal "' + id + '" has an ingredient without "item".'); });
     if (m.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = m.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '": macros.' + k + ' should be a number (or null).'); }
+    if (m.parts != null) {
+      if (!Array.isArray(m.parts)) errors.push('meal "' + id + '": parts should be a list.');
+      else m.parts.forEach((pt, i) => {
+        if (!pt || !pt.name) errors.push('meal "' + id + '", part ' + (i + 1) + ' needs a "name".');
+        else if (pt.amount != null && !(Number(pt.amount) > 0)) errors.push('meal "' + id + '", part "' + pt.name + '": amount should be a number above 0.');
+        if (pt && pt.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = pt.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '", part "' + pt.name + '": macros.' + k + ' should be a number (or null).'); }
+      });
+    }
+  }
+  if (f.library != null) {
+    if (!Array.isArray(f.library)) errors.push('food.library should be a list of foods.');
+    else f.library.forEach((x, i) => {
+      if (!x || !x.name) errors.push('food.library item ' + (i + 1) + ' needs a "name".');
+      else if (x.amount != null && !(Number(x.amount) > 0)) errors.push('food.library "' + x.name + '": amount should be a number above 0.');
+      if (x && x.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = x.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('food.library "' + x.name + '": macros.' + k + ' should be a number (or null).'); }
+    });
   }
   const t = p.training || {}, ex = t.exercises || {}, wo = t.workouts || {};
   for (const [d, id] of Object.entries(t.schedule || {})) {
@@ -116,7 +132,8 @@ const OUT = [
   ['money.weeks', 'weekEnding', w => dateErr(w, 'weekEnding') || (w.paycheck == null || num(w.paycheck) ? null : 'paycheck must be a number or null') || ['spent', 'bills', 'debtPayments', 'balances'].map(k => listErr(w, k)).find(Boolean) || null],
   ['money.balances', 'date', w => dateErr(w, 'date') || (isObj(w.debts) ? (Object.keys(w.debts).map(k => w.debts[k] == null || num(w.debts[k]) ? null : 'debts["' + k + '"] must be a number').find(Boolean) || null) : 'debts must be an object like { "Credit card": 1840 }')],
   ['weights', 'date', w => dateErr(w, 'date') || (num(w.lb) ? null : 'lb must be a number')],
-  ['workouts', 'id', w => (typeof w.id === 'string' && w.id ? null : 'id must be a text id like "grok-2026-11-27"') || dateErr(w, 'date') || (Array.isArray(w.sets) ? null : 'sets must be a list')]
+  ['workouts', 'id', w => (typeof w.id === 'string' && w.id ? null : 'id must be a text id like "grok-2026-11-27"') || dateErr(w, 'date') || (Array.isArray(w.sets) ? null : 'sets must be a list')],
+  ['eaten', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be a text id like "grok-2026-11-27-shake"') || dateErr(e, 'date') || (typeof e.name === 'string' && e.name.trim() ? null : 'name must be the food, like "Protein shake"') || (e.amount == null || num(e.amount) ? null : 'amount must be a number or null') || (e.macros == null ? null : !isObj(e.macros) ? 'macros must be an object like { "kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5 }' : (['kcal', 'protein', 'carbs', 'fat'].map(k => e.macros[k] == null || num(e.macros[k]) ? null : 'macros.' + k + ' must be a number or null').find(Boolean) || null)) || (e.slot == null || ['breakfast', 'lunch', 'snack', 'dinner'].includes(e.slot) ? null : 'slot must be breakfast, lunch, snack or dinner')]
 ];
 const OUT_PATHS = OUT.map(o => o[0]);
 const getp = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
@@ -253,8 +270,8 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins and workouts. Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
-    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, and food the owner ate that is not a planned meal (eaten). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 function text(t, isError) { return { content: [{ type: 'text', text: t }], isError: !!isError }; }
 function parseMaybe(x) { if (typeof x === 'string') { let s = x.trim(); const f = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) s = f[1]; return JSON.parse(s); } return x; }
