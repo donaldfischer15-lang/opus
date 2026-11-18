@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
-  const HELPER = '1.5.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.6.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -63,9 +63,11 @@
     ['reading', r => r.id],
     ['kept', k => k.date],
     ['eaten', e => e.id],
-    ['labs', l => l.date]
+    ['labs', l => l.date],
+    ['pets', e => e.id],
+    ['supps', e => e.id]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));
@@ -169,7 +171,9 @@
     ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free)) && (c.held == null || (Array.isArray(c.held) && c.held.every(x => isObj(x) && num(x.amount)))) && (c.accounts == null || (Array.isArray(c.accounts) && c.accounts.every(x => isObj(x) && num(x.amount))))],
     ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)],
     ['eaten', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.name === 'string' && !!e.name.trim() && (e.amount == null || num(e.amount)) && (e.macros == null || (isObj(e.macros) && ['kcal', 'protein', 'carbs', 'fat'].every(k => e.macros[k] == null || num(e.macros[k])))) && (e.micros == null || (isObj(e.micros) && Object.keys(e.micros).every(k => k === 'estimate' || e.micros[k] == null || num(e.micros[k]))))],
-    ['labs', l => l.date, l => isDate(l.date) && Array.isArray(l.markers) && l.markers.length > 0 && l.markers.every(m => isObj(m) && typeof m.name === 'string' && !!m.name.trim() && num(m.value) && (m.low == null || num(m.low)) && (m.high == null || num(m.high)))]
+    ['labs', l => l.date, l => isDate(l.date) && Array.isArray(l.markers) && l.markers.length > 0 && l.markers.every(m => isObj(m) && typeof m.name === 'string' && !!m.name.trim() && num(m.value) && (m.low == null || num(m.low)) && (m.high == null || num(m.high)))],
+    ['pets', e => e.id, e => typeof e.id === 'string' && !!e.id && isDate(e.date) && typeof e.pet === 'string' && !!e.pet && typeof e.care === 'string' && !!e.care && (e.lb == null || num(e.lb)) && (e.note == null || typeof e.note === 'string')],
+    ['supps', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.supp === 'string' && !!e.supp && e.id === e.date + ':' + e.supp]
   ];
   /* a money week from Grok does what a pasted one does: fills in debt balances and keeps a balance snapshot */
   function moneyWeekSideEffects(d, w) {
@@ -194,7 +198,7 @@
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
         const it = Object.assign({}, x, { by: 'grok' });
-        if (p === 'labs' && !it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
+        if ((p === 'labs' || p === 'pets' || p === 'supps') && !it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
         if (p === 'eaten') { if (it.item == null) it.extra = true; if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString(); if (it.macros && it.macros.estimate == null) it.macros = Object.assign({ estimate: true }, it.macros); }
         if (p === 'money.cash') { // cash on hand: the newest reading wins, whoever made it
           if (!it.at) it.at = i < 0 ? new Date().toISOString() : list[i].by === 'grok' ? list[i].at : ''; // no time from Grok: never beats a reading you made
@@ -507,10 +511,10 @@
       'You help me run Opus, my phone app for food, training, money and home. You reach it through the "opus" connector, which saves to my private opus-data repo. Opus reads that every time I open the app.',
       '',
       'First call read_opus_file with "guide". It explains every file. The short version:',
-      '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs. Change one part at a time with update_plan_section (for example section "money.debts"), keep every id, and change only what I ask for or what clearly needs it.',
+      '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs and my pets, and the supplements I take (health.supplements). Change one part at a time with update_plan_section (for example section "money.debts"), keep every id, and change only what I ask for or what clearly needs it.',
       '- Long files come in parts; ask for the next part, or read one section (like "money") at a time. The "sync" section of my logs says when Opus last synced and what it took from your outbox.',
-      '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, blood tests, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
-      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, my cash on hand, food I ate that is not a planned meal, or a blood test (every marker with its value, unit and the lab’s range as printed). With blood tests, never diagnose or suggest treatment; if a result is outside the lab’s range, just say so and that it is worth raising with my doctor.',
+      '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, blood tests, supplements taken, pet care, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
+      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, my cash on hand, food I ate that is not a planned meal, a supplement I took, pet care I did (a flea pill, a bath, a weigh-in, a vet visit), or a blood test (every marker with its value, unit and the lab’s range as printed). With blood tests, never diagnose or suggest treatment; if a result is outside the lab’s range, just say so and that it is worth raising with my doctor.',
       '- Meals have parts (4 eggs, 1 banana) with macros for each. When I change a meal, change its parts, serving, macros, ingredients and prep together with update_plan_section section "food".',
       '- Keep Opus current without being asked: whenever something comes up in any chat that belongs in Opus (a bill, a debt, a payday, a meal change, a weight, food I ate), save it right away, then tell me in one line what you saved. Don’t save guesses; ask me for the one missing detail.',
       '- When I say "Sync Opus", follow "Keeping Opus current" in the guide: check what Opus picked up, save my cash and money week, fill the blanks you can, apply changes I asked for, then tell me what you saved and what only I can answer.',

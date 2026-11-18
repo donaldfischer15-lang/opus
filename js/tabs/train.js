@@ -510,22 +510,8 @@
     });
     v.appendChild(hs);
 
-    // rest timer lengths
-    const rs = h('<div class="sec"><div class="sh"><span class="r">IV</span><span class="t">Rest timer</span><span class="c">starts when you log a set</span></div><div class="card"></div></div>');
-    ['compound', 'accessory', 'isolation'].forEach(type => {
-      const cur = () => Number(Store.data.settings.rest[type] || (t.rest || {})[type] || { compound: 180, accessory: 120, isolation: 75 }[type]);
-      const row = h('<div class="row"><span class="tx"><b>' + typeName[type] + '</b><small>' + ({ compound: 'Squat, RDL, bench', accessory: 'Rows, presses, machines', isolation: 'Curls, raises, calves' })[type] + '</small></span></div>');
-      const sp = ui.stepper({ label: typeName[type] + ' rest', value: cur(), step: (v, dir) => U.clamp((v || 0) + 15 * dir, 15, 600), onChange: v => { if (v) { Store.data.settings.rest[type] = v; Store.save(); lbl.textContent = U.fmtDuration(v); } } });
-      sp.el.style.width = '150px'; sp.input.id = 'rest-' + type;
-      const lbl = h('<span class="tm num" style="min-width:36px;text-align:right">' + U.fmtDuration(cur()) + '</span>');
-      row.appendChild(sp.el); row.appendChild(lbl);
-      rs.querySelector('.card').appendChild(row);
-    });
-    rs.appendChild(h('<p class="small" style="padding:0 4px">In seconds. The timer chimes when rest is up. Adjust a single rest with −15 and +15 on the timer.</p>'));
-    v.appendChild(rs);
-
     // program overview
-    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">V</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
+    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">IV</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
     const sched = t.schedule || {};
     Object.entries(t.workouts || {}).forEach(([id, w]) => {
       const days = Object.keys(sched).filter(k => sched[k] === id).map(k => U.DAY_NAMES[U.DAYS.indexOf(k)].slice(0, 3)).join(', ');

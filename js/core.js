@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.8.0';
+  Opus.VERSION = '1.9.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -76,7 +76,9 @@
       writing: [],         // [{ date, text, words, sentences }]
       eaten: [],           // what was actually eaten: part of a planned meal, a meal skipped, or something extra
       labs: [],            // blood test results: [{ date, lab, markers: [{ name, value, unit, low, high, range }], note, at }]
-      deleted: { workouts: {}, eaten: {}, labs: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
+      pets: [],            // pet care done, weigh-ins and vet visits: [{ id, date, pet, care, lb, note, at }]
+      supps: [],           // supplements taken: [{ id: 'date:supp', date, supp, at }]
+      deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
         tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
@@ -114,7 +116,7 @@
       for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
       for (const k of Object.keys(base.settings)) if (d.settings[k] === undefined) d.settings[k] = base.settings[k];
       if (!d.money.weeks) d.money.weeks = []; if (!d.money.balances) d.money.balances = [];
-      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs']) if (!d.deleted[k]) d.deleted[k] = {};
+      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs', 'pets', 'supps']) if (!d.deleted[k]) d.deleted[k] = {};
       const shipped = window.OPUS_PRELOADED_PLAN || window.OPUS_EXAMPLE_PLAN;
       if (!d.plan) d.plan = U.clone(shipped);
       else if (shipped && d.plan.name === shipped.name && (Number(shipped.rev) || 1) > (Number(d.plan.rev) || 1)) d.plan = upgradePlan(d.plan, shipped);
@@ -323,6 +325,7 @@
         if (it.kind === 'writing') { const wr = ((p.mind || {}).writing) || {}; it.detail = wr.goal ? 'Goal: ' + wr.goal : ''; }
         items.push(it);
       }
+      for (const m of this.mods) { try { for (const x of (m.items(d) || [])) items.push(x); } catch (e) { console.warn('opus: ' + m.prefix + ' items', e); } }
       for (const h of this.homeDue(d)) items.push({ id: 'home:' + h.id, title: h.title, part: h.part || 'evening', time: h.time || null, kind: 'home', detail: h.note || '', home: h });
       const f = p.food || {};
       if (f.prepDay === dk) items.push({ id: 'food-prep', title: 'Groceries and food prep', part: 'workday', time: f.prepTime || null, kind: 'prep', detail: 'Shop the list, then prep the week' });
@@ -334,9 +337,20 @@
       return items;
     },
     kindId(kind) { const r = (this.p.routine || []).find(x => x.kind === kind); return r ? r.id : null; },
-    checked(d) { return Store.data.checks[U.key(d)] || []; },
+    /* modules whose ticks live in their own logs (pets, supplements): { prefix, items(d), checked(d) -> ids, set(d, id, on) } */
+    mods: [],
+    mod(id) { const i = String(id).indexOf(':'); return i > 0 ? this.mods.find(m => m.prefix === String(id).slice(0, i)) : null; },
+    checked(d) {
+      const own = Store.data.checks[U.key(d)] || [];
+      if (!this.mods.length) return own;
+      const out = own.filter(id => !this.mod(id));
+      for (const m of this.mods) { try { for (const id of (m.checked(d) || [])) if (!out.includes(id)) out.push(id); } catch (e) { console.warn('opus: ' + m.prefix + ' checked', e); } }
+      return out;
+    },
     isChecked(d, id) { return this.checked(d).includes(id); },
     setChecked(d, id, on) {
+      const m = this.mod(id);
+      if (m) { m.set(d, id, on); Store.save(); return; }
       const k = U.key(d); const a = Store.data.checks[k] = Store.data.checks[k] || [];
       const i = a.indexOf(id);
       if (on && i < 0) a.push(id);
@@ -401,6 +415,18 @@
       const hl = p.health;
       if (typeof hl !== 'object' || Array.isArray(hl)) errors.push('health should be an object.');
       else if (hl.reference != null && !['men-19-30', 'men-31-50', 'women-19-30', 'women-31-50'].includes(hl.reference)) errors.push('health.reference should be men-19-30, men-31-50, women-19-30 or women-31-50.');
+      const sp = hl && hl.supplements;
+      if (sp != null && !Array.isArray(sp)) errors.push('health.supplements should be a list.');
+      const sids = new Set();
+      (Array.isArray(sp) ? sp : []).forEach((x, i) => {
+        if (!x || typeof x !== 'object' || !x.id || !x.name) { errors.push('health.supplements item ' + (i + 1) + ' needs "id" and "name".'); return; }
+        if (sids.has(x.id)) errors.push('supplement id "' + x.id + '" is used twice.'); sids.add(x.id);
+        if (x.part != null && !PARTS.includes(x.part)) errors.push('supplement "' + x.id + '": part should be morning, workday or evening.');
+        if (x.time != null && !TIME.test(x.time)) errors.push('supplement "' + x.id + '": time should look like "07:30" (or null).');
+        if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["mon","thu"].');
+        if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
+        if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
+      });
     }
     const f = p.food || {}, meals = f.meals || {};
     ((f.rotation || {}).weeks || []).forEach((w, i) => {
@@ -451,6 +477,25 @@
       if (!h.id || !h.title) errors.push('home item ' + (i + 1) + ' needs "id" and "title".');
       if (hids.has(h.id)) errors.push('home id "' + h.id + '" is used twice.'); hids.add(h.id);
       if (h.time && !TIME.test(h.time)) errors.push('home "' + h.id + '": time should look like "19:30".');
+      if (h.pet != null && typeof h.pet !== 'string' && !(Array.isArray(h.pet) && h.pet.every(x => typeof x === 'string'))) errors.push('home "' + h.id + '": pet should be a pet\'s id, or a list of ids, from home.pets.');
+    });
+    const pids = new Set(), UNITS = ['day', 'week', 'month'];
+    const pets = (p.home || {}).pets;
+    if (pets != null && !Array.isArray(pets)) errors.push('home.pets should be a list.');
+    (Array.isArray(pets) ? pets : []).forEach((pt, i) => {
+      if (!pt || typeof pt !== 'object' || !pt.id || !pt.name) { errors.push('home.pets item ' + (i + 1) + ' needs "id" and "name".'); return; }
+      if (pids.has(pt.id)) errors.push('pet id "' + pt.id + '" is used twice.'); pids.add(pt.id);
+      if (pt.kind != null && !['dog', 'cat', 'other'].includes(pt.kind)) errors.push('pet "' + pt.id + '": kind should be dog, cat or other.');
+      if (pt.born != null && !/^\d{4}-\d{2}-\d{2}$/.test(pt.born)) errors.push('pet "' + pt.id + '": born should be a date like "2020-05-14" (or null).');
+      for (const k of ['age', 'weightLb']) if (pt[k] != null && !(typeof pt[k] === 'number' && pt[k] >= 0)) errors.push('pet "' + pt.id + '": ' + k + ' should be a number (or null).');
+      if (pt.notes != null && !Array.isArray(pt.notes)) errors.push('pet "' + pt.id + '": notes should be a list of lines.');
+      const cids = new Set();
+      (pt.care || []).forEach((c, j) => {
+        if (!c || !c.id || !c.title) { errors.push('pet "' + pt.id + '": care item ' + (j + 1) + ' needs "id" and "title".'); return; }
+        if (['weight', 'vet'].includes(c.id)) errors.push('pet "' + pt.id + '": care id "' + c.id + '" is reserved; pick another.');
+        if (cids.has(c.id)) errors.push('pet "' + pt.id + '": care id "' + c.id + '" is used twice.'); cids.add(c.id);
+        if (c.every != null && !(c.every && typeof c.every === 'object' && Number(c.every.n) > 0 && UNITS.includes(c.every.unit))) errors.push('pet "' + pt.id + '", care "' + c.id + '": every should be like { "n": 1, "unit": "month" } (day, week or month), or null.');
+      });
     });
     return { ok: errors.length === 0, errors, warnings };
   };

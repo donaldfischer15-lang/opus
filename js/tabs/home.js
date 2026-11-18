@@ -1,4 +1,4 @@
-/* Home tab: house, pets and vehicle jobs, shown when they matter. */
+/* Home tab: house, pets and vehicle jobs, shown when they matter, and a section for each pet. */
 (function () {
   'use strict';
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, h = ui.h;
@@ -64,12 +64,19 @@
 
     const due = Plan.homeDue(d).sort((a, b) => (U.mins(a.time) ?? 2000) - (U.mins(b.time) ?? 2000));
     const now = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Today</span><span class="c num"></span></div><div class="card"></div></div>');
-    const cnt = () => { now.querySelector('.c').textContent = due.filter(it => Plan.isChecked(d, 'home:' + it.id)).length + ' / ' + due.length; };
-    if (!due.length) now.querySelector('.card').appendChild(h('<p class="empty">Nothing at home today.</p>'));
+    // pet care that is due today (or was done today) sits with the rest of today's jobs
+    const petDue = Plan.itemsFor(d).filter(it => it.kind === 'pet');
+    const cnt = () => { now.querySelector('.c').textContent = (due.filter(it => Plan.isChecked(d, 'home:' + it.id)).length + petDue.filter(it => Plan.isChecked(d, it.id)).length) + ' / ' + (due.length + petDue.length); };
+    if (!due.length && !petDue.length) now.querySelector('.card').appendChild(h('<p class="empty">Nothing at home today.</p>'));
     due.forEach(it => {
       const id = 'home:' + it.id, on = Plan.isChecked(d, id);
       const r = h('<div class="row tap' + (on ? ' done' : '') + '"><span class="ck">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.title) + '</b>' + (it.note ? '<small>' + U.esc(it.note) + '</small>' : '') + '</span><span class="tm num">' + (it.time ? U.fmtTime(it.time) : '') + '</span></div>');
       r.onclick = () => { const n = !Plan.isChecked(d, id); Plan.setChecked(d, id, n); r.classList.toggle('done', n); ui.buzz(10); cnt(); };
+      now.querySelector('.card').appendChild(r);
+    });
+    petDue.forEach(it => {
+      const r = h('<div class="row tap' + (Plan.isChecked(d, it.id) ? ' done' : '') + '"><span class="ck">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.title) + '</b><small>' + U.esc(it.detail) + '</small></span><span class="tm num">' + (it.time ? U.fmtTime(it.time) : '') + '</span></div>');
+      r.onclick = () => { const n = !Plan.isChecked(d, it.id); Plan.setChecked(d, it.id, n); ui.buzz(10); Opus.refresh(); };
       now.querySelector('.card').appendChild(r);
     });
     cnt(); v.appendChild(now);
@@ -79,16 +86,21 @@
     let any = false;
     for (let i = 1; i <= 7; i++) {
       const dd = U.addDays(d, i);
-      const its = Plan.homeDue(dd).filter(it => it.monthDay || Array.isArray(it.days) || typeof it.days === 'string' && it.days !== 'all');
+      const its = Plan.homeDue(dd).filter(it => it.monthDay || Array.isArray(it.days) || typeof it.days === 'string' && it.days !== 'all').map(it => it.title)
+        .concat(Opus.pets ? Opus.pets.upcoming(dd) : []);
       if (!its.length) continue; any = true;
-      up.querySelector('.card').appendChild(h('<div class="row"><span class="tag" style="min-width:44px">' + U.DAY_NAMES[dd.getDay()].slice(0, 3) + '</span><span class="tx"><b>' + its.map(it => U.esc(it.title)).join(' · ') + '</b></span></div>'));
+      up.querySelector('.card').appendChild(h('<div class="row"><span class="tag" style="min-width:44px">' + U.DAY_NAMES[dd.getDay()].slice(0, 3) + '</span><span class="tx"><b>' + its.map(t => U.esc(t)).join(' · ') + '</b></span></div>'));
     }
     if (!any) up.querySelector('.card').appendChild(h('<p class="empty">Only daily items this week.</p>'));
     v.appendChild(up);
 
+    const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    let n = 2;
+    if (Opus.pets) Opus.pets.list().forEach(p => Opus.pets.section(v, ROMAN[n++], p));
+
     const all = items();
     const areas = {}; all.forEach((it, i) => (areas[it.area || 'House'] = areas[it.area || 'House'] || []).push([it, i]));
-    const allSec = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Everything</span><button class="c" type="button">+ Add</button></div></div>');
+    const allSec = h('<div class="sec"><div class="sh"><span class="r">' + ROMAN[n] + '</span><span class="t">Everything</span><button class="c" type="button">+ Add</button></div></div>');
     allSec.querySelector('button').onclick = () => editItem(null);
     Object.keys(areas).sort().forEach(a => {
       const c = h('<div class="card" style="margin-top:6px"><div class="row" style="min-height:0;padding:10px 0 4px"><span class="tag">' + U.esc(a) + '</span></div></div>');

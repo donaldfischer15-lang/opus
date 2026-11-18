@@ -2,7 +2,7 @@
   Opus helper for Grok: a tiny MCP server that runs free on Cloudflare Workers.
   It lets Grok read the owner's private opus-data repo and save two files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
-    - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests)
+    - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
     - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, reading, notes)
   It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
   when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
@@ -15,7 +15,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -50,6 +50,18 @@ Plan.validate = function (p) {
     const hl = p.health;
     if (typeof hl !== 'object' || Array.isArray(hl)) errors.push('health should be an object.');
     else if (hl.reference != null && !['men-19-30', 'men-31-50', 'women-19-30', 'women-31-50'].includes(hl.reference)) errors.push('health.reference should be men-19-30, men-31-50, women-19-30 or women-31-50.');
+    const sp = hl && hl.supplements;
+    if (sp != null && !Array.isArray(sp)) errors.push('health.supplements should be a list.');
+    const sids = new Set();
+    (Array.isArray(sp) ? sp : []).forEach((x, i) => {
+      if (!x || typeof x !== 'object' || !x.id || !x.name) { errors.push('health.supplements item ' + (i + 1) + ' needs "id" and "name".'); return; }
+      if (sids.has(x.id)) errors.push('supplement id "' + x.id + '" is used twice.'); sids.add(x.id);
+      if (x.part != null && !PARTS.includes(x.part)) errors.push('supplement "' + x.id + '": part should be morning, workday or evening.');
+      if (x.time != null && !TIME.test(x.time)) errors.push('supplement "' + x.id + '": time should look like "07:30" (or null).');
+      if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["mon","thu"].');
+      if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
+      if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
+    });
   }
   const f = p.food || {}, meals = f.meals || {};
   ((f.rotation || {}).weeks || []).forEach((w, i) => {
@@ -100,6 +112,25 @@ Plan.validate = function (p) {
     if (!h.id || !h.title) errors.push('home item ' + (i + 1) + ' needs "id" and "title".');
     if (hids.has(h.id)) errors.push('home id "' + h.id + '" is used twice.'); hids.add(h.id);
     if (h.time && !TIME.test(h.time)) errors.push('home "' + h.id + '": time should look like "19:30".');
+    if (h.pet != null && typeof h.pet !== 'string' && !(Array.isArray(h.pet) && h.pet.every(x => typeof x === 'string'))) errors.push('home "' + h.id + '": pet should be a pet\'s id, or a list of ids, from home.pets.');
+  });
+  const pids = new Set(), UNITS = ['day', 'week', 'month'];
+  const pets = (p.home || {}).pets;
+  if (pets != null && !Array.isArray(pets)) errors.push('home.pets should be a list.');
+  (Array.isArray(pets) ? pets : []).forEach((pt, i) => {
+    if (!pt || typeof pt !== 'object' || !pt.id || !pt.name) { errors.push('home.pets item ' + (i + 1) + ' needs "id" and "name".'); return; }
+    if (pids.has(pt.id)) errors.push('pet id "' + pt.id + '" is used twice.'); pids.add(pt.id);
+    if (pt.kind != null && !['dog', 'cat', 'other'].includes(pt.kind)) errors.push('pet "' + pt.id + '": kind should be dog, cat or other.');
+    if (pt.born != null && !/^\d{4}-\d{2}-\d{2}$/.test(pt.born)) errors.push('pet "' + pt.id + '": born should be a date like "2020-05-14" (or null).');
+    for (const k of ['age', 'weightLb']) if (pt[k] != null && !(typeof pt[k] === 'number' && pt[k] >= 0)) errors.push('pet "' + pt.id + '": ' + k + ' should be a number (or null).');
+    if (pt.notes != null && !Array.isArray(pt.notes)) errors.push('pet "' + pt.id + '": notes should be a list of lines.');
+    const cids = new Set();
+    (pt.care || []).forEach((c, j) => {
+      if (!c || !c.id || !c.title) { errors.push('pet "' + pt.id + '": care item ' + (j + 1) + ' needs "id" and "title".'); return; }
+      if (['weight', 'vet'].includes(c.id)) errors.push('pet "' + pt.id + '": care id "' + c.id + '" is reserved; pick another.');
+      if (cids.has(c.id)) errors.push('pet "' + pt.id + '": care id "' + c.id + '" is used twice.'); cids.add(c.id);
+      if (c.every != null && !(c.every && typeof c.every === 'object' && Number(c.every.n) > 0 && UNITS.includes(c.every.unit))) errors.push('pet "' + pt.id + '", care "' + c.id + '": every should be like { "n": 1, "unit": "month" } (day, week or month), or null.');
+    });
   });
   return { ok: errors.length === 0, errors, warnings };
 };
@@ -152,7 +183,9 @@ const OUT = [
   ['weights', 'date', w => dateErr(w, 'date') || (num(w.lb) ? null : 'lb must be a number')],
   ['workouts', 'id', w => (typeof w.id === 'string' && w.id ? null : 'id must be a text id like "grok-2026-11-27"') || dateErr(w, 'date') || (Array.isArray(w.sets) ? null : 'sets must be a list')],
   ['eaten', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be a text id like "grok-2026-11-27-shake"') || dateErr(e, 'date') || (typeof e.name === 'string' && e.name.trim() ? null : 'name must be the food, like "Protein shake"') || (e.amount == null || num(e.amount) ? null : 'amount must be a number or null') || (e.macros == null ? null : !isObj(e.macros) ? 'macros must be an object like { "kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5 }' : (['kcal', 'protein', 'carbs', 'fat'].map(k => e.macros[k] == null || num(e.macros[k]) ? null : 'macros.' + k + ' must be a number or null').find(Boolean) || null)) || microsErr(e.micros) || (e.slot == null || ['breakfast', 'lunch', 'snack', 'dinner'].includes(e.slot) ? null : 'slot must be breakfast, lunch, snack or dinner')],
-  ['labs', 'date', l => dateErr(l, 'date') || (Array.isArray(l.markers) && l.markers.length ? null : 'markers must be a list of results like [{ "name": "Ferritin", "value": 85, "unit": "ng/mL", "range": "30-400", "low": 30, "high": 400 }]') || l.markers.map((m, n) => !isObj(m) ? 'markers[' + n + '] must be an object' : !(typeof m.name === 'string' && m.name.trim()) ? 'markers[' + n + '].name must be the marker as the report prints it' : !num(m.value) ? 'markers[' + n + '].value must be a number (got ' + JSON.stringify(m.value) + ')' : (m.low != null && !num(m.low)) ? 'markers[' + n + '].low must be a number or left out' : (m.high != null && !num(m.high)) ? 'markers[' + n + '].high must be a number or left out' : null).find(Boolean) || null]
+  ['labs', 'date', l => dateErr(l, 'date') || (Array.isArray(l.markers) && l.markers.length ? null : 'markers must be a list of results like [{ "name": "Ferritin", "value": 85, "unit": "ng/mL", "range": "30-400", "low": 30, "high": 400 }]') || l.markers.map((m, n) => !isObj(m) ? 'markers[' + n + '] must be an object' : !(typeof m.name === 'string' && m.name.trim()) ? 'markers[' + n + '].name must be the marker as the report prints it' : !num(m.value) ? 'markers[' + n + '].value must be a number (got ' + JSON.stringify(m.value) + ')' : (m.low != null && !num(m.low)) ? 'markers[' + n + '].low must be a number or left out' : (m.high != null && !num(m.high)) ? 'markers[' + n + '].high must be a number or left out' : null).find(Boolean) || null],
+  ['pets', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be "date:pet:care", like "2026-11-27:the-pet-id:flea"') || dateErr(e, 'date') || (typeof e.pet === 'string' && e.pet ? null : 'pet must be the pet\'s id from plan home.pets') || (typeof e.care === 'string' && e.care ? null : 'care must be a care id from that pet\'s care list, or "weight" or "vet"') || (e.id === e.date + ':' + e.pet + ':' + e.care ? null : 'id must be exactly date:pet:care ("' + e.date + ':' + e.pet + ':' + e.care + '")') || (e.lb == null || num(e.lb) ? null : 'lb must be a number') || (e.care === 'weight' && !num(e.lb) ? 'a weight entry needs lb' : null) || (e.note == null || typeof e.note === 'string' ? null : 'note must be text')],
+  ['supps', 'id', e => dateErr(e, 'date') || (typeof e.supp === 'string' && e.supp ? null : 'supp must be the supplement\'s id from plan health.supplements') || (e.id === e.date + ':' + e.supp ? null : 'id must be exactly date:supp ("' + e.date + ':' + e.supp + '")')]
 ];
 const OUT_PATHS = OUT.map(o => o[0]);
 const getp = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
@@ -289,8 +322,8 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), and blood test results copied from the lab report (labs). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
-    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), and supplements taken (supps). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 function text(t, isError) { return { content: [{ type: 'text', text: t }], isError: !!isError }; }
 function parseMaybe(x) { if (typeof x === 'string') { let s = x.trim(); const f = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) s = f[1]; return JSON.parse(s); } return x; }

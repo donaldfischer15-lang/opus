@@ -189,8 +189,21 @@
       drawTabs(); b.appendChild(ts);
 
       // sound
-      const so = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Timers</span></div><div class="card"><div class="row"><span class="tx"><b>Chime when rest is up</b><small>Rest lengths by lift type are in Train</small></span><button class="switch' + (s.sound ? ' on' : '') + '" type="button" role="switch" aria-checked="' + !!s.sound + '" aria-label="Chime"></button></div></div></div>');
+      const so = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Timers</span></div><div class="card"><div class="row"><span class="tx"><b>Chime when rest is up</b><small>When a rest is up</small></span><button class="switch' + (s.sound ? ' on' : '') + '" type="button" role="switch" aria-checked="' + !!s.sound + '" aria-label="Chime"></button></div></div></div>');
       so.querySelector('.switch').onclick = e => { s.sound = !s.sound; e.currentTarget.classList.toggle('on', s.sound); Store.save(); if (s.sound) ui.chime(); };
+      const restTypes = { compound: ['Big compound', 'Squat, RDL, bench'], accessory: ['Accessory', 'Rows, presses, machines'], isolation: ['Isolation', 'Curls, raises, calves'] };
+      const tr = Plan.p.training || {};
+      s.rest = s.rest || {};
+      Object.entries(restTypes).forEach(([type, [name, ex]]) => {
+        const cur = () => Number(s.rest[type] || (tr.rest || {})[type] || { compound: 180, accessory: 120, isolation: 75 }[type]);
+        const row = h('<div class="row"><span class="tx"><b>' + name + ' rest</b><small>' + ex + '</small></span></div>');
+        const lbl = h('<span class="tm num" style="min-width:36px;text-align:right">' + U.fmtDuration(cur()) + '</span>');
+        const sp = ui.stepper({ label: name + ' rest', value: cur(), step: (v, dir) => U.clamp((v || 0) + 15 * dir, 15, 600), onChange: v => { if (v) { s.rest[type] = v; Store.save(); lbl.textContent = U.fmtDuration(v); } } });
+        sp.el.style.width = '150px'; sp.input.id = 'rest-' + type;
+        row.appendChild(sp.el); row.appendChild(lbl);
+        so.querySelector('.card').appendChild(row);
+      });
+      so.appendChild(h('<p class="small" style="padding:0 4px">Rest lengths in seconds. The timer starts when you log a set. Adjust a single rest with −15 and +15 on the timer.</p>'));
       b.appendChild(so);
 
       // plan
@@ -211,9 +224,16 @@
       pc.appendChild(pb2);
       b.appendChild(pl);
 
+      // money paste: only needed when Grok can't save on its own
+      if (Opus.money && Opus.money.importBox) {
+        const mp = h('<details class="fold sec"><summary class="sh"><span class="r">V</span><span class="t">Paste a money week</span><span class="c">if Grok can’t save</span></summary><div class="card pad" style="margin-top:6px"></div></details>');
+        mp.querySelector('.card').appendChild(Opus.money.importBox(() => Opus.refresh()));
+        b.appendChild(mp);
+      }
+
       // data
       const lb = s.lastBackup ? U.daysBetween(new Date(s.lastBackup), new Date()) : null;
-      const da = h('<div class="sec"><div class="sh"><span class="r">V</span><span class="t">Your data</span><span class="c">' + (lb == null ? 'never backed up' : lb === 0 ? 'backed up today' : 'backup ' + lb + ' day' + (lb > 1 ? 's' : '') + ' ago') + '</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"></div></div>');
+      const da = h('<div class="sec"><div class="sh"><span class="r">VI</span><span class="t">Your data</span><span class="c">' + (lb == null ? 'never backed up' : lb === 0 ? 'backed up today' : 'backup ' + lb + ' day' + (lb > 1 ? 's' : '') + ' ago') + '</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"></div></div>');
       const dc = da.querySelector('.card');
       dc.appendChild(h('<p class="small">Everything stays on this phone. A backup is one file with your plan and every log. Keep one in Files or iCloud Drive each week.</p>'));
       const db = h('<div class="btns"><button class="btn quiet" type="button">Export backup</button><button class="btn quiet" type="button">Import backup</button></div>');
@@ -232,7 +252,7 @@
       b.appendChild(da);
 
       // about
-      const ab = h('<div class="sec"><div class="sh"><span class="r">VI</span><span class="t">About</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"><p class="small">Opus ' + Opus.VERSION + '. Works offline once installed. Plan format "opus-plan" v1, data format "opus-data" v1, synced logs "opus-logs" v1, Grok outbox "opus-grok" v1, money import "OPUS MONEY WEEK". The guide for AI helpers is GUIDE.md beside the app.' + (Store.ok() ? '' : ' <span class="warn">Saving is blocked in this browser.</span>') + '</p></div></div>');
+      const ab = h('<div class="sec"><div class="sh"><span class="r">VII</span><span class="t">About</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"><p class="small">Opus ' + Opus.VERSION + '. Works offline once installed. Plan format "opus-plan" v1, data format "opus-data" v1, synced logs "opus-logs" v1, Grok outbox "opus-grok" v1, money import "OPUS MONEY WEEK". The guide for AI helpers is GUIDE.md beside the app.' + (Store.ok() ? '' : ' <span class="warn">Saving is blocked in this browser.</span>') + '</p></div></div>');
       const rs = h('<button class="btn danger" type="button">Erase everything on this phone</button>');
       rs.onclick = () => ui.ask({ title: 'Erase all Opus data?', text: 'Plan, logs, history and settings are deleted from this phone, and sync is turned off. Your GitHub repo is not touched. Export a backup first if you might want them.', yes: 'Erase', danger: true }).then(ok => { if (ok) { Store.reset(); api.close(true); Opus.renderBar(); Opus.go('today'); ui.toast('Erased'); } });
       ab.querySelector('.card').appendChild(rs);

@@ -427,9 +427,10 @@
     v.appendChild(wSec);
 
     if (Opus.body) Opus.body.section(v, 'VI');
+    if (Opus.supps) Opus.supps.section(v, 'VII');
 
     if ((f.rules || []).length) {
-      const r = h('<div class="sec"><div class="sh"><span class="r">VII</span><span class="t">House rules</span></div><div class="card"></div></div>');
+      const r = h('<div class="sec"><div class="sh"><span class="r">VIII</span><span class="t">House rules</span></div><div class="card"></div></div>');
       f.rules.forEach(x => r.querySelector('.card').appendChild(h('<div class="row"><span class="tx"><small style="font-size:13.5px;color:var(--ink-2)">' + U.esc(x) + '</small></span></div>')));
       v.appendChild(r);
     }

@@ -18,7 +18,8 @@
   function weekSpent(w) { return U.sum((w.spent || []).map(s => s.amount)); }
   function calc() {
     const m = M();
-    const take = m.takeHomePerWeek;
+    const lastPay = weeks().filter(w => w.paycheck != null).pop() || null; // the most recent paycheck is the take-home
+    const take = lastPay ? lastPay.paycheck : m.takeHomePerWeek;
     const bills = (m.bills || []).map(b => perWeek(b));
     const billsW = U.sum(bills.filter(x => x != null)), billsMissing = bills.some(x => x == null);
     let debtW = m.plannedDebtPerWeek;
@@ -33,7 +34,7 @@
     const we = U.key(weekEnding());
     const cur = (Store.data.money.weeks || []).find(w => w.weekEnding === we);
     const left = base == null ? null : base - (cur ? weekSpent(cur) : 0);
-    return { take, billsW, billsMissing, debtW, debtSrc, spendLo, spendHi, spendSrc, free, cur, left, we };
+    return { take, lastPay, billsW, billsMissing, debtW, debtSrc, spendLo, spendHi, spendSrc, free, cur, left, we };
   }
   function debtFree() {
     const m = M(), ds = (m.debts || []);
@@ -139,7 +140,6 @@
     [...out.spent, ...out.bills, ...out.debtPayments, ...out.balances].forEach(x => { if (x.amount == null || isNaN(x.amount)) errors.push('An amount is missing or not a number.'); else if (x.amount < 0) errors.push('Amounts should not be negative (' + (x.cat || x.name) + ').'); });
     const names = (M().debts || []).map(d => d.name.toLowerCase());
     out.balances.forEach(b => { if (!names.includes(String(b.name).toLowerCase())) warnings.push('No debt named "' + b.name + '" in your plan, so that balance will not be used.'); });
-    if (out.paycheck != null && M().takeHomePerWeek != null && out.paycheck > M().takeHomePerWeek * 1.05) warnings.push('Paycheck is ' + U.money(out.paycheck - M().takeHomePerWeek) + ' above your usual take-home. That extra is likely overtime and is not counted in your plan.');
     return { ok: errors.length === 0, errors: [...new Set(errors)], warnings, week: out };
   }
   function saveWeek(w) {
@@ -235,7 +235,7 @@
     }
     const rows = h('<div style="margin-top:8px"></div>');
     const kv = (k, v, cls) => rows.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + v + '</span></div>'));
-    kv('Take-home' + (M().countOvertime === false ? ' (no overtime)' : ''), c.take == null ? '<span class="muted">not set</span>' : U.money(c.take));
+    kv(c.lastPay ? 'Take-home (paycheck, week ending ' + U.fmtDateShort(c.lastPay.weekEnding) + ')' : 'Take-home (until a paycheck is logged)', c.take == null ? '<span class="muted">not set</span>' : U.money(c.take, { cents: !!c.lastPay }));
     kv('Bills, weekly share', '− ' + U.money(c.billsW) + (c.billsMissing ? ' <span class="muted">+ blanks</span>' : ''));
     kv('Debt plan', c.debtW == null ? '<span class="muted">not set</span>' : '− ' + U.money(c.debtW) + (c.debtSrc === 'minimums' ? ' <span class="muted">(minimums)</span>' : ''));
     kv('Normal spending', c.spendLo == null ? '<span class="muted">no data yet</span>' : '− ' + (c.spendLo === c.spendHi ? U.money(c.spendLo) : U.money(c.spendLo) + '–' + U.money(c.spendHi).replace('$', '')));
@@ -286,7 +286,7 @@
     const m = M();
     ui.sheet({ title: 'Money numbers', kicker: 'Your plan', render(api) {
       const b = api.body;
-      b.appendChild(h('<div class="grid2">' + numField('mn-take', 'Take-home a week', m.takeHomePerWeek) + numField('mn-debt', 'To debt a week', m.plannedDebtPerWeek) + '</div>'));
+      b.appendChild(h('<div class="grid2">' + numField('mn-take', 'Take-home until a paycheck is logged', m.takeHomePerWeek) + numField('mn-debt', 'To debt a week', m.plannedDebtPerWeek) + '</div>'));
       const bills = h('<div class="card"></div>');
       (m.bills || []).forEach((bl, i) => bills.appendChild(h('<div class="row"><span class="tx"><b>' + U.esc(bl.name) + '</b><small>per ' + (bl.every || 'month') + '</small></span><input class="input" style="width:110px" id="mn-bill-' + i + '" inputmode="decimal" value="' + (bl.amount == null ? '' : bl.amount) + '" placeholder="blank"></div>')));
       b.appendChild(h('<div class="sh"><span class="t">Bills</span></div>')); b.appendChild(bills);
@@ -476,13 +476,10 @@
     }
     v.appendChild(hs);
 
-    const imp = h('<details class="fold sec"><summary class="sh"><span class="r">V</span><span class="t">Paste a week</span><span class="c">if Grok can’t save</span></summary><div class="card pad" style="margin-top:6px"></div></details>');
-    imp.querySelector('.card').appendChild(importBox(() => Opus.refresh()));
-    v.appendChild(imp);
     v.appendChild(h('<p class="small" style="text-align:center;padding:0 12px">Everything you enter here is saved for Grok to read.</p>'));
   }
 
-  Opus.money = { checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE, latestCash, freeOf, updateCash, nextPayday };
+  Opus.money = { importBox, checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE, latestCash, freeOf, updateCash, nextPayday };
   Opus.onBoot(() => {
     const m = M(), d = new Date(), k = U.key(d);
     if (m.checkInDay !== U.dayKey(d) || Store.data.seen.moneyAuto === k) return;
