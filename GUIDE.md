@@ -206,6 +206,8 @@ The app previews the block and lists any problems before saving.
 | `weights` | `[{ "date", "lb" }]` |
 | `money.weeks` | saved weekly money blocks: `{ "weekEnding", "paycheck", "spent": [{ "cat", "amount" }], "bills": [{ "name", "amount" }], "debtPayments": [{ "name", "amount" }], "balances": [{ "name", "amount" }], "notes": [] }` |
 | `money.balances` | `[{ "date", "debts": { "Credit card": 1840 } }]` balance history |
+| `money.cash` | `[{ "date", "at", "cash", "accounts": [{ "name", "amount" }], "held": [{ "name", "amount", "due" }], "free", "note" }]` Free cash readings, one per day: cash on hand, what is held back before payday, and what is left (`free`). The newest `at` wins, whoever made it. Entries with no `by` were entered by the owner. |
+| `prefs` | `{ "restSeconds": { "<exercise id>": 150 }, "tabs": [...], "hiddenTabs": [...], "sound": true }` the owner's settings, for reference only |
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
 | `reviews` | `[{ "weekOf", "worked", "slipped", "change", "saved" }]` |
@@ -216,6 +218,24 @@ The app previews the block and lists any problems before saving.
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
 Entries that came from you carry `"by": "grok"`.
+
+### Everything the owner enters, and where it is
+
+You never need the owner to repeat something they entered in Opus. It is all here:
+
+| they did this on the phone | read it in |
+|---|---|
+| ticked a meal, a routine item, a home job or the lesson | `logs.json` `checks` |
+| logged a workout or a set | `logs.json` `workouts` |
+| weighed in | `logs.json` `weights` |
+| entered cash on hand (Money › Free cash › Update it myself) | `logs.json` `money.cash` |
+| did the weekly money check-in | `logs.json` `money.weeks` |
+| updated a debt balance | `logs.json` `money.balances`, and the debt's `balance` in `plan.json` |
+| changed money numbers, a bill, a debt, a meal, an exercise or a home job | `plan.json` |
+| ticked groceries or prep | `logs.json` `groceries`, `prep` |
+| wrote, answered a lesson, kept words, moved a bookmark | `logs.json` `writing`, `kept`, `reading` |
+| did the weekly review | `logs.json` `reviews` |
+| changed rest timers, tabs or sound | `logs.json` `prefs` |
 
 ---
 
@@ -237,15 +257,28 @@ Put only new or corrected entries here. You may replace the whole file each time
         "balances": [ { "name": "Credit card", "amount": 1840.00 } ],
         "notes": ["optional, one line"] }
     ],
-    "balances": [ { "date": "2026-11-27", "debts": { "Credit card": 1840.00 } } ]
+    "balances": [ { "date": "2026-11-27", "debts": { "Credit card": 1840.00 } } ],
+    "cash": [
+      { "date": "2026-11-25", "at": "2026-11-25T12:40:00Z", "cash": 912.40,
+        "accounts": [ { "name": "Checking", "amount": 862.40 }, { "name": "Cash", "amount": 50.00 } ],
+        "held": [ { "name": "Phone", "amount": 85.00, "due": "2026-11-26" }, { "name": "Gas until payday", "amount": 40.00 } ],
+        "free": 787.40,
+        "note": "optional, one line" }
+    ]
   },
   "weights": [ { "date": "2026-11-27", "lb": 188.4 } ],
   "workouts": []
 }
 ```
-- Keys match each entry: a money week by `weekEnding`, a weigh-in or balance by `date`, a workout by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
+- **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
+  - `cash` is the total in the accounts they spend from (checking plus cash; not savings unless they say so). List each in `accounts`.
+  - `held` is everything that has to come out before payday: bills due by then, planned debt payments, and money they set aside. Give each a `due` date when it has one.
+  - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
+  - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
+  - Update it whenever you look at their accounts, and at least once a day if you can.
+- Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a workout by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.
-- If the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
+- Except for cash readings: if the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
 - A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
 - Same rules as everywhere: plain numbers, `null` or leave the line out when unknown, nothing invented.
 
@@ -291,5 +324,6 @@ Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
 - "I can't get to 8 on squats; make the range 5 to 7." Change that block's `reps`.
 - "Add 'Change the furnace filter' on the 1st of each month." Add a home item with `monthDay: 1`.
 - "Look at my last two weeks and tell me one change." Read `logs.json` (or the summary or backup); answer in a sentence or two, and only change the plan if asked.
+- "Update my free cash." Read the accounts, then add today's `money.cash` entry with `cash`, `held` and `free`.
 - "Log my money for this week." Read the week from the owner's accounts and add it to `grok.json` under `money.weeks`.
 - "What's still blank in my plan?" List every `null` in `plan.json` by where it is, in plain words.

@@ -1,4 +1,5 @@
-/* Money tab: free cash per week, debts in payoff order with a debt-free date, the Friday check-in, Grok's weekly import. */
+/* Money tab: free cash right now (kept current by Grok), what comes out before payday, debts in payoff order with a debt-free date,
+   the weekly plan, the check-in and Grok's weekly import. Everything entered here is saved in the logs (or the plan) for Grok to read. */
 (function () {
   'use strict';
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, h = ui.h;
@@ -61,6 +62,33 @@
   function debtHistory() {
     return (Store.data.money.balances || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(s => ({ date: s.date, v: U.sum(Object.values(s.debts || {})) }));
   }
+  /* ---------- cash on hand (money.cash in the logs): Grok writes it from the accounts, or you enter it ---------- */
+  const cashList = () => (Store.data.money.cash || []).slice().sort((a, b) => (a.date + (a.at || '')).localeCompare(b.date + (b.at || '')));
+  const latestCash = () => { const l = cashList(); return l[l.length - 1] || null; };
+  const heldOf = c => (Array.isArray(c && c.held) ? c.held : []).filter(x => x && typeof x.amount === 'number');
+  function freeOf(c) {
+    if (!c) return null;
+    if (typeof c.free === 'number') return c.free;
+    if (typeof c.cash === 'number') return c.cash - U.sum(heldOf(c).map(x => x.amount));
+    return null;
+  }
+  function nextPayday(d) {
+    d = d || new Date();
+    const pd = U.DAYS.indexOf(M().payday || 'fri');
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    while (x.getDay() !== pd) x.setDate(x.getDate() + 1);
+    return x; // today, if today is payday
+  }
+  function whenAt(c) {
+    const t = c.at ? new Date(c.at) : null;
+    if (!t || isNaN(t)) return U.daysBetween(U.parseKey(c.date), new Date()) === 0 ? 'today' : U.fmtDateShort(c.date);
+    const days = U.daysBetween(t, new Date()), hm = U.fmtTimeAP(U.pad(t.getHours()) + ':' + U.pad(t.getMinutes()));
+    if (days === 0) { const mins = Math.round((Date.now() - t.getTime()) / 60000); return mins < 2 ? 'just now' : mins < 60 ? mins + ' min ago' : 'today ' + hm; }
+    return (days === 1 ? 'yesterday' : days < 7 ? U.DAY_NAMES[t.getDay()] : U.fmtDateShort(t)) + ' ' + hm;
+  }
+  const ageHours = c => { const t = c && c.at ? new Date(c.at).getTime() : c ? U.parseKey(c.date).getTime() + 12 * 36e5 : 0; return (Date.now() - t) / 36e5; };
+  const ASK_GROK = 'Update my cash on hand in Opus: read my accounts, then add a money.cash entry for today with my cash and everything that has to come out before payday.';
+
   function snapshotBalances(date) {
     const debts = {}; for (const d of (M().debts || [])) if (d.balance != null) debts[d.name] = d.balance;
     const arr = Store.data.money.balances = (Store.data.money.balances || []).filter(s => s.date !== date);
@@ -170,7 +198,7 @@
   function checkIn() {
     ui.sheet({ title: 'Money check-in', kicker: 'Week ending ' + U.fmtDateShort(weekEnding()), full: true, onClose: () => Opus.refresh(), render(api) {
       const b = api.body, c = calc();
-      b.appendChild(h('<p class="note">Three steps: bring in the week from Grok, check free cash, update a balance if it changed.</p>'));
+      b.appendChild(h('<p class="note">Three steps: bring in the week from Grok, look over your week, update a balance if it changed. If Grok already logged the week, it shows here.</p>'));
       b.appendChild(h('<div class="sh"><span class="r">I</span><span class="t">This week from Grok</span></div>'));
       if (c.cur) b.appendChild(h('<div class="banner gold">This week is already in (' + U.money(weekSpent(c.cur), { cents: true }) + ' spent). Paste again to replace it.</div>'));
       b.appendChild(importBox(() => api.rerender()));
@@ -186,7 +214,7 @@
         ui.toast('Week saved'); api.rerender();
       };
       mb.appendChild(ms); b.appendChild(man);
-      b.appendChild(h('<div class="sh"><span class="r">II</span><span class="t">Free cash</span></div>'));
+      b.appendChild(h('<div class="sh"><span class="r">II</span><span class="t">Your week</span></div>'));
       b.appendChild(freeCard(calc()));
       b.appendChild(h('<div class="sh"><span class="r">III</span><span class="t">Debts</span></div>'));
       b.appendChild(debtCard(() => api.rerender()));
@@ -199,7 +227,7 @@
   function freeCard(c) {
     const card = h('<div class="card pad" style="display:flex;flex-direction:column;gap:6px"></div>');
     const fv = c.free ? (Math.round(c.free.lo) === Math.round(c.free.hi) ? U.money(c.free.lo) : U.money(c.free.lo) + '–' + U.money(c.free.hi).replace('$', '')) : '—';
-    card.appendChild(h('<div class="figure"><div class="v">' + fv + '</div><div class="k">Free cash a week</div><div class="sub">' + (c.free ? 'Estimate. It sharpens with each weekly check-in.' : 'Fill in the blanks below to see it.') + '</div></div>'));
+    card.appendChild(h('<div class="figure"><div class="v">' + fv + '</div><div class="k">Left over a week</div><div class="sub">' + (c.free ? 'Your plan on an average week. It sharpens with each check-in.' : 'Fill in the blanks below to see it.') + '</div></div>'));
     if (c.left != null && c.cur) {
       const base = c.take - c.billsW - (c.debtW || 0);
       const pct = base > 0 ? U.clamp(c.left / base, 0, 1) : 0;
@@ -212,7 +240,7 @@
     kv('Debt plan', c.debtW == null ? '<span class="muted">not set</span>' : '− ' + U.money(c.debtW) + (c.debtSrc === 'minimums' ? ' <span class="muted">(minimums)</span>' : ''));
     kv('Normal spending', c.spendLo == null ? '<span class="muted">no data yet</span>' : '− ' + (c.spendLo === c.spendHi ? U.money(c.spendLo) : U.money(c.spendLo) + '–' + U.money(c.spendHi).replace('$', '')));
     if (c.spendSrc) rows.appendChild(h('<div class="small" style="text-align:right;margin-top:-4px">' + U.esc(c.spendSrc) + '</div>'));
-    kv('Free cash', fv, 'total');
+    kv('Left over', fv, 'total');
     card.appendChild(rows);
     return card;
   }
@@ -274,37 +302,187 @@
     } });
   }
 
+  /* ---------- free cash, right now ---------- */
+  function cashHero() {
+    const c = latestCash(), free = freeOf(c), pay = nextPayday(), days = U.daysBetween(new Date(), pay);
+    const el = h('<div class="fc' + (c ? '' : ' none') + (free != null && free < 0 ? ' short' : '') + '" role="button" tabindex="0"></div>');
+    if (!c || free == null) {
+      el.innerHTML = '<div class="fc-k">Free cash</div><div class="fc-v wait">—</div>' +
+        '<div class="fc-s">Grok fills this in from your accounts: the cash you can use that isn’t needed for bills or anything else before payday.</div>' +
+        '<div class="fc-acts"><button class="g-act" type="button" data-ask>' + ui.icon('spark') + '<span>Copy ask for Grok</span></button><button class="g-act" type="button" data-hand><span>Enter it myself</span></button></div>';
+      el.querySelector('[data-ask]').onclick = e => { e.stopPropagation(); ui.copy(ASK_GROK); };
+      el.querySelector('[data-hand]').onclick = e => { e.stopPropagation(); updateCash(); };
+      el.onclick = null; el.removeAttribute('role'); el.removeAttribute('tabindex');
+      return el;
+    }
+    const stale = ageHours(c) > 36, held = heldOf(c);
+    const perDay = days > 0 && free > 0 ? free / days : null;
+    const payLine = days === 0 ? 'Payday today' : 'Payday ' + U.DAY_NAMES[pay.getDay()] + ' · ' + days + (days === 1 ? ' day' : ' days');
+    const hist = cashList().map(x => ({ date: x.date, v: freeOf(x) })).filter(x => x.v != null).slice(-30);
+    el.innerHTML = '<div class="fc-k">Free cash</div>' +
+      '<div class="fc-v num">' + U.money(free) + '</div>' +
+      '<div class="fc-s">' + (free < 0 ? 'Short by ' + U.money(-free) + ' before payday' : 'Yours to use until payday') + '</div>' +
+      '<div class="fc-chips"><span>' + U.esc(payLine) + '</span>' + (perDay != null ? '<span>about ' + U.money(perDay) + ' a day</span>' : '') + (held.length ? '<span>' + U.money(U.sum(held.map(x => x.amount))) + ' held back</span>' : '') + '</div>' +
+      (hist.length > 2 ? '<div class="fc-spark" aria-hidden="true">' + ui.spark(hist, { w: 240, h: 34 }) + '</div>' : '') +
+      '<div class="fc-from' + (stale ? ' stale' : '') + '"><i></i>' + (c.by === 'grok' ? 'From Grok' : 'You entered it') + ' · ' + U.esc(whenAt(c)) + (stale ? ' · may be out of date' : '') + '</div>' +
+      (stale ? '<div class="fc-acts"><button class="g-act" type="button" data-ask>' + ui.icon('spark') + '<span>Copy ask for Grok</span></button></div>' : '');
+    const ask = el.querySelector('[data-ask]'); if (ask) ask.onclick = e => { e.stopPropagation(); ui.copy(ASK_GROK); };
+    el.onclick = () => cashSheet();
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cashSheet(); } };
+    return el;
+  }
+
+  function cashSheet() {
+    const c = latestCash(); if (!c) { updateCash(); return; }
+    ui.sheet({ title: 'Free cash', kicker: (c.by === 'grok' ? 'From Grok · ' : 'You entered it · ') + whenAt(c), render(api) {
+      const b = api.body, free = freeOf(c), held = heldOf(c).slice().sort((x, y) => String(x.due || '9').localeCompare(String(y.due || '9')));
+      const card = h('<div class="card"></div>');
+      const kv = (k, v, cls) => card.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + v + '</span></div>'));
+      (Array.isArray(c.accounts) ? c.accounts : []).forEach(a => kv(U.esc(a.name || 'Account'), U.money(a.amount, { cents: true })));
+      if (typeof c.cash === 'number') kv('<b>' + (Array.isArray(c.accounts) && c.accounts.length ? 'Total cash' : 'Cash') + '</b>', '<b>' + U.money(c.cash, { cents: true }) + '</b>');
+      held.forEach(x => kv(U.esc(x.name || 'Held back') + (x.due ? ' <span class="muted">· ' + U.esc(dueLabel(x.due)) + '</span>' : ''), '− ' + U.money(x.amount, { cents: true })));
+      kv('Free cash', U.money(free, { cents: true }), 'total');
+      b.appendChild(card);
+      if (typeof c.free === 'number' && typeof c.cash === 'number' && Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free) > 1) b.appendChild(h('<p class="small">Grok’s free cash differs from cash minus what’s listed by ' + U.money(Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free)) + '. Ask Grok what else it held back.</p>'));
+      if (c.note) b.appendChild(h('<div class="g-take"><div class="tag">' + (c.by === 'grok' ? 'Grok’s note' : 'Your note') + '</div><div>' + U.esc(c.note) + '</div></div>'));
+      const past = cashList().reverse().slice(1, 8);
+      if (past.length) {
+        b.appendChild(h('<div class="sh" style="margin-top:6px"><span class="t">Earlier</span></div>'));
+        const pc = h('<div class="card"></div>');
+        past.forEach(x => pc.appendChild(h('<div class="kv"><span>' + U.esc(U.DAY_NAMES[U.parseKey(x.date).getDay()].slice(0, 3) + ', ' + U.fmtDateShort(x.date)) + ' <span class="muted">· ' + (x.by === 'grok' ? 'Grok' : 'you') + '</span></span><span class="num">' + U.money(freeOf(x)) + '</span></div>')));
+        b.appendChild(pc);
+      }
+      const btns = h('<div class="btns"><button class="btn quiet" type="button">Copy ask for Grok</button><button class="btn" type="button">Update it myself</button></div>');
+      btns.children[0].onclick = () => ui.copy(ASK_GROK);
+      btns.children[1].onclick = () => { api.close(true); updateCash(); };
+      b.appendChild(btns);
+    } });
+  }
+  function dueLabel(k) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(k))) return String(k);
+    const n = U.daysBetween(new Date(), U.parseKey(k));
+    return n < 0 ? 'was due ' + U.fmtDateShort(k) : n === 0 ? 'due today' : n === 1 ? 'due tomorrow' : n < 7 ? 'due ' + U.DAY_NAMES[U.parseKey(k).getDay()] : 'due ' + U.fmtDateShort(k);
+  }
+
+  /* enter cash by hand: what's held back carries over from the last reading, minus anything already past due */
+  function updateCash() {
+    const last = latestCash(), today = U.key();
+    let held = heldOf(last).filter(x => !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= today).map(x => Object.assign({}, x));
+    ui.sheet({ title: 'Cash on hand', kicker: 'Update it yourself', foot: true, render(api) {
+      const b = api.body;
+      b.appendChild(h('<div class="field"><label for="cash-now">Cash you have now</label><input class="input" id="cash-now" inputmode="decimal" placeholder="checking plus cash"></div>'));
+      b.appendChild(h('<p class="small">The total in the accounts you spend from. Opus takes away what’s held back below.</p>'));
+      b.appendChild(h('<div class="sh" style="margin-top:4px"><span class="t">Held back before payday</span></div>'));
+      const list = h('<div class="card"></div>'); b.appendChild(list);
+      const out = h('<div class="figure" style="padding-top:2px"><div class="v num">—</div><div class="k">Free cash</div></div>');
+      const calcOut = () => { const v = amt(b.querySelector('#cash-now').value); out.querySelector('.v').textContent = v == null ? '—' : U.money(v - U.sum(held.map(x => x.amount))); };
+      const draw = () => {
+        list.innerHTML = '';
+        if (!held.length) list.appendChild(h('<p class="empty" style="padding:12px 0">Nothing held back. Add bills or anything else due before payday.</p>'));
+        held.forEach((x, i) => {
+          const r = h('<div class="kv"><span>' + U.esc(x.name) + (x.due ? ' <span class="muted">· ' + U.esc(dueLabel(x.due)) + '</span>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + ' <button class="link" type="button" aria-label="Remove ' + U.esc(x.name) + '">✕</button></span></div>');
+          r.querySelector('button').onclick = () => { held.splice(i, 1); draw(); calcOut(); };
+          list.appendChild(r);
+        });
+        const add = h('<div class="row" style="gap:8px"><input class="input" placeholder="What" style="flex:1;min-width:0"><input class="input" inputmode="decimal" placeholder="$" style="width:84px"><button class="btn sm" type="button">Add</button></div>');
+        add.querySelector('button').onclick = () => { const n = add.children[0].value.trim(), a = amt(add.children[1].value); if (!n || a == null) { ui.toast('Add a name and an amount'); return; } held.push({ name: n, amount: a }); draw(); calcOut(); };
+        list.appendChild(add);
+        // bills from the plan that aren't listed yet, one tap to add
+        const names = held.map(x => x.name.toLowerCase());
+        const sug = (M().bills || []).filter(bl => bl.amount != null && !names.includes(bl.name.toLowerCase()));
+        if (sug.length) {
+          const chips = h('<div class="chips" style="padding:4px 0 12px"></div>');
+          sug.slice(0, 8).forEach(bl => { const ch = h('<button class="chip" type="button">+ ' + U.esc(bl.name) + '</button>'); ch.onclick = () => { held.push({ name: bl.name, amount: bl.amount }); draw(); calcOut(); }; chips.appendChild(ch); });
+          list.appendChild(chips);
+        }
+      };
+      draw();
+      b.appendChild(out);
+      b.querySelector('#cash-now').addEventListener('input', calcOut);
+      const sv = h('<button class="btn block" type="button">Save</button>');
+      sv.onclick = () => {
+        const v = amt(b.querySelector('#cash-now').value); if (v == null) { ui.toast('Enter the cash you have now'); return; }
+        const entry = { date: today, at: new Date().toISOString(), cash: v, held, free: Math.round((v - U.sum(held.map(x => x.amount))) * 100) / 100 };
+        Store.data.money.cash = (Store.data.money.cash || []).filter(x => x.date !== today).concat([entry]);
+        Store.save(); api.close(); ui.toast('Saved. Grok can see it.'); Opus.refresh();
+      };
+      api.foot.appendChild(sv);
+    } });
+  }
+
+  /* what comes out before payday: Grok's list if it has one, else plan bills that have a due day */
+  function beforePayday() {
+    const c = latestCash(), pay = nextPayday(), today = U.key();
+    let items = heldOf(c).map(x => ({ name: x.name, amount: x.amount, due: x.due || null }));
+    let src = c && items.length ? (c.by === 'grok' ? 'From Grok, ' + whenAt(c) : 'From your last update') : null;
+    if (!items.length) {
+      const end = U.addDays(pay, days0(pay) ? 7 : 0);
+      for (const bl of M().bills || []) {
+        if (bl.amount == null || !bl.dueDay) continue;
+        for (let d = new Date(); d <= end; d = U.addDays(d, 1)) if (d.getDate() === bl.dueDay) { items.push({ name: bl.name, amount: bl.amount, due: U.key(d) }); break; }
+      }
+      if (items.length) src = 'From the due days in your plan';
+    }
+    items = items.filter(x => !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= today).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
+    const sec = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Before payday</span><span class="c num"></span></div><div class="card"></div></div>');
+    const card = sec.querySelector('.card');
+    if (!items.length) { card.appendChild(h('<p class="empty">Grok lists what has to come out before payday when it updates your free cash.</p>')); return sec; }
+    sec.querySelector('.c').textContent = U.money(U.sum(items.map(x => x.amount)));
+    items.forEach(x => {
+      const soon = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && U.daysBetween(new Date(), U.parseKey(x.due)) <= 1;
+      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (x.due ? '<small>' + U.esc(dueLabel(x.due)) + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
+    });
+    if (src) card.appendChild(h('<div class="row" style="min-height:0;padding:8px 0 10px"><span class="tx"><small>' + U.esc(src) + '</small></span></div>'));
+    return sec;
+  }
+  const days0 = d => U.daysBetween(new Date(), d) === 0;
+
   /* ---------- the tab ---------- */
   function render(v) {
     const c = calc(), m = M();
     v.appendChild(h('<div class="top"><div><div class="eyebrow">Week ending ' + U.DAY_NAMES[weekEnding().getDay()].slice(0, 3) + ', ' + U.fmtDateShort(weekEnding()) + '</div><div class="title">Money</div></div></div>'));
-    v.appendChild(freeCard(c));
-    const ed = h('<button class="link" type="button" style="align-self:flex-end;margin-top:-8px">Edit numbers</button>'); ed.onclick = () => editNumbers(() => Opus.refresh()); v.appendChild(ed);
+    v.appendChild(cashHero());
+    v.appendChild(beforePayday());
+
+    const ds = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">Debts</span><span class="c">payoff order</span></div></div>');
+    const total = U.sum((m.debts || []).map(d => d.balance).filter(x => x != null)), dh = debtHistory();
+    if (total > 0) {
+      const top = h('<div class="card pad debt-top"><div><div class="k">Total debt known</div><div class="v num">' + U.money(total) + '</div>' +
+        (dh.length > 1 && dh[0].v > total ? '<div class="small" style="color:var(--good)">' + U.money(dh[0].v - total) + ' paid down since ' + U.fmtDateShort(dh[0].date) + '</div>' : '<div class="small">Each balance update is saved</div>') + '</div>' +
+        (dh.length > 1 ? '<div class="spk">' + ui.spark(dh.slice(-20), { w: 110, h: 34 }) + '</div>' : '') + '</div>');
+      ds.appendChild(top);
+    }
+    ds.appendChild(debtCard(() => Opus.refresh())); v.appendChild(ds);
+    if (m.notes) {
+      const nt = h('<details class="fold"><summary class="link" style="padding:0 4px">Your money rules</summary><p class="small" style="padding:6px 4px 0"></p></details>');
+      nt.querySelector('p').textContent = m.notes; v.appendChild(nt);
+    }
+
+    const wk = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Your week</span><button class="c" type="button">Edit numbers</button></div></div>');
+    wk.querySelector('button').onclick = () => editNumbers(() => Opus.refresh());
+    wk.appendChild(freeCard(c)); v.appendChild(wk);
 
     const isDay = m.checkInDay === U.dayKey(new Date());
-    const ck = h('<div class="next"><div class="body"><div class="k">' + (c.cur ? 'Check-in done' : isDay ? 'Today' : U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')]) + '</div><div class="h">Friday check-in</div><div class="s">' + (c.cur ? U.money(weekSpent(c.cur), { cents: true }) + ' spent this week' : 'Paste the week from Grok, review, done') + '</div></div><button class="btn' + (c.cur ? ' ghost sm' : '') + '" type="button">' + (c.cur ? 'Open' : 'Start') + '</button></div>');
+    const ck = h('<div class="next"><div class="body"><div class="k">' + (c.cur ? (c.cur.by === 'grok' ? 'Logged by Grok' : 'Check-in done') : isDay ? 'Today' : U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')]) + '</div><div class="h">' + U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')] + ' check-in</div><div class="s">' + (c.cur ? U.money(weekSpent(c.cur), { cents: true }) + ' spent this week' : 'Grok logs the week, you look it over') + '</div></div><button class="btn' + (c.cur ? ' ghost sm' : '') + '" type="button">' + (c.cur ? 'Open' : 'Start') + '</button></div>');
     ck.querySelector('.btn').onclick = checkIn; v.appendChild(ck);
 
-    const ds = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Debts</span><span class="c">payoff order</span></div></div>');
-    ds.appendChild(debtCard(() => Opus.refresh())); v.appendChild(ds);
-    if (m.notes) v.appendChild(h('<p class="small" style="padding:0 4px;margin-top:-10px">' + U.esc(m.notes) + '</p>'));
-
-    const imp = h('<details class="fold sec"><summary class="sh"><span class="r">II</span><span class="t">Weekly money import</span><span class="c">from Grok</span></summary><div class="card pad" style="margin-top:6px"></div></details>');
-    imp.querySelector('.card').appendChild(importBox(() => Opus.refresh()));
-    v.appendChild(imp);
-
     const ws = weeks().slice(-8).reverse();
-    const hs = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Recent weeks</span></div><div class="card"></div></div>');
-    if (!ws.length) hs.querySelector('.card').appendChild(h('<p class="empty">Each Friday check-in adds a week here.</p>'));
+    const hs = h('<div class="sec"><div class="sh"><span class="r">IV</span><span class="t">Recent weeks</span></div><div class="card"></div></div>');
+    if (!ws.length) hs.querySelector('.card').appendChild(h('<p class="empty">Each weekly check-in adds a week here.</p>'));
     else {
       const pts = weeks().map(w => ({ date: w.weekEnding, v: weekSpent(w) }));
       if (pts.length > 1) { const box = h('<div style="padding:12px 0 4px"></div>'); box.appendChild(ui.chart(pts, { h: 90, fmt: x => U.money(x) })); hs.querySelector('.card').appendChild(box); }
-      ws.forEach(w => hs.querySelector('.card').appendChild(h('<div class="row"><span class="tx"><b>Week ending ' + U.fmtDateShort(w.weekEnding) + '</b><small>' + (w.paycheck != null ? 'Pay ' + U.money(w.paycheck, { cents: true }) + ' · ' : '') + (w.source === 'grok' ? 'from Grok' : 'by hand') + '</small></span><span class="num">' + U.money(weekSpent(w), { cents: true }) + '</span></div>')));
+      ws.forEach(w => hs.querySelector('.card').appendChild(h('<div class="row"><span class="tx"><b>Week ending ' + U.fmtDateShort(w.weekEnding) + '</b><small>' + (w.paycheck != null ? 'Pay ' + U.money(w.paycheck, { cents: true }) + ' · ' : '') + (w.by === 'grok' || w.source === 'grok' ? 'from Grok' : 'by hand') + '</small></span><span class="num">' + U.money(weekSpent(w), { cents: true }) + '</span></div>')));
     }
     v.appendChild(hs);
+
+    const imp = h('<details class="fold sec"><summary class="sh"><span class="r">V</span><span class="t">Paste a week</span><span class="c">if Grok can’t save</span></summary><div class="card pad" style="margin-top:6px"></div></details>');
+    imp.querySelector('.card').appendChild(importBox(() => Opus.refresh()));
+    v.appendChild(imp);
+    v.appendChild(h('<p class="small" style="text-align:center;padding:0 12px">Everything you enter here is saved for Grok to read.</p>'));
   }
 
-  Opus.money = { checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE };
+  Opus.money = { checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE, latestCash, freeOf, updateCash, nextPayday };
   Opus.onBoot(() => {
     const m = M(), d = new Date(), k = U.key(d);
     if (m.checkInDay !== U.dayKey(d) || Store.data.seen.moneyAuto === k) return;

@@ -55,6 +55,7 @@
     ['weights', w => w.date],
     ['money.weeks', w => w.weekEnding],
     ['money.balances', w => w.date],
+    ['money.cash', c => c.date],
     ['reviews', r => r.weekOf],
     ['writing', w => (w.kind ? w.date + ':' + w.kind : w.date)],
     ['reading', r => r.id],
@@ -67,7 +68,13 @@
     o.money = {};
     for (const [p] of KEYED) setp(o, p, getp(d, p) || []);
     o.deleted = { workouts: ((d.deleted || {}).workouts) || {} };
+    o.prefs = prefsOf(d);
     return o;
+  }
+  /* choices made in Opus that aren't part of the plan, so Grok can see them too (the phone's copy wins) */
+  function prefsOf(d) {
+    const s = d.settings || {};
+    return { restSeconds: s.rest || {}, tabs: s.tabs || [], hiddenTabs: s.hidden || [], sound: s.sound !== false };
   }
   function logsSame(a, b) { if (!a || !b) return false; const x = Object.assign({}, a), y = Object.assign({}, b); delete x.updated; delete x.app; delete y.updated; delete y.app; return eq(x, y); }
   function validLogs(o) { return isObj(o) && o.format === 'opus-logs' && Array.isArray(o.workouts) && isObj(o.checks); }
@@ -102,6 +109,7 @@
     o.deleted = { workouts: tomb };
     for (const k of SETS) o[k] = mergeSetMap(B && B[k], L[k], R && R[k]);
     for (const [p, key] of KEYED) setp(o, p, mergeKeyed(B && getp(B, p), getp(L, p), R && getp(R, p), key, p === 'workouts' ? tomb : null));
+    o.prefs = (L && L.prefs) || (R && R.prefs) || {};
     return o;
   }
   /* logs that GitHub has and the merge would drop (other than workouts deleted on purpose) */
@@ -146,6 +154,7 @@
     ['weights', w => w.date, w => isDate(w.date) && num(w.lb)],
     ['money.weeks', w => w.weekEnding, w => isDate(w.weekEnding) && (w.paycheck == null || num(w.paycheck)) && ['spent', 'bills', 'debtPayments', 'balances'].every(k => w[k] == null || (Array.isArray(w[k]) && w[k].every(x => isObj(x) && num(x.amount))))],
     ['money.balances', w => w.date, w => isDate(w.date) && isObj(w.debts)],
+    ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free)) && (c.held == null || (Array.isArray(c.held) && c.held.every(x => isObj(x) && num(x.amount)))) && (c.accounts == null || (Array.isArray(c.accounts) && c.accounts.every(x => isObj(x) && num(x.amount))))],
     ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)]
   ];
   /* a money week from Grok does what a pasted one does: fills in debt balances and keeps a balance snapshot */
@@ -171,6 +180,13 @@
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
         const it = Object.assign({}, x, { by: 'grok' });
+        if (p === 'money.cash') { // cash on hand: the newest reading wins, whoever made it
+          if (!it.at) it.at = i < 0 ? new Date().toISOString() : list[i].by === 'grok' ? list[i].at : ''; // no time from Grok: never beats a reading you made
+          if (i < 0) { list.push(it); r.added++; }
+          else if (String(it.at) >= String(list[i].at || '')) { if (!eq(list[i], it)) { list[i] = it; r.changed++; } }
+          else if (list[i].by !== 'grok') r.kept.push('cash on hand ' + k);
+          continue;
+        }
         if (i < 0) {
           list.push(it);
           if (p === 'money.weeks') moneyWeekSideEffects(d, it);
@@ -453,18 +469,18 @@
   }
 
   function grokPrompt() {
-    const repo = cfg && cfg.owner ? cfg.owner + '/' + cfg.repo : 'YOUR-USERNAME/opus-data';
     return [
-      'You help me run Opus, my phone app for food, training, money and home. Its data is in my private GitHub repo ' + repo + ', which you can reach through your GitHub connector. Opus reads it every time I open the app.',
+      'You help me run Opus, my phone app for food, training, money and home. You reach it through the "opus" connector, which saves to my private opus-data repo. Opus reads that every time I open the app.',
       '',
-      'First read GUIDE.md in that repo. It explains every file. The short version:',
-      '- plan.json is my plan: schedule, daily routine, meals with macros, grocery sections, the training program, money (pay, bills, debts in payoff order), home jobs and writing prompts. You may edit it. Keep it one valid JSON file with "format": "opus-plan", keep every id the same, set "updated" to today, and change only what I ask for or what clearly needs it.',
-      '- logs.json is what I logged on my phone. Read it. Never edit or delete it.',
-      '- grok.json is your outbox for things you log for me, like a money week, a weigh-in or a balance. Put only new or corrected entries in it, in the format GUIDE.md shows. You may replace the whole file each time. Opus copies the entries in and keeps them.',
-      '- Never invent numbers. Use null for anything you don’t know.',
-      '- After each change, tell me in one line which file you changed and what changed. If your connector can’t write files, give me the whole file in one code block instead and I’ll paste it into Opus.',
+      'First call read_opus_file with "guide". It explains every file. The short version:',
+      '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs. Change it with save_plan, keep every id, and change only what I ask for or what clearly needs it.',
+      '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
+      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, or my cash on hand.',
+      '- Free cash is the top of my Money tab: cash I can use now that isn’t needed for bills or anything else before payday. Whenever you look at my accounts, add a "money.cash" entry with today’s date, the time, my cash, and every amount that has to come out before payday (with due dates), as GUIDE.md section 4 shows.',
+      '- Never invent numbers. Leave out anything you don’t know.',
+      '- After each change, tell me in one line what you saved.',
       '',
-      'To start: read GUIDE.md, plan.json and logs.json. Then tell me which numbers in plan.json are still null, and fill in only the ones you actually know from my accounts or from what I’ve told you, listing each number you added so I can check it.'
+      'To start: read the guide, my plan and my logs. Then update my cash on hand if you can see my accounts, and tell me which numbers in my plan are still blank.'
     ].join('\n');
   }
 

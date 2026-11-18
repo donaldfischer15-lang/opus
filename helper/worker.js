@@ -14,7 +14,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -105,6 +105,7 @@ const OUT = [
   ['weights', w => w.date, w => isDate(w.date) && num(w.lb)],
   ['money.weeks', w => w.weekEnding, w => isDate(w.weekEnding) && (w.paycheck == null || num(w.paycheck)) && ['spent', 'bills', 'debtPayments', 'balances'].every(k => w[k] == null || (Array.isArray(w[k]) && w[k].every(x => isObj(x) && num(x.amount))))],
   ['money.balances', w => w.date, w => isDate(w.date) && isObj(w.debts)],
+  ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free)) && (c.held == null || (Array.isArray(c.held) && c.held.every(x => isObj(x) && num(x.amount)))) && (c.accounts == null || (Array.isArray(c.accounts) && c.accounts.every(x => isObj(x) && num(x.amount))))],
   ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)]
 ];
 const getp = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
@@ -121,6 +122,7 @@ function mergeOutbox(cur, add) {
       const k = isObj(x) ? key(x) : null;
       if (k == null) { report.bad.push(p + ': an entry has no ' + (p === 'workouts' ? 'id' : p === 'money.weeks' ? 'weekEnding' : 'date')); continue; }
       if (!(x.delete === true) && !ok(x)) { report.bad.push(p + ' ' + k + ': missing or wrong fields (see GUIDE.md section 4)'); continue; }
+      if (p === 'money.cash' && !x.delete && !x.at) x.at = new Date().toISOString();
       const i = list.findIndex(y => isObj(y) && key(y) === k);
       if (i >= 0) { list[i] = x; report.replaced++; } else { list.push(x); report.added++; }
       any = true;
@@ -200,8 +202,8 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Read the plan first and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries the owner asked you to log: money weeks, weigh-ins, debt balance snapshots or workouts, in the grok.json format from GUIDE.md section 4. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
-    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus: free cash (money.cash: cash on hand and what is held back before payday, from the accounts), money weeks, weigh-ins, debt balance snapshots or workouts, in the grok.json format from GUIDE.md section 4. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+    inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 function text(t, isError) { return { content: [{ type: 'text', text: t }], isError: !!isError }; }
 function parseMaybe(x) { if (typeof x === 'string') { let s = x.trim(); const f = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) s = f[1]; return JSON.parse(s); } return x; }
