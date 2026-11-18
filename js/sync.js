@@ -17,7 +17,9 @@
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store;
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
-  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json' };
+  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
+  const HELPER = '1.3.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
     get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -76,7 +78,7 @@
     const s = d.settings || {};
     return { restSeconds: s.rest || {}, tabs: s.tabs || [], hiddenTabs: s.hidden || [], sound: s.sound !== false };
   }
-  function logsSame(a, b) { if (!a || !b) return false; const x = Object.assign({}, a), y = Object.assign({}, b); delete x.updated; delete x.app; delete y.updated; delete y.app; return eq(x, y); }
+  function logsSame(a, b) { if (!a || !b) return false; const x = Object.assign({}, a), y = Object.assign({}, b); for (const k of ['updated', 'app', 'sync']) { delete x[k]; delete y[k]; } return eq(x, y); }
   function validLogs(o) { return isObj(o) && o.format === 'opus-logs' && Array.isArray(o.workouts) && isObj(o.checks); }
 
   /* sets (checks per day): keep everything here, add what is new there, drop only what was unticked here */
@@ -251,7 +253,7 @@
       case 'pending': return 'Saved on this phone · syncing soon';
       case 'blocked': return 'Sync paused · open Settings › Sync';
       case 'problem': return 'Sync needs a look · Settings › Sync';
-      default: return (cfg.problems || []).length ? 'Synced ' + when + ' · one thing to look at in Settings' : (when ? 'Synced ' + when : 'Sync on');
+      default: return (cfg.problems || []).length ? 'Synced ' + when + ' · one thing to look at in Settings' : (cfg.helper && vnum(cfg.helper.version) < vnum(HELPER)) ? 'Synced ' + when + ' · Grok helper is behind, see Settings' : (when ? 'Synced ' + when : 'Sync on');
     }
   }
 
@@ -270,8 +272,12 @@
   async function run(opts) {
     opts = opts || {};
     const local = Store.data;
-    const [rp, rl, rg, rgw] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok), getFile(F.growth)]);
+    const [rp, rl, rg, rgw, rh] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok), getFile(F.growth), getFile(F.helper).catch(() => ({ missing: true }))]);
     const notes = [];
+
+    // which helper is live (it writes helper.json when it starts a new version)
+    if (rh.missing) cfg.helper = null;
+    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null }; }
 
     // Cassius's growth page (read only: only Cassius writes growth.json)
     if (!rgw.missing) {
@@ -311,7 +317,7 @@
     }
 
     // Grok's outbox (only when the file changed)
-    let work = local, grokReport = null;
+    let work = local, grokReport = null, grokFile = null;
     const grokSha = rg.missing ? null : rg.sha;
     if (!rg.missing && grokSha !== ((base || {}).sha || {}).grok) {
       let g = null;
@@ -319,6 +325,7 @@
       if (g) {
         if (g.format !== 'opus-grok') problem('grok', 'grok.json should have "format": "opus-grok", so nothing from it was added.');
         else {
+          grokFile = g;
           work = U.clone(local); work.plan = U.clone(mPlan);
           grokReport = applyGrok(work, g);
           if (!Plan.validate(work.plan).ok) work.plan = U.clone(mPlan);
@@ -354,8 +361,12 @@
       sha.plan = await putFile(F.plan, JSON.stringify(mPlan, null, 2) + '\n', rp.sha, 'Opus: plan from phone ' + stamp());
       basePlan = U.clone(mPlan);
     }
-    if (!logsSame(mLogs, RL)) {
-      const out = Object.assign({}, mLogs, { updated: new Date().toISOString(), app: 'Opus ' + Opus.VERSION });
+    // logs.json "sync": when this phone last synced and what it took from grok.json, so Grok can check (written at least once a day)
+    const lastSeen = RL && isObj(RL.sync) ? RL.sync : null;
+    const outbox = grokReport ? { updated: grokFile.updated || null, sha: grokSha, added: grokReport.added, changed: grokReport.changed, removed: grokReport.removed, kept: grokReport.kept.slice(0, 10), skipped: grokReport.bad.slice(0, 10) } : (lastSeen && lastSeen.outbox) || null;
+    const stale = !lastSeen || !lastSeen.at || U.key(new Date(lastSeen.at)) !== U.key();
+    if (!logsSame(mLogs, RL) || grokReport || stale) {
+      const out = Object.assign({}, mLogs, { updated: new Date().toISOString(), app: 'Opus ' + Opus.VERSION, sync: { at: new Date().toISOString(), app: Opus.VERSION, outbox } });
       sha.logs = await putFile(F.logs, JSON.stringify(out, null, 1) + '\n', rl.sha, logsBroken ? 'Opus: logs.json rebuilt from phone' : 'Opus: logs from phone ' + stamp());
       if (logsBroken) notes.push('logs.json was damaged in GitHub, so Opus rebuilt it from this phone');
     }
@@ -368,6 +379,15 @@
         const gr = await fetch('GUIDE.md', { cache: 'no-store' });
         if (gr.ok) { const text = await gr.text(); const cur = await getFile(F.guide); if (cur.missing || cur.text !== text) await putFile(F.guide, text, cur.sha, 'Opus: guide for ' + Opus.VERSION); cfg.guideVer = Opus.VERSION; }
       } catch (e) { if (e.kind === 'conflict' || e.kind === 'offline') throw e; }
+    }
+    // a full backup into backups/ once a month, so a bad sync can't wipe history
+    const month = U.key().slice(0, 7);
+    if (cfg.backupMonth !== month) {
+      try {
+        const name = 'backups/opus-backup-' + month + '.json', cur = await getFile(name);
+        if (cur.missing) await putFile(name, Store.exportJSON() + '\n', null, 'Opus: monthly backup ' + month);
+        cfg.backupMonth = month;
+      } catch (e) { if (e.kind === 'offline') throw e; }
     }
     cfg.lastSync = new Date().toISOString();
     problem('sync', null);
@@ -473,7 +493,8 @@
       'You help me run Opus, my phone app for food, training, money and home. You reach it through the "opus" connector, which saves to my private opus-data repo. Opus reads that every time I open the app.',
       '',
       'First call read_opus_file with "guide". It explains every file. The short version:',
-      '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs. Change it with save_plan, keep every id, and change only what I ask for or what clearly needs it.',
+      '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs. Change one part at a time with update_plan_section (for example section "money.debts"), keep every id, and change only what I ask for or what clearly needs it.',
+      '- Long files come in parts; ask for the next part, or read one section (like "money") at a time. The "sync" section of my logs says when Opus last synced and what it took from your outbox.',
       '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
       '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, or my cash on hand.',
       '- Free cash is the top of my Money tab: cash I can use now that isn’t needed for bills or anything else before payday. Whenever you look at my accounts, add a "money.cash" entry with today’s date, the time, my cash, and every amount that has to come out before payday (with due dates), as GUIDE.md section 4 shows.',
@@ -497,6 +518,7 @@
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
     blocked: () => S.blocked, grokPrompt, steps, dirty,
+    helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests
     _: { merge3, mergeLogs, mergeSetMap, mergeKeyed, applyGrok, logsOf, droppedFrom, toB64, fromB64, eq }
   };

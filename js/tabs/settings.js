@@ -138,6 +138,12 @@
       if (g.added) bits.push('added ' + g.added); if (g.changed) bits.push('changed ' + g.changed); if (g.removed) bits.push('took back ' + g.removed);
       card.appendChild(h('<p class="small">From Grok, ' + U.esc(U.fmtDateShort(new Date(g.at))) + ': ' + U.esc(bits.join(', ') || 'nothing new') + '.' + (g.kept && g.kept.length ? ' You had already logged ' + U.esc(g.kept.join(', ')) + ', so yours were kept.' : '') + '</p>'));
     }
+    const hv = S.helper();
+    if (hv.behind) card.appendChild(h('<div class="banner"><b>The Grok helper is behind.</b><br>It’s on ' + U.esc(hv.have) + ', and this Opus needs ' + U.esc(hv.want) + ', so Grok’s newest saves may fail. If Cloudflare is linked to your opus repo, it catches up on its own within the hour. If not, paste the new helper code into Cloudflare once.</div>'));
+    const facts = [];
+    facts.push('Grok helper: ' + (hv.have ? hv.have + (hv.behind ? ' (needs ' + hv.want + ')' : ', up to date') : 'reports in after its next update'));
+    if (c.backupMonth) facts.push('Monthly backup: ' + U.MONTHS[+c.backupMonth.slice(5, 7) - 1] + ' saved in opus-data › backups');
+    card.appendChild(h('<p class="small">' + facts.map(U.esc).join('<br>') + '</p>'));
     if (c.undoPlan) {
       const un = h('<button class="btn ghost" type="button">Undo the last plan update from GitHub</button>');
       un.onclick = () => ui.ask({ title: 'Put the earlier plan back?', text: 'Opus goes back to the plan you had before the update on ' + U.fmtDateShort(new Date(c.undoPlan.at)) + ', and saves that to GitHub. Logs stay as they are.', yes: 'Put it back' }).then(ok => { if (ok) { S.undoPlan(); S.sync({ now: true, quiet: true }); api.rerender(); } });

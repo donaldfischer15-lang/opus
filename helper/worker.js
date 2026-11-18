@@ -4,7 +4,8 @@
     - plan.json  (checked with the same rules Opus uses before it is saved)
     - grok.json  (Grok's outbox: money weeks, weigh-ins, balances, workouts)
     - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, reading, notes)
-  It never writes logs.json or anything else.
+  It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
+  when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
 
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
@@ -14,7 +15,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -101,35 +102,83 @@ function gh(env) {
 const isObj = x => x && typeof x === 'object' && !Array.isArray(x);
 const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const num = v => typeof v === 'number' && isFinite(v);
+/* The outbox sections. GUIDE.md section 4 lists exactly these (a test checks that the two match).
+   Each check returns null when the entry is fine, or what is wrong with it, naming the field. */
+const listErr = (o, k) => {
+  if (o[k] == null) return null;
+  if (!Array.isArray(o[k])) return k + ' must be a list';
+  for (let n = 0; n < o[k].length; n++) { const x = o[k][n]; if (!isObj(x)) return k + '[' + n + '] must be an object like { "name": "...", "amount": 12.5 }'; if (!num(x.amount)) return k + '[' + n + '].amount must be a number (got ' + JSON.stringify(x.amount) + ')'; }
+  return null;
+};
+const dateErr = (o, k) => isDate(o[k]) ? null : k + ' must be a date like "2026-11-27" (got ' + JSON.stringify(o[k]) + ')';
 const OUT = [
-  ['weights', w => w.date, w => isDate(w.date) && num(w.lb)],
-  ['money.weeks', w => w.weekEnding, w => isDate(w.weekEnding) && (w.paycheck == null || num(w.paycheck)) && ['spent', 'bills', 'debtPayments', 'balances'].every(k => w[k] == null || (Array.isArray(w[k]) && w[k].every(x => isObj(x) && num(x.amount))))],
-  ['money.balances', w => w.date, w => isDate(w.date) && isObj(w.debts)],
-  ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free)) && (c.held == null || (Array.isArray(c.held) && c.held.every(x => isObj(x) && num(x.amount)))) && (c.accounts == null || (Array.isArray(c.accounts) && c.accounts.every(x => isObj(x) && num(x.amount))))],
-  ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)]
+  ['money.cash', 'date', c => dateErr(c, 'date') || (num(c.cash) || num(c.free) ? null : 'needs cash (or free) as a number') || listErr(c, 'held') || listErr(c, 'accounts') || (c.free != null && !num(c.free) ? 'free must be a number' : null)],
+  ['money.weeks', 'weekEnding', w => dateErr(w, 'weekEnding') || (w.paycheck == null || num(w.paycheck) ? null : 'paycheck must be a number or null') || ['spent', 'bills', 'debtPayments', 'balances'].map(k => listErr(w, k)).find(Boolean) || null],
+  ['money.balances', 'date', w => dateErr(w, 'date') || (isObj(w.debts) ? (Object.keys(w.debts).map(k => w.debts[k] == null || num(w.debts[k]) ? null : 'debts["' + k + '"] must be a number').find(Boolean) || null) : 'debts must be an object like { "Credit card": 1840 }')],
+  ['weights', 'date', w => dateErr(w, 'date') || (num(w.lb) ? null : 'lb must be a number')],
+  ['workouts', 'id', w => (typeof w.id === 'string' && w.id ? null : 'id must be a text id like "grok-2026-11-27"') || dateErr(w, 'date') || (Array.isArray(w.sets) ? null : 'sets must be a list')]
 ];
+const OUT_PATHS = OUT.map(o => o[0]);
 const getp = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
 function setp(o, p, v) { const ks = p.split('.'); let a = o; for (const k of ks.slice(0, -1)) { if (!isObj(a[k])) a[k] = {}; a = a[k]; } a[ks[ks.length - 1]] = v; }
+// accept { "money.cash": [...] } and { "cash": [...] } as well as { "money": { "cash": [...] } }; name anything else
+function normalizeEntries(add) {
+  const out = {}, unknown = [];
+  for (const k of Object.keys(add)) {
+    if (['format', 'version', 'updated'].includes(k)) continue;
+    if (k === 'money' && isObj(add.money)) { for (const m of Object.keys(add.money)) { if (OUT_PATHS.includes('money.' + m)) setp(out, 'money.' + m, add.money[m]); else unknown.push('money.' + m); } continue; }
+    const path = OUT_PATHS.includes(k) ? k : OUT_PATHS.includes('money.' + k) ? 'money.' + k : null;
+    if (path) setp(out, path, add[k]); else unknown.push(k);
+  }
+  return { out, unknown };
+}
 function mergeOutbox(cur, add) {
   const out = isObj(cur) && cur.format === 'opus-grok' ? cur : { format: 'opus-grok', version: 1 };
   const report = { added: 0, replaced: 0, bad: [] };
   let any = false;
-  for (const [p, key, ok] of OUT) {
-    const items = getp(add, p); if (items == null) continue;
-    if (!Array.isArray(items)) { report.bad.push(p + ' must be a list'); continue; }
+  const nz = normalizeEntries(add);
+  nz.unknown.forEach(u => report.bad.push('"' + u + '" is not an outbox section, so it was not saved. The sections are: ' + OUT_PATHS.join(', ') + '.'));
+  for (const [p, keyName, check] of OUT) {
+    const items = getp(nz.out, p); if (items == null) continue;
+    const arr = Array.isArray(items) ? items : isObj(items) ? [items] : null;
+    if (!arr) { report.bad.push(p + ' must be a list of entries'); continue; }
     const list = Array.isArray(getp(out, p)) ? getp(out, p) : []; setp(out, p, list);
-    for (const x of items) {
-      const k = isObj(x) ? key(x) : null;
-      if (k == null) { report.bad.push(p + ': an entry has no ' + (p === 'workouts' ? 'id' : p === 'money.weeks' ? 'weekEnding' : 'date')); continue; }
-      if (!(x.delete === true) && !ok(x)) { report.bad.push(p + ' ' + k + ': missing or wrong fields (see GUIDE.md section 4)'); continue; }
+    arr.forEach((x, n) => {
+      const where = p + '[' + n + ']';
+      if (!isObj(x)) { report.bad.push(where + ' must be an object'); return; }
+      const k = x[keyName];
+      if (k == null || k === '') { report.bad.push(where + ' has no "' + keyName + '"'); return; }
+      if (x.delete !== true) { const e = check(x); if (e) { report.bad.push(p + ' ' + k + ': ' + e); return; } }
       if (p === 'money.cash' && !x.delete && !x.at) x.at = new Date().toISOString();
-      const i = list.findIndex(y => isObj(y) && key(y) === k);
+      const i = list.findIndex(y => isObj(y) && y[keyName] === k);
       if (i >= 0) { list[i] = x; report.replaced++; } else { list.push(x); report.added++; }
       any = true;
-    }
+    });
   }
-  out.updated = new Date().toISOString().slice(0, 10);
-  return { out, report, any };
+  out.updated = new Date().toISOString(); // Opus copies this into logs.json sync.outbox.updated once it picks the file up
+  return { out, report, any, received: Object.keys(add) };
+}
+
+/* ---------- reading in pieces (Grok's reader cuts long results) ---------- */
+const PAGE = 14000;
+function pick(obj, section) {
+  const v = getp(obj, section);
+  if (v === undefined) return { err: '"' + section + '" is not in this file. Sections: ' + Object.keys(obj).filter(k => k !== 'format' && k !== 'version').join(', ') + '.' };
+  return { v };
+}
+function sinceFilter(v, since) {
+  if (!since || !Array.isArray(v)) return v;
+  return v.filter(x => !isObj(x) || String(x.date || x.weekEnding || x.weekOf || '') >= since);
+}
+function guideSection(text, section) {
+  const parts = text.split(/\n(?=## )/), want = String(section).toLowerCase();
+  const hit = parts.filter(t => { const head = t.split('\n')[0].toLowerCase(); return head.startsWith('## ' + want + '.') || head.includes(want); });
+  return hit.length ? hit.join('\n') : null;
+}
+function paged(t, part, label) {
+  const total = Math.max(1, Math.ceil(t.length / PAGE)), n = Math.min(Math.max(1, part | 0 || 1), total);
+  const body = t.slice((n - 1) * PAGE, n * PAGE);
+  return total === 1 ? body : '[' + label + ': part ' + n + ' of ' + total + (n < total ? '. Call again with part ' + (n + 1) + ' for the rest.' : '. This is the end.') + ']\n' + body;
 }
 
 /* ---------- the Growth page (Cassius) ---------- */
@@ -196,13 +245,15 @@ function mergeGrowth(old, add, today) {
 /* ---------- tools ---------- */
 const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json' };
 const TOOLS = [
-  { name: 'read_opus_file', description: 'Read one file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, what the owner logged on the phone (read only). "outbox" is grok.json, entries you added that Opus copies into the logs. "growth" is growth.json, the Growth page that Cassius (the teacher) fills in.',
-    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth'] } }, required: ['file'] } },
+  { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page that Cassius fills in. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
+    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
+  { name: 'update_plan_section', description: 'Change one part of plan.json without sending the whole plan. section is a top-level key ("money", "training", "food", "home", "routine", "schedule", "mind", "review", "profile", "notes", "name") or a dotted path inside one ("money.debts", "money.takeHomePerWeek", "training.schedule"). value replaces that part whole, so read that section first, change it, and send it back. Everything else in the plan stays exactly as it is, including edits the owner or Claude made meanwhile. Opus checks the whole plan with its own rules before saving and refuses a broken one, naming the problem. Never invent numbers; use null when unknown.',
+    inputSchema: { type: 'object', properties: { section: { type: 'string' }, value: { description: 'The new value for that section (object, list, number, text or null).' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['section', 'value', 'change'] } },
   { name: 'update_growth', description: 'Save to the Growth page (growth.json), the teacher\'s page in Opus. Send only the sections you change, as in GUIDE.md section 5. energy, creed, lesson and prompt are replaced whole (a missing "date" becomes today; a new lesson files the old one in "lessons"). prompts, subjects, reading, lessons and notes are lists: an entry with the same key replaces the old one (prompts, subjects and reading by "id"; lessons by "date"; notes by "date" and "on"), new ones are added, and { key, "delete": true } removes one. Never invent facts about the owner.',
     inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
-  { name: 'save_plan', description: 'Save the whole updated plan.json. Read the plan first and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
+  { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus: free cash (money.cash: cash on hand and what is held back before payday, from the accounts), money weeks, weigh-ins, debt balance snapshots or workouts, in the grok.json format from GUIDE.md section 4. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins and workouts. Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 function text(t, isError) { return { content: [{ type: 'text', text: t }], isError: !!isError }; }
@@ -215,7 +266,41 @@ async function callTool(name, args, env) {
     const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox or growth.', true);
     const r = await G.get(f);
     if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Use update_growth to start it.' : ''));
-    return text(r.text);
+    let out = r.text, label = f;
+    if (args.section != null && String(args.section).trim()) {
+      const sec = String(args.section).trim();
+      if (args.file === 'guide') { out = guideSection(r.text, sec); if (out == null) return text('No heading in GUIDE.md matches "' + sec + '". Headings: ' + (r.text.match(/^## .+$/gm) || []).map(x => x.slice(3)).join(' | '), true); }
+      else {
+        let o; try { o = JSON.parse(r.text); } catch (e) { return text(f + ' is not valid JSON right now: ' + e.message, true); }
+        const pk = pick(o, sec); if (pk.err) return text(pk.err, true);
+        out = JSON.stringify(sinceFilter(pk.v, isDate(args.since) ? args.since : null), null, 1);
+      }
+      label = f + ' › ' + sec;
+    } else if (isDate(args.since) && args.file !== 'guide') {
+      try { const o = JSON.parse(r.text); for (const k of Object.keys(o)) o[k] = sinceFilter(o[k], args.since); out = JSON.stringify(o, null, 1); } catch (e) {}
+    }
+    return text(paged(out, args.part, label));
+  }
+  if (name === 'update_plan_section') {
+    const sec = String(args.section || '').trim();
+    if (!sec || /^(format|version|updated|rev)$/.test(sec.split('.')[0])) return text('section must name a part of the plan such as "money" or "money.debts" (not format, version or updated).', true);
+    let v; try { v = typeof args.value === 'string' && /^\s*[[{]/.test(args.value) ? parseMaybe(args.value) : args.value; } catch (e) { return text('value is not valid JSON: ' + e.message, true); }
+    if (v === undefined) return text('value is missing. Send the new contents of ' + sec + '.', true);
+    const cur = await G.get(FILES.plan);
+    if (cur.missing) return text('plan.json does not exist yet, so there is nothing to change. Use save_plan to write a whole plan.', true);
+    let plan; try { plan = JSON.parse(cur.text); } catch (e) { return text('plan.json is not valid JSON right now (' + e.message + '). Fix it with save_plan first.', true); }
+    const top = sec.split('.')[0];
+    if (!(top in plan)) return text('"' + top + '" is not a part of this plan. Parts: ' + Object.keys(plan).filter(k => !/^(format|version|updated|rev)$/.test(k)).join(', ') + '.', true);
+    if (sec.includes('.') && getp(plan, sec.split('.').slice(0, -1).join('.')) == null) return text('"' + sec.split('.').slice(0, -1).join('.') + '" is not in the plan, so "' + sec + '" can\'t be set.', true);
+    if (JSON.stringify(getp(plan, sec)) === JSON.stringify(v)) return text('Nothing changed in ' + sec + ', so nothing was saved.');
+    setp(plan, sec, v);
+    let today; try { today = new Intl.DateTimeFormat('en-CA', { timeZone: env.TIME_ZONE || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { today = new Date().toISOString().slice(0, 10); }
+    plan.updated = today;
+    const val = Plan.validate(plan);
+    if (!val.ok) return text('Not saved. With that change the plan has problems:\n- ' + val.errors.slice(0, 10).join('\n- '), true);
+    const change = String(args.change || sec + ' update').replace(/\s+/g, ' ').slice(0, 100);
+    await G.put(FILES.plan, JSON.stringify(plan, null, 2) + '\n', cur.sha, 'Grok: ' + change);
+    return text('Saved ' + sec + ' in plan.json; the rest of the plan is unchanged. Opus picks it up the next time the owner opens it.' + (val.warnings.length ? '\nWarnings:\n- ' + val.warnings.slice(0, 8).join('\n- ') : ''));
   }
   if (name === 'save_plan') {
     let p; try { p = parseMaybe(args.plan); } catch (e) { return text('The plan is not valid JSON: ' + e.message, true); }
@@ -240,10 +325,10 @@ async function callTool(name, args, env) {
     const cur = await G.get(FILES.outbox);
     let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) { old = null; } }
     const { out, report, any } = mergeOutbox(old, add);
-    if (!any) return text('Nothing saved.' + (report.bad.length ? ' Problems:\n- ' + report.bad.join('\n- ') : ' No entries found.'), true);
+    if (!any) return text('Nothing saved.' + (report.bad.length ? ' Problems:\n- ' + report.bad.join('\n- ') : ' No entries found in what you sent (top-level keys: ' + (Object.keys(add).join(', ') || 'none') + '). Send them like { "money": { "cash": [ { "date": "2026-11-27", "cash": 900 } ] } }. The sections are: ' + OUT_PATHS.join(', ') + '.'), true);
     const change = String(args.change || 'outbox').replace(/\s+/g, ' ').slice(0, 100);
     await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, 'Grok: ' + change);
-    return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' Skipped:\n- ' + report.bad.join('\n- ') : '') + ' Opus copies them in the next time the owner opens it.');
+    return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' NOT saved:\n- ' + report.bad.join('\n- ') + '\n' : ' ') + 'Opus copies them in the next time the owner opens it; logs.json section "sync" then shows what it picked up.');
   }
   if (name === 'update_growth') {
     let add; try { add = parseMaybe(args.sections); } catch (e) { return text('The sections are not valid JSON: ' + e.message, true); }
@@ -260,15 +345,28 @@ async function callTool(name, args, env) {
   return text('Unknown tool ' + name, true);
 }
 
+/* ---------- helper.json: tell Opus which version is live (written once per version) ---------- */
+let reported = null;
+async function report(env) {
+  if (reported === VERSION) return;
+  try {
+    const G = gh(env), cur = await G.get('helper.json');
+    let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) {} }
+    if (!old || old.version !== VERSION) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: new Date().toISOString() }, null, 2) + '\n', cur.sha, 'Helper: now ' + VERSION);
+    reported = VERSION;
+  } catch (e) { /* try again next time */ }
+}
+
 /* ---------- MCP over HTTP (stateless, JSON replies) ---------- */
-async function handleRpc(msg, env) {
+async function handleRpc(msg, env, ctx) {
   const { id, method, params } = msg || {};
   const ok = result => ({ jsonrpc: '2.0', id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return err(-32600, 'Invalid request');
   if (id === undefined) return null; // a notification: nothing to answer
-  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"). Save plan changes with save_plan, things you log with add_to_outbox, and the Growth page with update_growth. You can never change logs.json.' });
+  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan), things you log with add_to_outbox, and the Growth page with update_growth. You can never change logs.json.' });
   if (method === 'ping') return ok({});
+  if (method === 'tools/list' || method === 'tools/call') { const p = report(env); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p; }
   if (method === 'tools/list') return ok({ tools: TOOLS });
   if (method === 'tools/call') {
     try {
@@ -284,7 +382,9 @@ async function handleRpc(msg, env) {
 function same(a, b) { a = String(a || ''); b = String(b || ''); if (!a || a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; }
 
 export default {
-  async fetch(request, env) {
+  // Cloudflare runs this every hour (see wrangler.jsonc), so a new version reports in without waiting for Grok
+  async scheduled(event, env, ctx) { if (env.GITHUB_TOKEN) ctx.waitUntil(report(env)); },
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);
     const notFound = () => new Response('Not found', { status: 404 });
@@ -300,10 +400,10 @@ export default {
     if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
     let body; try { body = await request.json(); } catch (e) { return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, { status: 400 }); }
     if (Array.isArray(body)) {
-      const out = (await Promise.all(body.map(m => handleRpc(m, env)))).filter(Boolean);
+      const out = (await Promise.all(body.map(m => handleRpc(m, env, ctx)))).filter(Boolean);
       return out.length ? Response.json(out) : new Response(null, { status: 202 });
     }
-    const r = await handleRpc(body, env);
+    const r = await handleRpc(body, env, ctx);
     return r ? Response.json(r) : new Response(null, { status: 202 });
   }
 };

@@ -4,7 +4,7 @@ Opus is a personal phone app (a home-screen web app). It reads **one plan file**
 
 ## Where the data lives
 
-The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Opus pulls it every time it opens and pushes the phone's logs back. Five files sit at the top of the repo:
+The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Opus pulls it every time it opens and pushes the phone's logs back. These files sit in the repo:
 
 | file | who writes it | what it is |
 |---|---|---|
@@ -13,6 +13,20 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
 | `growth.json` | **only the teacher** (Cassius) | the Growth page: today's words, the lesson, prompts, creed, reading, notes (section 5). The app only reads it. |
 | `GUIDE.md` | the app | this guide. |
+| `helper.json` | the Opus helper | which helper version is live (`{ "version", "since" }`). Opus warns the owner when it is behind. |
+| `backups/opus-backup-YYYY-MM.json` | the app, once a month | a full backup (plan, logs and settings, `"format": "opus-data"`) from the first sync of that month. Never edit these. To restore one, the owner imports it in Settings › Your data › Import backup. |
+
+### The Opus helper (the "opus" connector)
+
+If you have the opus connector, use its tools; they check everything before saving and say exactly what was wrong if something isn't saved.
+
+| tool | use it to |
+|---|---|
+| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox` or `growth`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
+| `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
+| `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
+| `add_to_outbox` | log entries for the owner (section 4). |
+| `update_growth` | the Growth page (section 5; Cassius only). |
 
 If the owner hasn't set up the repo, or your connector can't write files, use the paste route instead: reply with the whole file in one code block and the owner pastes it into Opus (Settings › Plan › Import plan, or Money › Weekly money import).
 
@@ -207,6 +221,7 @@ The app previews the block and lists any problems before saving.
 | `money.weeks` | saved weekly money blocks: `{ "weekEnding", "paycheck", "spent": [{ "cat", "amount" }], "bills": [{ "name", "amount" }], "debtPayments": [{ "name", "amount" }], "balances": [{ "name", "amount" }], "notes": [] }` |
 | `money.balances` | `[{ "date", "debts": { "Credit card": 1840 } }]` balance history |
 | `money.cash` | `[{ "date", "at", "cash", "accounts": [{ "name", "amount" }], "held": [{ "name", "amount", "due" }], "free", "note" }]` Free cash readings, one per day: cash on hand, what is held back before payday, and what is left (`free`). The newest `at` wins, whoever made it. Entries with no `by` were entered by the owner. |
+| `sync` | `{ "at", "app", "outbox": { "updated", "added", "changed", "removed", "kept": [...], "skipped": [...] } }` when Opus last synced (it writes this at least once on each day it's opened) and what it took from `grok.json` the last time that file changed. If `outbox.updated` matches the `updated` time in `grok.json`, Opus has picked up your latest entries. `kept` = entries where the owner's own entry won; `skipped` = entries Opus refused, with the reason. |
 | `prefs` | `{ "restSeconds": { "<exercise id>": 150 }, "tabs": [...], "hiddenTabs": [...], "sound": true }` the owner's settings, for reference only |
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
@@ -241,13 +256,15 @@ You never need the owner to repeat something they entered in Opus. It is all her
 
 ## 4. Your outbox (`grok.json`, `"format": "opus-grok"`)
 
+The outbox has exactly five sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
+
 Put only new or corrected entries here. You may replace the whole file each time; Opus copies each entry into the logs once and keeps it, even after you take it out of this file.
 
 ```json
 {
   "format": "opus-grok",
   "version": 1,
-  "updated": "2026-11-27",
+  "updated": "2026-11-27T18:40:00Z",
   "money": {
     "weeks": [
       { "weekEnding": "2026-11-27", "paycheck": 650.00,
@@ -318,7 +335,7 @@ Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
 
 ## Good requests to expect
 
-- "Swap Week B dinner for something with ground beef." Edit `food.meals` and `food.rotation`, keep ingredient amounts weekly.
+- "Swap Week B dinner for something with ground beef." With the helper: read section `food`, change it, save with `update_plan_section` section `food`. Edit `food.meals` and `food.rotation`, keep ingredient amounts weekly.
 - "Move Upper A to Wednesday." Change `training.schedule`.
 - "Bump my protein at lunch." Change the lunch meal's ingredients and portion, then its `serving` and `macros`.
 - "I can't get to 8 on squats; make the range 5 to 7." Change that block's `reps`.
