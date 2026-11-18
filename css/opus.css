@@ -239,11 +239,12 @@ textarea.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-siz
 .toast button { color: var(--gold-2); font-weight: 600; }
 
 /* rest timer dock */
-.restdock { position: fixed; left: 50%; z-index: 50; transform: translate(-50%, 140%); transition: transform .5s var(--ease);
+.restdock { position: fixed; left: 50%; z-index: 50; transform: translate(-50%, calc(100% + var(--tabbar) + env(safe-area-inset-bottom, 0px) + 60px));
+  visibility: hidden; pointer-events: none; transition: transform .5s var(--ease), visibility 0s linear .5s;
   bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px) + 12px); width: min(448px, calc(100% - 32px));
   background: linear-gradient(160deg, #2a2018, #1a1410); border: 1px solid var(--line-strong); border-radius: 22px; padding: 10px 12px;
   display: flex; align-items: center; gap: 12px; box-shadow: 0 16px 40px -12px #000; }
-.restdock.show { transform: translate(-50%, 0); }
+.restdock.show { transform: translate(-50%, 0); visibility: visible; pointer-events: auto; transition: transform .5s var(--ease), visibility 0s; }
 .restdock.in-sheet { bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); }
 .restdock .ring { width: 48px; height: 48px; flex: none; position: relative; }
 .restdock .ring svg { width: 48px; height: 48px; transform: rotate(-90deg); }
