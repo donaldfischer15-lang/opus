@@ -563,3 +563,10 @@ button.row { width: 100%; background: none; border: 0; border-top: 1px solid var
 .wdots i.on { background: var(--gold); border-color: var(--gold); }
 .wdots i.fut { opacity: .45; }
 .wdots i.off { border-style: dotted; opacity: .3; }
+/* a session's save status: saved, on its way to Grok, or with Grok */
+.saved-line { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 14px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 14px; color: var(--ink-2); text-align: left; }
+.saved-line i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px rgba(185, 201, 143, .14); }
+.saved-line.busy i { background: var(--gold); box-shadow: 0 0 0 3px rgba(242, 211, 160, .14); animation: savedPulse 1.2s ease-in-out infinite; }
+.saved-line.warn i { background: var(--warn); box-shadow: 0 0 0 3px rgba(227, 154, 107, .14); }
+@keyframes savedPulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .saved-line.busy i { animation: none; } }

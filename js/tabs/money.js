@@ -245,6 +245,57 @@
     return card;
   }
 
+  /* what's yours this week: free cash (bills before payday already out) minus food until payday and this week's planned debt payment */
+  function thisWeek() {
+    const m = M(), c = latestCash(), free = freeOf(c);
+    const pay = nextPayday(), d0 = U.daysBetween(new Date(), pay), days = d0 > 0 ? d0 : 7;
+    const fb = (Plan.p.food || {}).budgetPerWeek || {}, foodW = fb.high != null ? fb.high : fb.low;
+    const food = foodW == null ? null : Math.round(foodW * days / 7);
+    const we = U.key(pay), cur = (Store.data.money.weeks || []).find(w => w.weekEnding === we);
+    const paid = cur ? U.sum((cur.debtPayments || []).map(x => x.amount)) : 0;
+    const inHeld = heldOf(c).some(x => /\bdebt\b/i.test(x.name || '')); // Grok already held this week's debt payment back
+    const debt = m.plannedDebtPerWeek == null || inHeld ? null : Math.max(0, m.plannedDebtPerWeek - paid);
+    const yours = free == null ? null : free - (food || 0) - (debt || 0);
+    const cash = c && typeof c.cash === 'number' ? c.cash : null;
+    return { c, free, cash, pay, days, payToday: d0 === 0, foodW, food, debt, paid, yours };
+  }
+  function weekCard() {
+    const t = thisWeek(), m = M();
+    const card = h('<div class="card pad" style="display:flex;flex-direction:column;gap:6px"></div>');
+    if (t.yours == null) {
+      card.appendChild(h('<div class="figure"><div class="v">—</div><div class="k">Yours this week</div><div class="sub">This needs your cash on hand. Grok adds it when it reads your accounts, or tap Free cash at the top to enter it.</div></div>'));
+      return card;
+    }
+    const v = Math.floor(t.yours), short = v < 0;
+    const until = t.payToday ? 'until next payday' : 'until payday ' + U.DAY_NAMES[t.pay.getDay()];
+    card.appendChild(h('<div class="figure"><div class="v num"' + (short ? ' style="color:var(--warn);background:none;-webkit-text-fill-color:currentColor"' : '') + '>' + (short ? '−' + U.money(-v) : U.money(v)) + '</div><div class="k">Yours this week</div><div class="sub">' +
+      (short ? 'Short ' + until + '. Hold off on extras.' : 'Spend it on anything, or put extra on debt. It covers you ' + until + '.') + '</div></div>'));
+    if (!short && t.days > 1) card.appendChild(h('<div class="fc-chips" style="margin-top:2px"><span>about ' + U.money(t.yours / t.days) + ' a day</span><span>' + t.days + ' days left</span></div>'));
+    const rows = h('<div style="margin-top:8px"></div>');
+    const kv = (k, val, cls) => rows.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + val + '</span></div>'));
+    kv('Free cash <span class="muted">· ' + U.esc(whenAt(t.c)) + '</span>', U.money(t.free, { cents: true }));
+    if (t.food != null) kv('Food ' + (t.days === 1 ? 'for 1 day' : 'for ' + t.days + ' days'), '− ' + U.money(t.food));
+    if (t.debt != null) kv(t.paid ? 'Rest of this week’s debt payment' : 'This week’s debt payment', t.debt ? '− ' + U.money(t.debt) : '<span class="muted">sent</span>');
+    kv('Yours this week', short ? '−' + U.money(-v) : U.money(v), 'total');
+    rows.appendChild(h('<div class="small" style="margin-top:6px">Bills due before payday are already out of free cash.' + (t.foodW != null ? ' Food uses the top of your ' + U.money(t.foodW) + ' weekly budget.' : '') + '</div>'));
+    card.appendChild(rows);
+    // your rule: extra debt payments wait for the cushion
+    if (m.cushion != null && t.cash != null && !short) {
+      const first = (m.debts || []).find(d => d.balance == null || d.balance > 0);
+      const gap = m.cushion - t.cash;
+      card.appendChild(h('<div class="g-take" style="margin-top:8px"><div class="tag">Extra on debt</div><div>' + (gap > 0
+        ? 'Your rule keeps a ' + U.money(m.cushion) + ' cushion first. Cash is ' + U.money(gap) + ' short of it, so extra debt payments wait for now.'
+        : 'Cash is above your ' + U.money(m.cushion) + ' cushion, so up to ' + U.money(Math.min(v, t.cash - m.cushion)) + ' can go to extra debt' + (first ? ', starting with ' + U.esc(first.name) : '') + '.') + '</div></div>'));
+    }
+    const avg = calc().free;
+    if (avg) {
+      const f = h('<button class="link" type="button" style="align-self:center;margin-top:6px">Average week from your plan: ' + (Math.round(avg.lo) === Math.round(avg.hi) ? U.money(avg.lo) : U.money(avg.lo) + '–' + U.money(avg.hi).replace('$', '')) + '</button>');
+      f.onclick = () => ui.sheet({ title: 'Average week', kicker: 'Your plan', render(api) { api.body.appendChild(freeCard(calc())); } });
+      card.appendChild(f);
+    }
+    return card;
+  }
+
   function debtCard(onChange) {
     const m = M(), ds = m.debts || [];
     const card = h('<div class="card"></div>');
@@ -286,7 +337,7 @@
     const m = M();
     ui.sheet({ title: 'Money numbers', kicker: 'Your plan', render(api) {
       const b = api.body;
-      b.appendChild(h('<div class="grid2">' + numField('mn-take', 'Take-home until a paycheck is logged', m.takeHomePerWeek) + numField('mn-debt', 'To debt a week', m.plannedDebtPerWeek) + '</div>'));
+      b.appendChild(h('<div class="grid2">' + numField('mn-take', 'Take-home until a paycheck is logged', m.takeHomePerWeek) + numField('mn-debt', 'To debt a week', m.plannedDebtPerWeek) + numField('mn-cush', 'Cushion before extra debt', m.cushion) + '</div>'));
       const bills = h('<div class="card"></div>');
       (m.bills || []).forEach((bl, i) => bills.appendChild(h('<div class="row"><span class="tx"><b>' + U.esc(bl.name) + '</b><small>per ' + (bl.every || 'month') + '</small></span><input class="input" style="width:110px" id="mn-bill-' + i + '" inputmode="decimal" value="' + (bl.amount == null ? '' : bl.amount) + '" placeholder="blank"></div>')));
       b.appendChild(h('<div class="sh"><span class="t">Bills</span></div>')); b.appendChild(bills);
@@ -294,7 +345,7 @@
       const sv = h('<button class="btn block" type="button">Save</button>');
       sv.onclick = () => {
         const g = id => { const v = b.querySelector(id).value.trim(); return v === '' ? null : amt(v); };
-        m.takeHomePerWeek = g('#mn-take'); m.plannedDebtPerWeek = g('#mn-debt');
+        m.takeHomePerWeek = g('#mn-take'); m.plannedDebtPerWeek = g('#mn-debt'); m.cushion = g('#mn-cush');
         (m.bills || []).forEach((bl, i) => { bl.amount = g('#mn-bill-' + i); });
         Store.save(); api.close(); ui.toast('Saved'); onChange && onChange();
       };
@@ -460,7 +511,7 @@
 
     const wk = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Your week</span><button class="c" type="button">Edit numbers</button></div></div>');
     wk.querySelector('button').onclick = () => editNumbers(() => Opus.refresh());
-    wk.appendChild(freeCard(c)); v.appendChild(wk);
+    wk.appendChild(weekCard()); v.appendChild(wk);
 
     const isDay = m.checkInDay === U.dayKey(new Date());
     const ck = h('<div class="next"><div class="body"><div class="k">' + (c.cur ? (c.cur.by === 'grok' ? 'Logged by Grok' : 'Check-in done') : isDay ? 'Today' : U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')]) + '</div><div class="h">' + U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')] + ' check-in</div><div class="s">' + (c.cur ? U.money(weekSpent(c.cur), { cents: true }) + ' spent this week' : 'Grok logs the week, you look it over') + '</div></div><button class="btn' + (c.cur ? ' ghost sm' : '') + '" type="button">' + (c.cur ? 'Open' : 'Start') + '</button></div>');
@@ -479,7 +530,7 @@
     v.appendChild(h('<p class="small" style="text-align:center;padding:0 12px">Everything you enter here is saved for Grok to read.</p>'));
   }
 
-  Opus.money = { importBox, checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE, latestCash, freeOf, updateCash, nextPayday };
+  Opus.money = { thisWeek, importBox, checkIn, calc, debtFree, debtHistory, parseWeek, saveWeek, grokPrompt, TEMPLATE, latestCash, freeOf, updateCash, nextPayday };
   Opus.onBoot(() => {
     const m = M(), d = new Date(), k = U.key(d);
     if (m.checkInDay !== U.dayKey(d) || Store.data.seen.moneyAuto === k) return;

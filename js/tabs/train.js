@@ -403,10 +403,31 @@
         api.body.appendChild(c);
       }
       api.body.appendChild(sessionDetail(rec));
-      const cp = h('<button class="btn block" type="button">Copy log for Claude or Grok</button>'); cp.onclick = () => ui.copy(logText(rec)); api.body.appendChild(cp);
+      api.body.appendChild(savedLine());
       const nx = Plan.nextWorkoutAfter(new Date());
       if (nx) api.body.appendChild(h('<p class="note">Next: ' + U.esc(nx.workout.name) + ' on ' + U.DAY_NAMES[nx.date.getDay()] + '. Your next targets are ready in Train.</p>'));
     } });
+  }
+  /* where the session is: saved on the phone, on its way to Grok, or with Grok. Opus syncs a few seconds after a save. */
+  function savedLine() {
+    const el = h('<div class="saved-line" role="status"><i></i><span></span></div>');
+    const S = Opus.sync, on = S && S.cfg() && S.cfg().token;
+    const draw = () => {
+      let t, tone = '';
+      if (!on) { t = 'Saved on this phone. Turn on Sync in Settings so Grok sees your workouts.'; tone = 'warn'; }
+      else {
+        const st = S.status();
+        if (st === 'syncing' || st === 'pending') { t = 'Saved · sending to Grok…'; tone = 'busy'; }
+        else if (st === 'offline') { t = 'Saved on this phone · goes to Grok when you’re back online'; tone = 'warn'; }
+        else if (st === 'blocked' || st === 'problem') { t = 'Saved on this phone · sync needs a look in Settings'; tone = 'warn'; }
+        else if (S.dirty()) { t = 'Saved · sending to Grok…'; tone = 'busy'; }
+        else t = 'Saved for Grok. Nothing to copy.';
+      }
+      el.className = 'saved-line ' + tone; el.querySelector('span').textContent = t;
+    };
+    draw();
+    if (on) { S.on(() => { if (el.isConnected) draw(); }); setTimeout(() => { if (el.isConnected) draw(); }, 6500); }
+    return el;
   }
   /* plain-text log to paste to Claude or Grok */
   function logText(rec) {
@@ -432,7 +453,6 @@
   function historySheet(rec) {
     ui.sheet({ title: rec.name, kicker: U.DAY_NAMES[U.parseKey(rec.date).getDay()] + ' · ' + U.fmtDateShort(rec.date), render(api) {
       api.body.appendChild(sessionDetail(rec));
-      const cp = h('<button class="btn ghost" type="button">Copy log</button>'); cp.onclick = () => ui.copy(logText(rec)); api.body.appendChild(cp);
       const del = h('<button class="btn danger" type="button">Delete this session</button>');
       del.onclick = () => ui.ask({ title: 'Delete session?', text: 'This removes it from your history and trends.', yes: 'Delete', danger: true }).then(ok => { if (ok) { Store.data.workouts = Store.data.workouts.filter(w => w.id !== rec.id); const dl = Store.data.deleted = Store.data.deleted || {}; (dl.workouts = dl.workouts || {})[rec.id] = new Date().toISOString(); Store.save(); api.close(); Opus.refresh(); } });
       api.body.appendChild(del);
@@ -545,7 +565,7 @@
     } });
   }
 
-  Opus.train = { start, openLogger, plateView, logText };
+  Opus.train = { start, openLogger, plateView, logText, savedLine };
   Opus.onBoot(() => { if (A()) ui.toast(A().name + ' is still open', { label: 'Resume', run: () => openLogger() }); });
   Opus.tab({ id: 'train', title: 'Train', icon: 'train', render });
 })();

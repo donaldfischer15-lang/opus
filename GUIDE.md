@@ -196,13 +196,16 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
   "countOvertime": false,
   "payday": "fri", "checkInDay": "fri", "checkInTime": "18:30",
   "plannedDebtPerWeek": null,
+  "cushion": null,
   "bills": [ { "name": "Car insurance", "amount": 151, "every": "month" } ],
   "debts": [ { "name": "Credit card", "balance": null, "apr": null, "minMonthly": null } ]
 }
 ```
 - `debts` are in **payoff order**. The first with a balance above zero is the focus.
 - `every` is `week`, `month` or `year`.
-- Free cash a week = take-home − bills (weekly share) − `plannedDebtPerWeek` − normal spending (average of the last 4 imported weeks; the grocery budget until then).
+- `cushion`: cash to keep before any extra debt payment (the owner's rule). Money shows when extra can go to debt.
+- **Yours this week** (Money, section III) = today's Free cash − food until payday (the top of `food.budgetPerWeek`, per day) − this week's `plannedDebtPerWeek` (less any `debtPayments` already in the current money week). It is what the owner can spend on anything, or put toward debt as extra.
+- The plan's average week (shown under it) = take-home − bills (weekly share) − `plannedDebtPerWeek` − normal spending (average of the last 4 imported weeks; the grocery budget until then).
 - Debt-free date: each month pays every minimum, then the rest of the debt money goes to the first debt in order. Interest uses `apr` when set.
 
 ### home
@@ -379,7 +382,7 @@ Put only new or corrected entries here. You may replace the whole file each time
 ```
 - **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
   - `cash` is the total in the accounts they spend from (checking plus cash; not savings unless they say so). List each in `accounts`.
-  - `held` is everything that has to come out before payday: bills due by then, planned debt payments, and money they set aside. Give each a `due` date when it has one.
+  - `held` is everything that has to come out before payday: bills due by then (loan minimums included) and money they set aside. Leave out the weekly `plannedDebtPerWeek` payment: Opus takes that out itself in Yours this week. If you do list it, name it with the word "debt" so Opus doesn't count it twice. Give each a `due` date when it has one.
   - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
   - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
   - Update it whenever you look at their accounts, and at least once a day if you can.
