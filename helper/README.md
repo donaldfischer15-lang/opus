@@ -24,4 +24,4 @@ root directory `helper`, build command empty, deploy command `npx wrangler deplo
 Secrets stay in Cloudflare. Free plan: 3,000 build minutes a month; each build takes about a minute.
 After each new version the helper writes `helper.json` in opus-data (within the hour, or at Grok's next call); Opus warns in Settings if it is behind.
 
-Last linked to Cloudflare builds: 2026-11-18.
+Last linked to Cloudflare builds: 2026-11-18. A copy of wrangler.jsonc also sits at the repo root, so the build deploys the helper even if its root directory is left blank.
