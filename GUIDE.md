@@ -51,6 +51,7 @@ The owner should never have to tell you something twice, or tell you to save it.
 - a change to workouts, exercises, starting weights or the schedule (plan `training`)
 - a new home job or a change to one (plan `home`)
 - a weigh-in, a meal or food eaten, a workout done, or today's cash (the outbox, section 4)
+- blood test results, from a report or a photo of one (the outbox `labs`, section 4)
 
 Don't save guesses. If one detail is missing (an amount, a date), save what you know with `null` for the rest and ask for just that detail. If the owner is only thinking out loud ("maybe I'll drop Spotify"), ask before you change anything.
 
@@ -135,7 +136,8 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
       "serving": "6 oz cooked chicken thigh, 1 cup rice, 1 cup broccoli",
       "macros": { "kcal": 580, "protein": 49, "carbs": 53, "fat": 17, "estimate": true },
       "parts": [
-        { "name": "Chicken thigh, cooked", "amount": 170, "unit": "g", "macros": { "kcal": 354, "protein": 42, "carbs": 0, "fat": 19, "estimate": true } },
+        { "name": "Chicken thigh, cooked", "amount": 170, "unit": "g", "macros": { "kcal": 354, "protein": 42, "carbs": 0, "fat": 19, "estimate": true },
+          "micros": { "fiber": 0, "sodium": 150, "potassium": 430, "calcium": 15, "iron": 1.6, "magnesium": 40, "zinc": 3.4, "vitA": 30, "vitC": 0, "vitD": 0.3, "b12": 0.8, "folate": 10, "estimate": true } },
         { "name": "Rice, cooked", "amount": 1, "unit": "cup", "macros": { "kcal": 205, "protein": 4, "carbs": 45, "fat": 0.4, "estimate": true } },
         { "name": "Broccoli", "amount": 1, "unit": "cup", "macros": { "kcal": 31, "protein": 2.6, "carbs": 6, "fat": 0.3, "estimate": true } }
       ],
@@ -153,6 +155,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - Every meal id used in `rotation.weeks` must exist in `meals`.
 - **`macros` are per serving** (one serving as eaten, described in `serving`): `kcal`, then `protein`, `carbs`, `fat` in grams. Set `"estimate": true` when the numbers come from standard nutrition values, `false` when they come from the owner's labels. Use `null` for anything unknown. The app adds up the meals on Today and shows how much has been eaten so far. When you change a meal's ingredients or portion, update its `serving` and `macros` too.
 - **`parts`** are the pieces of one serving, so the owner can tick off only what was eaten (just the banana) or change an amount (150 g of chicken, not 200). Each part has `name`, `amount` (a number), `unit` (`"g"`, `"cup"`, `"tbsp"`, or `""` for a count like 4 eggs) and `macros` **for that amount**. When every part has macros, the meal's macros are their sum, so keep `macros` equal to that sum. Keep part names stable: what was eaten is logged by part name. When you change a meal, change its `parts`, `serving`, `macros`, `ingredients` and `prep` together, and save the whole `food` section (or `food.meals`) with `update_plan_section`.
+- **`micros`** (optional, on a part or a saved food) are the vitamins and minerals **for that amount**, from standard nutrition values (USDA FoodData Central), with `"estimate": true`. The keys and units are fixed: `fiber` g, `sodium` mg, `potassium` mg, `calcium` mg, `iron` mg, `magnesium` mg, `zinc` mg, `vitA` µg RAE, `vitC` mg, `vitD` µg, `b12` µg, `folate` µg DFE. Any other key is refused. Use `null` for a nutrient you don't know. Sodium leaves out salt and seasoning added while cooking. Opus adds them up on Food › Vitamins & minerals and names every food that has no `micros`, so when you add or change a meal or a saved food, give each part its `micros` too.
 - **`library`** is the owner's saved foods: things the owner eats outside the plan (a yogurt cup, a protein bar). Each has `name`, `amount`, `unit` and `macros` for that amount. They show as one-tap choices in Food › Add food, and Opus scales the macros when the amount changes. Add to it when the owner mentions a food they eat often; they can add to it on the phone too.
 
 ### training
@@ -202,6 +205,13 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 
 ### home
 `{ "id", "title", "area", "days", "monthDay", "part", "time", "note" }`. Use `days` (same rules as routine) or `monthDay` (1–28) for monthly jobs. Items show on Today only on the days they are due.
+
+### health
+```json
+"health": { "reference": "men-31-50" }
+```
+- `reference` is which daily amounts Food › Vitamins & minerals compares against: `"men-19-30"`, `"men-31-50"`, `"women-19-30"` or `"women-31-50"` (US Dietary Reference Intakes). The owner picks it on the phone the first time. Never set or change it yourself unless the owner tells you which.
+- Blood test results are not in the plan: they go in the outbox `labs` (section 4) and live in `logs.json` `labs`.
 
 ### mind and review
 ```json
@@ -263,7 +273,8 @@ The app previews the block and lists any problems before saving.
 | `reading` | `[{ "id", "page", "date", "done" }]` the owner's page in each book from `growth.json` `reading` (`done` true = finished) |
 | `kept` | `[{ "date", "text", "from" }]` the Growth words the owner chose to keep |
 | `eaten` | what was actually eaten, when it differs from the plan. **A planned meal:** `{ "id": "<date>:<routine item id>", "date", "item", "meal", "name", "parts": [{ "name", "unit", "planned", "ate", "macros" }], "macros", "at" }` (part of it was eaten, or more or less; `macros` is what was eaten), or the same with `"skipped": true` (not eaten). A planned meal that is ticked in `checks` with no entry here was eaten as planned. **Something extra:** `{ "id", "date", "extra": true, "name", "amount", "unit", "slot", "macros", "at" }` (`macros` may be `null`; `slot` is breakfast, lunch, snack or dinner). |
-| `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" } }` workouts and food entries the owner removed, so they stay removed |
+| `labs` | blood test results: `{ "date", "lab", "markers": [{ "name", "value", "unit", "range", "low", "high" }], "note", "at" }`, one entry per test date. `range` is the lab's reference range as printed; `low` and `high` are its numbers. A value below `low` or above `high` shows as outside the lab's range. |
+| `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" }, "labs": { "<date>": "<when>" } }` workouts, food entries and blood tests the owner removed, so they stay removed |
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
 Entries that came from you carry `"by": "grok"`.
@@ -278,6 +289,8 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | ate only part of a meal, more or less of it, or skipped it | `logs.json` `eaten` (by meal and part) |
 | added food that wasn't in the plan | `logs.json` `eaten` (`"extra": true`) |
 | saved a food to "my foods" | `plan.json` `food.library` |
+| entered a blood test | `logs.json` `labs` |
+| picked which daily amounts to compare against | `plan.json` `health.reference` |
 | logged a workout or a set | `logs.json` `workouts` |
 | weighed in | `logs.json` `weights` |
 | entered cash on hand (Money › Free cash › Update it myself) | `logs.json` `money.cash` |
@@ -293,7 +306,7 @@ You never need the owner to repeat something they entered in Opus. It is all her
 
 ## 4. Your outbox (`grok.json`, `"format": "opus-grok"`)
 
-The outbox has exactly six sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
+The outbox has exactly seven sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`, `labs`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
 
 Put only new or corrected entries here. You may replace the whole file each time; Opus copies each entry into the logs once and keeps it, even after you take it out of this file.
 
@@ -322,7 +335,11 @@ Put only new or corrected entries here. You may replace the whole file each time
   },
   "weights": [ { "date": "2026-11-27", "lb": 188.4 } ],
   "workouts": [],
-  "eaten": [ { "id": "grok-2026-11-27-shake", "date": "2026-11-27", "name": "Protein shake", "amount": 1, "unit": "scoop", "slot": "snack", "macros": { "kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5, "estimate": false } } ]
+  "eaten": [ { "id": "grok-2026-11-27-shake", "date": "2026-11-27", "name": "Protein shake", "amount": 1, "unit": "scoop", "slot": "snack", "macros": { "kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5, "estimate": false } } ],
+  "labs": [ { "date": "2026-12-04", "lab": "Quest", "markers": [
+    { "name": "Vitamin D, 25-OH", "value": 24, "unit": "ng/mL", "range": "30-100", "low": 30, "high": 100 },
+    { "name": "Ferritin", "value": 85, "unit": "ng/mL", "range": "38-380", "low": 38, "high": 380 }
+  ] } ]
 }
 ```
 - **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
@@ -332,7 +349,8 @@ Put only new or corrected entries here. You may replace the whole file each time
   - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
   - Update it whenever you look at their accounts, and at least once a day if you can.
 - **Food the owner tells you they ate (`eaten`)** shows on Food › Today as something extra and counts in the day's totals. Give each a made-up `id` (e.g. `"grok-2026-11-27-shake"`), `date` and `name`; add `amount`, `unit`, `slot` and `macros` when you know them (`null` when you don't). If it is a planned meal eaten as planned, don't log it here; the owner ticks it on the phone.
-- Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
+- **Blood tests (`labs`)**: when the owner sends a lab report or a photo of one, copy every result exactly as printed: `name`, `value` (a number), `unit`, and the lab's reference `range` as printed, with its numbers in `low` and `high` (leave one out for a range like "<100" or ">40"). `date` is the date the blood was drawn. One entry per test date; send the same `date` again to correct it. Read every number twice; if one is hard to read, leave that marker out and ask. Don't interpret, diagnose or suggest treatment. If a result is outside the lab's range, say only that, and that it is worth raising with their doctor. Opus shows the results under Food › Vitamins & minerals › Blood tests, with trends, beside the food estimates.
+- Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a blood test by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.
 - Except for cash readings: if the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
 - A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
@@ -378,6 +396,8 @@ Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
 - "Swap Week B dinner for something with ground beef." With the helper: read section `food`, change it, save with `update_plan_section` section `food`. Edit `food.meals` (with the new meal's `parts`, `serving`, `macros`, `ingredients` and `prep`) and `food.rotation`, keep ingredient amounts weekly.
 - "Breakfast is 3 eggs now, not 4." Change that meal's egg part (`amount` and its `macros`), then its `serving` and `macros` sum, and the weekly egg `qty` in `ingredients`.
 - "I had a protein shake after the gym." Add it to the outbox `eaten`. If they have it often, also add it to `food.library`.
+- "Add my blood test to Opus" (with a photo or PDF of the report). Copy every result into the outbox `labs` as described in section 4, then list what you saved and anything you couldn't read.
+- "How are my vitamins looking?" Add up `micros` for what they ate (planned meals ticked, scaled by `eaten` parts, plus extras) and compare with the daily amounts for `health.reference`; name the foods without `micros`. Put any blood results beside them. No diagnosis; anything outside the lab's range is for their doctor.
 - "What did I actually eat this week?" Read `checks` and `eaten` since Sunday; planned meals ticked with no `eaten` entry were eaten as planned.
 - "Move Upper A to Wednesday." Change `training.schedule`.
 - "Bump my protein at lunch." Change the lunch meal's ingredients and portion, then its `serving` and `macros`.

@@ -164,7 +164,7 @@
     let s = '';
     const ticks = [lo + (hi - lo) * .1, lo + (hi - lo) * .5, lo + (hi - lo) * .9];
     ticks.forEach(v => { s += '<line class="grid" x1="' + pl + '" x2="' + (o.w - pr) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text x="' + (pl - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + U.esc(o.fmt(v)) + '</text>'; });
-    if (o.target != null) s += '<line class="ln2" x1="' + pl + '" x2="' + (o.w - pr) + '" y1="' + Y(o.target).toFixed(1) + '" y2="' + Y(o.target).toFixed(1) + '"/><text x="' + (o.w - pr) + '" y="' + (Y(o.target) - 4).toFixed(1) + '" text-anchor="end">goal ' + U.esc(o.fmt(o.target)) + '</text>';
+    if (o.target != null) s += '<line class="ln2" x1="' + pl + '" x2="' + (o.w - pr) + '" y1="' + Y(o.target).toFixed(1) + '" y2="' + Y(o.target).toFixed(1) + '"/><text x="' + (o.w - pr) + '" y="' + (Y(o.target) - 4).toFixed(1) + '" text-anchor="end">' + U.esc(o.tlabel == null ? 'goal' : o.tlabel) + ' ' + U.esc(o.fmt(o.target)) + '</text>';
     const line = pts.map((p, i) => (i ? 'L' : 'M') + X(p.date).toFixed(1) + ',' + Y(p.v).toFixed(1)).join('');
     const gid = 'g' + U.uid();
     if (pts.length > 1) {
@@ -182,7 +182,7 @@
     s += '<line class="hl" id="hl" y1="' + pt + '" y2="' + (o.h - pb) + '" style="opacity:0"/><circle class="hov" r="5" style="opacity:0"/>';
     s += '<rect x="0" y="0" width="' + o.w + '" height="' + o.h + '" fill="transparent"/>';
     svg.innerHTML = s;
-    const lab = p => U.fmtDateShort(p.date) + ' · ' + o.fmt(p.v) + (p.note ? ' · ' + p.note : '');
+    const lab = p => U.fmtDateShort(p.date) + ' · ' + (o.tipFmt || o.fmt)(p.v) + (p.note ? ' · ' + p.note : '');
     tip.textContent = 'Latest: ' + lab(last);
     const hl = svg.querySelector('.hl'), hv = svg.querySelector('.hov');
     const move = e => {

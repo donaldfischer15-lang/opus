@@ -176,14 +176,15 @@
   }
 
   /* Anything you ate that wasn't in the plan: a yogurt cup, a coffee, a second banana. */
+  const scaleMicros = (m, f) => { const o = {}; for (const k in m) o[k] = typeof m[k] === 'number' ? Math.round(m[k] * f * 100) / 100 : m[k]; o.estimate = m.estimate !== false; return o; };
   function addFood(d, o) {
     o = o || {};
     const ed = o.entry || null;
     const lib = Plan.library();
     const recent = []; const seen = new Set(lib.map(x => String(x.name).toLowerCase()));
     (Store.data.eaten || []).filter(e => e.extra && e.name).sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).forEach(e => { const k = e.name.toLowerCase(); if (!seen.has(k) && recent.length < 6) { seen.add(k); recent.push(e); } });
-    const picks = lib.map(x => Object.assign({ from: 'lib' }, x)).concat(recent.map(x => ({ name: x.name, amount: x.amount, unit: x.unit, macros: x.macros, from: 'recent' })));
-    let slot = ed ? ed.slot || slotNow() : o.slot || slotNow(), base = null, touched = false;
+    const picks = lib.map(x => Object.assign({ from: 'lib' }, x)).concat(recent.map(x => ({ name: x.name, amount: x.amount, unit: x.unit, macros: x.macros, micros: x.micros || null, from: 'recent' })));
+    let slot = ed ? ed.slot || slotNow() : o.slot || slotNow(), base = null, touched = false, mbase = null;
     ui.sheet({ title: ed ? ed.name : 'Add food', kicker: ed ? 'Something extra' : 'Not in the plan', foot: true, onClose: () => { o.after && o.after(); Opus.refresh(); }, render(api) {
       const b = api.body;
       if (picks.length && !ed) {
@@ -212,11 +213,12 @@
       function fill(x) {
         inp('name').value = x.name || ''; inp('unit').value = x.unit || ''; st.set(x.amount == null ? 1 : x.amount, true);
         base = x.macros ? { amount: x.amount == null ? 1 : Number(x.amount), macros: x.macros } : null; touched = false; setMac(x.macros);
+        mbase = x.micros ? { name: String(x.name || '').toLowerCase(), amount: x.amount == null ? 1 : Number(x.amount) || 1, micros: x.micros } : null;
         keepOn = false; keep.classList.remove('on'); keep.hidden = x.from === 'lib';
       }
       function scale() { if (!base || touched || !base.amount) return; setMac(Plan.scaleMacros(base.macros, (st.get() || 0) / base.amount)); }
       const readMac = () => { const o2 = { estimate: true }; let any = false; for (const [k] of MK) { const raw = inp(k).value.trim(); if (raw === '') { o2[k] = null; continue; } const v = Number(raw.replace(',', '.')); if (!(v >= 0)) return false; o2[k] = v; any = true; } if (base && !touched) o2.estimate = base.macros.estimate !== false; else if (any) o2.estimate = false; return any ? o2 : null; };
-      if (ed) { fill({ name: ed.name, amount: ed.amount, unit: ed.unit, macros: ed.macros }); base = null; }
+      if (ed) { fill({ name: ed.name, amount: ed.amount, unit: ed.unit, macros: ed.macros, micros: ed.micros }); base = null; }
       drawSlot();
       const ft = h('<div class="btns">' + (ed ? '<button class="btn quiet" type="button">Remove</button>' : '') + '<button class="btn" type="button">' + (ed ? 'Save' : 'Add') + '</button></div>');
       api.foot.appendChild(ft);
@@ -229,12 +231,14 @@
         const amount = st.get(); if (!(amount > 0)) { ui.toast('Enter an amount'); return; }
         const macros = readMac(); if (macros === false) { ui.toast('Macros: numbers only'); return; }
         const unit = inp('unit').value.trim();
-        const e = { id: ed ? ed.id : newId(d), date: ed ? ed.date : U.key(d), extra: true, name, amount, unit, slot, macros, at: new Date().toISOString() };
+        // vitamins and minerals carry over from the food you picked, scaled to the amount (only while the name still matches)
+        const micros = mbase && mbase.name === name.toLowerCase() ? scaleMicros(mbase.micros, amount / mbase.amount) : null;
+        const e = Object.assign({ id: ed ? ed.id : newId(d), date: ed ? ed.date : U.key(d), extra: true, name, amount, unit, slot, macros, at: new Date().toISOString() }, micros ? { micros } : {});
         putEaten(e);
         if (keepOn) {
           const f = Plan.p.food = Plan.p.food || {}; f.library = Array.isArray(f.library) ? f.library : [];
           const i = f.library.findIndex(x => String(x.name).toLowerCase() === name.toLowerCase());
-          const item = { name, amount, unit, macros }; if (i >= 0) f.library[i] = item; else f.library.push(item);
+          const item = Object.assign({ name, amount, unit, macros }, micros ? { micros } : {}); if (i >= 0) f.library[i] = item; else f.library.push(item);
           Plan.p.updated = U.key();
         }
         Store.save(); ui.buzz(12); api.close(); ui.toast(ed ? 'Saved' : 'Added ' + name + (keepOn ? ', and kept in your foods' : ''));
@@ -422,8 +426,10 @@
     const lb = h('<button class="btn ghost" type="button">Log weight</button>'); lb.onclick = weighIn; wc.appendChild(lb);
     v.appendChild(wSec);
 
+    if (Opus.body) Opus.body.section(v, 'VI');
+
     if ((f.rules || []).length) {
-      const r = h('<div class="sec"><div class="sh"><span class="r">VI</span><span class="t">House rules</span></div><div class="card"></div></div>');
+      const r = h('<div class="sec"><div class="sh"><span class="r">VII</span><span class="t">House rules</span></div><div class="card"></div></div>');
       f.rules.forEach(x => r.querySelector('.card').appendChild(h('<div class="row"><span class="tx"><small style="font-size:13.5px;color:var(--ink-2)">' + U.esc(x) + '</small></span></div>')));
       v.appendChild(r);
     }

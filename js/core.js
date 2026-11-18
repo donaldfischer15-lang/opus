@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.7.0';
+  Opus.VERSION = '1.8.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -75,7 +75,8 @@
       reviews: [],         // [{ weekOf, worked, slipped, change, saved }]
       writing: [],         // [{ date, text, words, sentences }]
       eaten: [],           // what was actually eaten: part of a planned meal, a meal skipped, or something extra
-      deleted: { workouts: {}, eaten: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
+      labs: [],            // blood test results: [{ date, lab, markers: [{ name, value, unit, low, high, range }], note, at }]
+      deleted: { workouts: {}, eaten: {}, labs: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
         tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
@@ -113,7 +114,7 @@
       for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
       for (const k of Object.keys(base.settings)) if (d.settings[k] === undefined) d.settings[k] = base.settings[k];
       if (!d.money.weeks) d.money.weeks = []; if (!d.money.balances) d.money.balances = [];
-      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten']) if (!d.deleted[k]) d.deleted[k] = {};
+      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs']) if (!d.deleted[k]) d.deleted[k] = {};
       const shipped = window.OPUS_PRELOADED_PLAN || window.OPUS_EXAMPLE_PLAN;
       if (!d.plan) d.plan = U.clone(shipped);
       else if (shipped && d.plan.name === shipped.name && (Number(shipped.rev) || 1) > (Number(d.plan.rev) || 1)) d.plan = upgradePlan(d.plan, shipped);
@@ -227,7 +228,7 @@
     MK: ['kcal', 'protein', 'carbs', 'fat'],
     partsOf(m) {
       if (!m) return [];
-      if (Array.isArray(m.parts) && m.parts.length) return m.parts.map(p => ({ name: p.name, amount: p.amount == null ? 1 : Number(p.amount), unit: p.unit || '', macros: p.macros || null }));
+      if (Array.isArray(m.parts) && m.parts.length) return m.parts.map(p => ({ name: p.name, amount: p.amount == null ? 1 : Number(p.amount), unit: p.unit || '', macros: p.macros || null, micros: p.micros || null }));
       // no parts written yet: read them off the serving line ("4 large eggs, 1 banana"), without macros
       return String(m.serving || '').split(/,\s*(?![^()]*\))|\s+and\s+(?=\d)/).map(t => t.trim()).filter(Boolean).map(t => {
         const x = t.match(/^(\d+(?:\.\d+)?|[½¼¾])\s*(g|kg|oz|lb|ml|cups?|tbsp|tsp)?\b\s*(.*)$/i);
@@ -387,6 +388,20 @@
       if (r.part && !PARTS.includes(r.part)) errors.push('routine "' + r.id + '": part must be morning, workday or evening.');
       if (r.time && !TIME.test(r.time)) errors.push('routine "' + r.id + '": time should look like "12:00".');
     });
+    const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'b12', 'folate'];
+    const microErr = (o, where) => {
+      if (typeof o !== 'object' || Array.isArray(o)) { errors.push(where + ': micros should be an object like { "fiber": 3.1, "potassium": 422 }.'); return; }
+      for (const k of Object.keys(o)) {
+        if (k === 'estimate' || k === 'note') continue;
+        if (!MICROS.includes(k)) errors.push(where + ': micros has "' + k + '"; use ' + MICROS.join(', ') + '.');
+        else if (o[k] != null && !(Number(o[k]) >= 0)) errors.push(where + ': micros.' + k + ' should be a number (or null).');
+      }
+    };
+    if (p.health != null) {
+      const hl = p.health;
+      if (typeof hl !== 'object' || Array.isArray(hl)) errors.push('health should be an object.');
+      else if (hl.reference != null && !['men-19-30', 'men-31-50', 'women-19-30', 'women-31-50'].includes(hl.reference)) errors.push('health.reference should be men-19-30, men-31-50, women-19-30 or women-31-50.');
+    }
     const f = p.food || {}, meals = f.meals || {};
     ((f.rotation || {}).weeks || []).forEach((w, i) => {
       for (const [slot, id] of Object.entries(w)) if (slot !== 'name' && !meals[id]) errors.push('food rotation week ' + (i + 1) + ' (' + slot + ') points to meal "' + id + '", which is not in food.meals.');
@@ -401,6 +416,7 @@
           if (!pt || !pt.name) errors.push('meal "' + id + '", part ' + (i + 1) + ' needs a "name".');
           else if (pt.amount != null && !(Number(pt.amount) > 0)) errors.push('meal "' + id + '", part "' + pt.name + '": amount should be a number above 0.');
           if (pt && pt.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = pt.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '", part "' + pt.name + '": macros.' + k + ' should be a number (or null).'); }
+          if (pt && pt.micros != null) microErr(pt.micros, 'meal "' + id + '", part "' + pt.name + '"');
         });
       }
     }
@@ -410,6 +426,7 @@
         if (!x || !x.name) errors.push('food.library item ' + (i + 1) + ' needs a "name".');
         else if (x.amount != null && !(Number(x.amount) > 0)) errors.push('food.library "' + x.name + '": amount should be a number above 0.');
         if (x && x.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = x.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('food.library "' + x.name + '": macros.' + k + ' should be a number (or null).'); }
+        if (x && x.micros != null) microErr(x.micros, 'food.library "' + (x.name || i + 1) + '"');
       });
     }
     const t = p.training || {}, ex = t.exercises || {}, wo = t.workouts || {};
