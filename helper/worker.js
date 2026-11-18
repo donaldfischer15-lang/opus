@@ -1,6 +1,6 @@
 /*
   Opus helper for Grok: a tiny MCP server that runs free on Cloudflare Workers.
-  It lets Grok read Donald's opus-data repo and save two files there:
+  It lets Grok read the owner's private opus-data repo and save two files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
     - grok.json  (Grok's outbox: money weeks, weigh-ins, balances, workouts)
   It never writes logs.json or anything else.
