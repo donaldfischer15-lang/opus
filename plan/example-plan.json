@@ -1,0 +1,1073 @@
+{
+  "format": "opus-plan",
+  "version": 1,
+  "name": "Example plan",
+  "updated": "2026-11-18",
+  "rev": 3,
+  "notes": "Example plan that ships with Opus. Replace it: Settings > Import plan. Blank numbers (null) are yours to fill in.",
+  "profile": {
+    "name": "",
+    "motto": "Strong body. Clear mind. Easy life."
+  },
+  "schedule": {
+    "wake": "05:00",
+    "lightsOut": "21:30",
+    "workdays": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri"
+    ],
+    "workStart": "06:30",
+    "workEnd": "17:00",
+    "dayOffMidday": "11:00",
+    "dayOffEvening": "17:00"
+  },
+  "routine": [
+    {
+      "id": "breakfast",
+      "title": "Breakfast",
+      "part": "morning",
+      "time": "05:15",
+      "meal": "breakfast",
+      "daysOff": {
+        "time": "07:30"
+      }
+    },
+    {
+      "id": "weigh-in",
+      "title": "Weigh in",
+      "part": "morning",
+      "time": "05:05",
+      "kind": "weigh",
+      "days": [
+        "mon",
+        "wed",
+        "fri"
+      ]
+    },
+    {
+      "id": "pack-lunch",
+      "title": "Pack the cold lunch",
+      "part": "morning",
+      "time": "05:40",
+      "days": "workdays"
+    },
+    {
+      "id": "write",
+      "title": "Write five sentences",
+      "part": "morning",
+      "time": "06:00",
+      "kind": "writing",
+      "daysOff": {
+        "time": "08:00"
+      }
+    },
+    {
+      "id": "lunch",
+      "title": "Lunch",
+      "part": "workday",
+      "time": "12:00",
+      "meal": "lunch",
+      "detail": "Packed cold"
+    },
+    {
+      "id": "snack",
+      "title": "Meat stick",
+      "part": "workday",
+      "time": "15:00",
+      "meal": "snack"
+    },
+    {
+      "id": "workout",
+      "title": "Workout",
+      "part": "evening",
+      "time": "17:45",
+      "kind": "workout",
+      "daysOff": {
+        "part": "workday",
+        "time": "11:00"
+      }
+    },
+    {
+      "id": "dinner",
+      "title": "Dinner",
+      "part": "evening",
+      "time": "19:00",
+      "meal": "dinner"
+    }
+  ],
+  "food": {
+    "goal": {
+      "start": null,
+      "target": null,
+      "unit": "lb"
+    },
+    "budgetPerWeek": {
+      "low": null,
+      "high": null
+    },
+    "prepDay": "sun",
+    "prepTime": "12:00",
+    "rules": [
+      "Example rules: write what makes food easy for you.",
+      "Same meals every day for a week, then rotate."
+    ],
+    "sections": [
+      "Produce",
+      "Meat",
+      "Dairy & eggs",
+      "Bakery",
+      "Pantry",
+      "Frozen",
+      "Other"
+    ],
+    "rotation": {
+      "start": "2026-11-22",
+      "weeks": [
+        {
+          "name": "Week A",
+          "breakfast": "eggs-yogurt",
+          "lunch": "chicken-rice",
+          "snack": "meat-stick",
+          "dinner": "beef-chili"
+        },
+        {
+          "name": "Week B",
+          "breakfast": "egg-muffins",
+          "lunch": "beef-burrito-bowl",
+          "snack": "meat-stick",
+          "dinner": "sheet-pan-chicken"
+        },
+        {
+          "name": "Week C",
+          "breakfast": "cottage-oats",
+          "lunch": "chicken-pasta-salad",
+          "snack": "meat-stick",
+          "dinner": "slow-cooker-beef"
+        }
+      ]
+    },
+    "meals": {
+      "eggs-yogurt": {
+        "name": "Eggs and Greek yogurt",
+        "slot": "breakfast",
+        "how": "3 scrambled eggs, a cup of Greek yogurt with berries",
+        "prep": [],
+        "ingredients": [
+          {
+            "item": "Eggs",
+            "qty": "2 dozen",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Plain Greek yogurt",
+            "qty": "2 large tubs",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Frozen berries",
+            "qty": "1 bag",
+            "section": "Frozen"
+          }
+        ],
+        "serving": "3 eggs, 1 cup 2% Greek yogurt, ½ cup berries",
+        "macros": {
+          "kcal": 420,
+          "protein": 39,
+          "carbs": 18,
+          "fat": 20,
+          "estimate": true
+        }
+      },
+      "egg-muffins": {
+        "name": "Egg muffins and milk",
+        "slot": "breakfast",
+        "how": "3 egg muffins, reheated, and a glass of milk",
+        "prep": [
+          "Whisk eggs with peppers, onion and cheese; bake 24 muffins at 350°F for 20 min",
+          "Cool and box the egg muffins for the week"
+        ],
+        "ingredients": [
+          {
+            "item": "Eggs",
+            "qty": "2 dozen",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Shredded cheese",
+            "qty": "1 bag",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Bell peppers",
+            "qty": "2",
+            "section": "Produce"
+          },
+          {
+            "item": "Onion",
+            "qty": "1",
+            "section": "Produce"
+          },
+          {
+            "item": "Milk",
+            "qty": "1 gallon",
+            "section": "Dairy & eggs"
+          }
+        ],
+        "serving": "3 egg muffins, 1 cup 2% milk",
+        "macros": {
+          "kcal": 450,
+          "protein": 33,
+          "carbs": 15,
+          "fat": 29,
+          "estimate": true
+        }
+      },
+      "cottage-oats": {
+        "name": "Cottage cheese oats",
+        "slot": "breakfast",
+        "how": "Oats cooked with milk, a scoop of cottage cheese, banana",
+        "prep": [],
+        "ingredients": [
+          {
+            "item": "Rolled oats",
+            "qty": "1 canister",
+            "section": "Pantry"
+          },
+          {
+            "item": "Cottage cheese",
+            "qty": "2 tubs",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Milk",
+            "qty": "1 gallon",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Bananas",
+            "qty": "1 bunch",
+            "section": "Produce"
+          }
+        ],
+        "serving": "½ cup oats, 1 cup 2% milk, ½ cup cottage cheese, 1 banana",
+        "macros": {
+          "kcal": 470,
+          "protein": 26,
+          "carbs": 71,
+          "fat": 11,
+          "estimate": true
+        }
+      },
+      "chicken-rice": {
+        "name": "Chicken rice bowl",
+        "slot": "lunch",
+        "how": "Chicken thighs, rice, roasted broccoli, salsa. Good cold.",
+        "prep": [
+          "Season chicken thighs and air-fry or bake at 400°F until 165°F inside",
+          "Cook a big pot of rice",
+          "Roast broccoli at 425°F for 18 min",
+          "Pack 5 lunch boxes"
+        ],
+        "ingredients": [
+          {
+            "item": "Chicken thighs",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Rice",
+            "qty": "1 bag",
+            "section": "Pantry"
+          },
+          {
+            "item": "Broccoli",
+            "qty": "2 heads",
+            "section": "Produce"
+          },
+          {
+            "item": "Salsa",
+            "qty": "1 jar",
+            "section": "Pantry"
+          }
+        ],
+        "serving": "6 oz cooked chicken thigh, 1 cup rice, 1 cup broccoli",
+        "macros": {
+          "kcal": 580,
+          "protein": 49,
+          "carbs": 53,
+          "fat": 17,
+          "estimate": true
+        }
+      },
+      "beef-burrito-bowl": {
+        "name": "Beef burrito bowl",
+        "slot": "lunch",
+        "how": "Seasoned ground beef, rice, black beans, cheese, salsa. Good cold.",
+        "prep": [
+          "Brown ground beef with taco seasoning",
+          "Cook rice and warm black beans",
+          "Pack 5 lunch boxes with cheese and salsa"
+        ],
+        "ingredients": [
+          {
+            "item": "Lean ground beef",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Rice",
+            "qty": "1 bag",
+            "section": "Pantry"
+          },
+          {
+            "item": "Black beans",
+            "qty": "3 cans",
+            "section": "Pantry"
+          },
+          {
+            "item": "Taco seasoning",
+            "qty": "2 packets",
+            "section": "Pantry"
+          },
+          {
+            "item": "Shredded cheese",
+            "qty": "1 bag",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Salsa",
+            "qty": "1 jar",
+            "section": "Pantry"
+          }
+        ],
+        "serving": "6 oz cooked 90% lean beef, 1 cup rice, ½ cup beans, ¼ cup cheese",
+        "macros": {
+          "kcal": 800,
+          "protein": 62,
+          "carbs": 68,
+          "fat": 30,
+          "estimate": true
+        }
+      },
+      "chicken-pasta-salad": {
+        "name": "Chicken pasta salad",
+        "slot": "lunch",
+        "how": "Pasta, shredded chicken, cucumber, feta, Italian dressing. Made to be eaten cold.",
+        "prep": [
+          "Cook and shred chicken breasts in the slow cooker or oven",
+          "Cook pasta, rinse cold",
+          "Toss with cucumber, feta and dressing; pack 5 boxes"
+        ],
+        "ingredients": [
+          {
+            "item": "Chicken breasts",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Pasta",
+            "qty": "2 boxes",
+            "section": "Pantry"
+          },
+          {
+            "item": "Cucumbers",
+            "qty": "2",
+            "section": "Produce"
+          },
+          {
+            "item": "Feta",
+            "qty": "1 tub",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Italian dressing",
+            "qty": "1 bottle",
+            "section": "Pantry"
+          }
+        ],
+        "serving": "6 oz cooked chicken breast, 1½ cups pasta, 1 oz feta, 2 tbsp dressing",
+        "macros": {
+          "kcal": 750,
+          "protein": 69,
+          "carbs": 69,
+          "fat": 21,
+          "estimate": true
+        }
+      },
+      "meat-stick": {
+        "name": "Meat stick",
+        "slot": "snack",
+        "how": "Keep a few in the truck or lunch bag",
+        "prep": [],
+        "ingredients": [
+          {
+            "item": "Meat sticks",
+            "qty": "1 box",
+            "section": "Other"
+          }
+        ],
+        "serving": "2 beef sticks",
+        "macros": {
+          "kcal": 200,
+          "protein": 12,
+          "carbs": 2,
+          "fat": 16,
+          "estimate": true
+        }
+      },
+      "beef-chili": {
+        "name": "Beef chili",
+        "slot": "dinner",
+        "how": "Slow-cooker chili with beans, topped with cheese and sour cream",
+        "prep": [
+          "Brown the beef, then slow-cook with beans, tomatoes and chili spice for 6 hours",
+          "Portion into 7 containers"
+        ],
+        "ingredients": [
+          {
+            "item": "Lean ground beef",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Kidney beans",
+            "qty": "3 cans",
+            "section": "Pantry"
+          },
+          {
+            "item": "Diced tomatoes",
+            "qty": "2 cans",
+            "section": "Pantry"
+          },
+          {
+            "item": "Chili seasoning",
+            "qty": "2 packets",
+            "section": "Pantry"
+          },
+          {
+            "item": "Onion",
+            "qty": "2",
+            "section": "Produce"
+          },
+          {
+            "item": "Sour cream",
+            "qty": "1 tub",
+            "section": "Dairy & eggs"
+          },
+          {
+            "item": "Shredded cheese",
+            "qty": "1 bag",
+            "section": "Dairy & eggs"
+          }
+        ],
+        "serving": "1½ cups chili with cheese and sour cream",
+        "macros": {
+          "kcal": 640,
+          "protein": 52,
+          "carbs": 37,
+          "fat": 30,
+          "estimate": true
+        }
+      },
+      "sheet-pan-chicken": {
+        "name": "Sheet-pan chicken and potatoes",
+        "slot": "dinner",
+        "how": "Chicken thighs, potatoes and green beans roasted together",
+        "prep": [
+          "Cube potatoes; roast with chicken thighs and green beans at 425°F for 35 min",
+          "Portion into 7 containers"
+        ],
+        "ingredients": [
+          {
+            "item": "Chicken thighs",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Potatoes",
+            "qty": "5 lb bag",
+            "section": "Produce"
+          },
+          {
+            "item": "Green beans",
+            "qty": "2 bags",
+            "section": "Frozen"
+          }
+        ],
+        "serving": "6 oz cooked chicken thigh, 1½ cups potatoes, 1 cup green beans",
+        "macros": {
+          "kcal": 580,
+          "protein": 49,
+          "carbs": 48,
+          "fat": 21,
+          "estimate": true
+        }
+      },
+      "slow-cooker-beef": {
+        "name": "Slow-cooker beef and rice",
+        "slot": "dinner",
+        "how": "Chuck roast slow-cooked with onion and carrots, over rice",
+        "prep": [
+          "Slow-cook chuck roast with onion, carrots and broth for 8 hours",
+          "Shred, portion over rice into 7 containers"
+        ],
+        "ingredients": [
+          {
+            "item": "Chuck roast",
+            "qty": "3 lb",
+            "section": "Meat"
+          },
+          {
+            "item": "Carrots",
+            "qty": "2 lb bag",
+            "section": "Produce"
+          },
+          {
+            "item": "Onion",
+            "qty": "2",
+            "section": "Produce"
+          },
+          {
+            "item": "Beef broth",
+            "qty": "1 carton",
+            "section": "Pantry"
+          },
+          {
+            "item": "Rice",
+            "qty": "1 bag",
+            "section": "Pantry"
+          }
+        ],
+        "serving": "5 oz cooked chuck roast, 1 cup rice, carrots",
+        "macros": {
+          "kcal": 590,
+          "protein": 47,
+          "carbs": 54,
+          "fat": 18,
+          "estimate": true
+        }
+      }
+    },
+    "macroNote": "Per serving. Estimates from standard nutrition values; swap in label numbers any time and set \"estimate\" to false."
+  },
+  "training": {
+    "notes": "Starting draft: 4 days, two upper and two lower, each ending with short conditioning. Edit freely.",
+    "schedule": {
+      "tue": "lower-a",
+      "thu": "upper-a",
+      "sat": "lower-b",
+      "sun": "upper-b"
+    },
+    "rest": {
+      "compound": 180,
+      "accessory": 120,
+      "isolation": 75,
+      "conditioning": 60
+    },
+    "bar": 45,
+    "plates": [
+      45,
+      35,
+      25,
+      10,
+      5,
+      2.5
+    ],
+    "dumbbells": [
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      52.5,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      85,
+      90,
+      95,
+      100
+    ],
+    "increments": {
+      "barbell-lower": 10,
+      "barbell-upper": 5,
+      "machine": 10,
+      "cable": 5
+    },
+    "exercises": {
+      "back-squat": {
+        "name": "Back squat",
+        "type": "compound",
+        "load": "barbell-lower",
+        "cue": "Ramp up with a few lighter sets first; they don’t count. Working sets end with 1 to 2 good reps left."
+      },
+      "rdl": {
+        "name": "Romanian deadlift",
+        "type": "compound",
+        "load": "barbell-lower",
+        "cue": "Push the hips back, bar close to the legs, flat back. Stop when the hamstrings stop stretching."
+      },
+      "db-bench": {
+        "name": "DB bench press",
+        "type": "compound",
+        "load": "dumbbell",
+        "cue": "Shoulder blades pinned, feet planted. Lower under control, press up and slightly back."
+      },
+      "db-shoulder-press": {
+        "name": "DB shoulder press",
+        "type": "accessory",
+        "load": "dumbbell",
+        "cue": "Brace hard, no lean back. Press up and slightly in."
+      },
+      "hip-thrust-machine": {
+        "name": "Hip thrust machine",
+        "type": "accessory",
+        "load": "machine",
+        "cue": "Chin tucked, ribs down. Pause and squeeze the glutes at the top."
+      },
+      "lat-pulldown": {
+        "name": "Lat pulldown",
+        "type": "accessory",
+        "load": "cable",
+        "cue": "Chest up, pull elbows down to your sides. No swinging."
+      },
+      "walking-lunge": {
+        "name": "DB walking lunge",
+        "type": "accessory",
+        "load": "dumbbell",
+        "repsNote": "per leg"
+      },
+      "leg-curl": {
+        "name": "Leg curl",
+        "type": "isolation",
+        "load": "machine"
+      },
+      "calf-raise": {
+        "name": "Standing calf raise",
+        "type": "isolation",
+        "load": "machine"
+      },
+      "chest-row": {
+        "name": "Chest-supported DB row",
+        "type": "accessory",
+        "load": "dumbbell"
+      },
+      "lateral-raise": {
+        "name": "DB lateral raise",
+        "type": "isolation",
+        "load": "dumbbell"
+      },
+      "pushdown": {
+        "name": "Triceps pushdown",
+        "type": "isolation",
+        "load": "cable"
+      },
+      "leg-press": {
+        "name": "Leg press",
+        "type": "accessory",
+        "load": "machine"
+      },
+      "farmer-carry": {
+        "name": "Farmer carry",
+        "type": "accessory",
+        "load": "dumbbell",
+        "repsNote": "yards"
+      },
+      "incline-db": {
+        "name": "Incline DB press",
+        "type": "accessory",
+        "load": "dumbbell"
+      },
+      "cable-row": {
+        "name": "Seated cable row",
+        "type": "accessory",
+        "load": "cable"
+      },
+      "db-curl": {
+        "name": "DB curl",
+        "type": "isolation",
+        "load": "dumbbell"
+      },
+      "face-pull": {
+        "name": "Face pull",
+        "type": "isolation",
+        "load": "cable"
+      }
+    },
+    "workouts": {
+      "lower-a": {
+        "name": "Lower A",
+        "focus": "Squat strength",
+        "warmup": [
+          "Bike 3 min easy",
+          "90/90 hip switches × 8",
+          "Goblet squat hold 30 s",
+          "Empty-bar squats × 10"
+        ],
+        "blocks": [
+          {
+            "ex": "back-squat",
+            "sets": 4,
+            "reps": [
+              6,
+              8
+            ],
+            "start": null
+          },
+          {
+            "ex": "walking-lunge",
+            "sets": 3,
+            "reps": [
+              8,
+              10
+            ],
+            "start": null
+          },
+          {
+            "ex": "leg-curl",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "calf-raise",
+            "sets": 3,
+            "reps": [
+              12,
+              15
+            ],
+            "start": null
+          }
+        ],
+        "conditioning": {
+          "name": "Bike intervals",
+          "detail": "8 rounds: 20 s hard, 40 s easy",
+          "minutes": 8,
+          "rounds": 8,
+          "work": 20,
+          "rest": 40
+        },
+        "cooldown": [
+          "Couch stretch 45 s a side",
+          "Deep squat hold 60 s"
+        ]
+      },
+      "upper-a": {
+        "name": "Upper A",
+        "focus": "Press and pull",
+        "warmup": [
+          "Rower 3 min easy",
+          "Band pull-aparts × 15",
+          "Arm circles × 10 each way"
+        ],
+        "blocks": [
+          {
+            "ex": "db-bench",
+            "sets": 3,
+            "reps": [
+              8,
+              10
+            ],
+            "start": null
+          },
+          {
+            "ex": "chest-row",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "lat-pulldown",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "lateral-raise",
+            "sets": 3,
+            "reps": [
+              12,
+              15
+            ],
+            "start": null
+          },
+          {
+            "ex": "pushdown",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          }
+        ],
+        "conditioning": {
+          "name": "Rower intervals",
+          "detail": "5 rounds: 1 min hard, 1 min easy",
+          "minutes": 10,
+          "rounds": 5,
+          "work": 60,
+          "rest": 60
+        },
+        "cooldown": [
+          "Doorway chest stretch 45 s",
+          "Thread the needle × 6 a side"
+        ]
+      },
+      "lower-b": {
+        "name": "Lower B",
+        "focus": "Hinge and hips",
+        "warmup": [
+          "Bike 3 min easy",
+          "Hip hinge drill × 10",
+          "Glute bridge × 12",
+          "Light RDL × 8"
+        ],
+        "blocks": [
+          {
+            "ex": "rdl",
+            "sets": 3,
+            "reps": [
+              8,
+              10
+            ],
+            "start": null
+          },
+          {
+            "ex": "hip-thrust-machine",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "leg-press",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "farmer-carry",
+            "sets": 4,
+            "reps": [
+              40,
+              40
+            ],
+            "start": null
+          }
+        ],
+        "conditioning": {
+          "name": "Incline walk",
+          "detail": "10 min brisk at a steep incline",
+          "minutes": 10
+        },
+        "cooldown": [
+          "Hamstring floss × 10 a side",
+          "Pigeon stretch 45 s a side"
+        ]
+      },
+      "upper-b": {
+        "name": "Upper B",
+        "focus": "Shoulders and back",
+        "warmup": [
+          "Rower 3 min easy",
+          "Band dislocates × 10",
+          "Scap push-ups × 10"
+        ],
+        "blocks": [
+          {
+            "ex": "db-shoulder-press",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "incline-db",
+            "sets": 3,
+            "reps": [
+              8,
+              10
+            ],
+            "start": null
+          },
+          {
+            "ex": "cable-row",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "db-curl",
+            "sets": 3,
+            "reps": [
+              10,
+              12
+            ],
+            "start": null
+          },
+          {
+            "ex": "face-pull",
+            "sets": 3,
+            "reps": [
+              12,
+              15
+            ],
+            "start": null
+          }
+        ],
+        "conditioning": {
+          "name": "Bike finisher",
+          "detail": "6 rounds: 30 s hard, 30 s easy",
+          "minutes": 6,
+          "rounds": 6,
+          "work": 30,
+          "rest": 30
+        },
+        "cooldown": [
+          "Lat stretch on a rack 45 s a side",
+          "Child's pose 60 s"
+        ]
+      }
+    }
+  },
+  "money": {
+    "currency": "USD",
+    "takeHomePerWeek": null,
+    "countOvertime": false,
+    "payday": "fri",
+    "checkInDay": "fri",
+    "checkInTime": "18:30",
+    "plannedDebtPerWeek": null,
+    "bills": [
+      {
+        "name": "Phone",
+        "amount": null,
+        "every": "month"
+      },
+      {
+        "name": "Insurance",
+        "amount": null,
+        "every": "month"
+      }
+    ],
+    "debts": [
+      {
+        "name": "Credit card",
+        "balance": null,
+        "apr": null,
+        "minMonthly": null
+      },
+      {
+        "name": "Car loan",
+        "balance": null,
+        "apr": null,
+        "minMonthly": null
+      }
+    ],
+    "notes": "Payoff order is the order the debts are listed in."
+  },
+  "home": {
+    "items": [
+      {
+        "id": "trash",
+        "title": "Trash to the curb",
+        "area": "House",
+        "days": [
+          "mon"
+        ],
+        "part": "evening",
+        "time": "19:30",
+        "note": "Trash night"
+      },
+      {
+        "id": "clothes",
+        "title": "Put clothes away",
+        "area": "Room",
+        "part": "evening",
+        "time": "20:45",
+        "note": "Two minutes now beats a pile on Saturday"
+      },
+      {
+        "id": "walk-dog",
+        "title": "Walk the dog",
+        "area": "Pets",
+        "part": "evening",
+        "time": "17:20"
+      },
+      {
+        "id": "litter",
+        "title": "Scoop the litter box",
+        "area": "Pets",
+        "days": [
+          "mon",
+          "thu"
+        ],
+        "part": "evening",
+        "time": "20:30"
+      },
+      {
+        "id": "tires",
+        "title": "Check tire pressure",
+        "area": "Vehicle",
+        "monthDay": 1,
+        "part": "evening",
+        "time": "18:00"
+      }
+    ]
+  },
+  "mind": {
+    "writing": {
+      "goal": "I write clearly",
+      "sentences": 5,
+      "prompts": [
+        "Explain one thing you did at work yesterday to someone who has never been on a job site.",
+        "Describe a place you know well in five sentences.",
+        "What is one thing you want to be true by spring? Say why.",
+        "Teach the steps of a task you know well.",
+        "Write a short message you would actually send, then make it clearer.",
+        "Describe your best lift of the week and how it felt.",
+        "Pick a word you use too much. Write five sentences without it."
+      ]
+    }
+  },
+  "review": {
+    "day": "sun",
+    "time": "19:30",
+    "questions": [
+      "What worked?",
+      "What slipped?",
+      "One change for next week"
+    ]
+  }
+}
