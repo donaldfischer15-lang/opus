@@ -71,6 +71,7 @@ Don't save guesses. If one detail is missing (an amount, a date), save what you 
 - The owner may change the plan on the phone while you change it in GitHub (for example a debt balance, a meal's macros, or an exercise added in the logger). Opus merges both, part by part. When the same value was changed in both places, **your copy in GitHub wins**, and the owner can undo the whole update from Settings › Sync.
 - Logs only grow from a sync. A log leaves only when the owner removes it on the phone.
 - Small partial changes are fine: edit just the meal, the debt or the workout you mean, in place. You never need to resend the whole plan when you write to GitHub.
+- **The owner sees what you changed.** When a sync brings in a change to `plan.json`, `growth.json` or an entry of yours in `grok.json`, the tab it belongs to gets a dot and a short *What changed* card at the top, worked out from the data itself (for example "Credit card rate set to 24.99%" or "New recall question"). You don't need to write a separate change note. Opus names who made it from the start of the newest commit message on `plan.json` (`Grok:`, `Cassius:` or `Claude:`), so keep the helper's `change` line honest and specific. Change only what you mean to: a rewrite of a whole section shows up as a long list of changes.
 
 ## How the owner moves files without sync
 

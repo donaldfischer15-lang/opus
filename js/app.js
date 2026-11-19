@@ -21,7 +21,7 @@
     const U = Opus.ui;
     const bar = document.getElementById('tabbar');
     bar.innerHTML = '<div class="in" role="tablist">' + enabledTabs().map(id =>
-      '<button class="tab' + (id === current ? ' on' : '') + (id !== current && registry[id].badge && registry[id].badge() ? ' new' : '') + '" role="tab" aria-selected="' + (id === current) + '" data-tab="' + id + '" type="button">' +
+      '<button class="tab' + (id === current ? ' on' : '') + (id !== current && ((registry[id].badge && registry[id].badge()) || (Opus.changes && Opus.changes.unseen(id))) ? ' new' : '') + '" role="tab" aria-selected="' + (id === current) + '" data-tab="' + id + '" type="button">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true">' + (U.I[registry[id].icon] || '') + '</svg>' + registry[id].title + '</button>').join('') + '</div>';
     bar.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { if (b.dataset.tab === current) { window.scrollTo({ top: 0, behavior: 'smooth' }); } else go(b.dataset.tab); });
   }
@@ -35,6 +35,7 @@
     v.innerHTML = '';
     v.className = 'view';
     registry[id].render(v, { refresh: !!opts.refresh && !changed });
+    if (Opus.changes) Opus.changes.place(id, v);
     if (!(opts.refresh && !changed)) { Opus.ui.stagger(v); window.scrollTo(0, 0); }
     renderBar();
   }

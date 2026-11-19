@@ -166,7 +166,15 @@
       const b = api.body, s = Store.data.settings, reg = Opus.tabsAll();
 
       // sync
-      b.appendChild(syncSection(api));
+      const ss = syncSection(api); b.appendChild(ss);
+      // what Grok, Cassius and updates changed lately
+      if (Opus.changes) {
+        const n = (Store.data.changes || []).length;
+        const cr = h('<div class="row tap"><span class="tx"><b>What changed lately</b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+        cr.querySelector('small').textContent = n ? 'Every change from Grok, Cassius and updates, last 30 days' : 'Nothing yet. Changes from Grok and Cassius show here.';
+        cr.onclick = () => Opus.changes.history(null);
+        const cc = ss.querySelector('.card'); (cc || ss).appendChild(cr);
+      }
 
       // tabs
       const ts = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">Tabs</span><span class="c">on, off and order</span></div><div class="card list-reorder"></div></div>');

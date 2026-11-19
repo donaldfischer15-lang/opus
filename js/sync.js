@@ -245,6 +245,16 @@
     else { const r2 = await gh('GET', '/contents/' + name, null, 'application/vnd.github.raw+json'); text = await r2.text(); }
     return { sha: j.sha, text };
   }
+  /* who last changed a file in GitHub, from the start of its commit message ("Grok: ...", "Cassius: ...") */
+  async function lastAuthor(name) {
+    try {
+      const r = await gh('GET', '/commits?path=' + encodeURIComponent(name) + '&per_page=5');
+      if (!r.ok) return 'Grok';
+      const c = (await r.json()).map(x => String((x.commit || {}).message || '')).find(m => !/^Opus\b/.test(m));
+      const m = c && /^(Grok|Cassius|Claude)\b/i.exec(c);
+      return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : 'Grok';
+    } catch (e) { return 'Grok'; }
+  }
   async function putFile(name, text, sha, message) {
     const r = await gh('PUT', '/contents/' + name, Object.assign({ message, content: toB64(text) }, sha ? { sha } : {}));
     if (r.status === 409 || r.status === 422) throw new SyncError('conflict', 'changed while saving');
@@ -307,6 +317,7 @@
         else {
           problem('growth', null);
           if (!eq(g, local.growth)) {
+            if (local.growth && Opus.changes) Opus.changes.fromSync({ growthBefore: local.growth, growthAfter: g });
             local.growth = g; applying = true; Store.save(true); applying = false;
             S.refreshLater = true;
           }
@@ -371,6 +382,10 @@
     const planChanged = !eq(mPlan, local.plan), logsChanged = !logsSame(mLogs, logsOf(local));
     if ((planChanged || logsChanged) && Opus.ui.topSheet() && !opts.now) return { wait: true };
     if (planFromGitHub) { cfg.undoPlan = { plan: U.clone(local.plan), at: new Date().toISOString(), name: local.plan.name }; notes.unshift('Plan updated from GitHub'); }
+    if ((planChanged || logsChanged) && base && Opus.changes) {
+      const planBy = planChanged ? await lastAuthor(F.plan) : null;
+      Opus.changes.fromSync({ planBefore: planChanged ? local.plan : null, planAfter: planChanged ? mPlan : null, planBy, logsBefore: logsChanged ? logsOf(local) : null, logsAfter: logsChanged ? mLogs : null });
+    }
     if (planChanged || logsChanged) apply(planChanged ? U.clone(mPlan) : null, logsChanged ? mLogs : null);
 
     // push

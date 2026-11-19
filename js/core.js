@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.10.0';
+  Opus.VERSION = '1.11.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -78,6 +78,7 @@
       labs: [],            // blood test results: [{ date, lab, markers: [{ name, value, unit, low, high, range }], note, at }]
       pets: [],            // pet care done, weigh-ins and vet visits: [{ id, date, pet, care, lb, note, at }]
       supps: [],           // supplements taken: [{ id: 'date:supp', date, supp, at }]
+      changes: [],         // what Grok, Cassius or an update changed, per tab (this phone only, never synced)
       ledger: [],          // the Growth ledger, one mark a day: [{ week, virtue, date, mark: 'clean' | 'dot', at }]
       deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {}, ledger: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
