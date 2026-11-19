@@ -669,3 +669,9 @@ button.row { width: 100%; background: none; border: 0; border-top: 1px solid var
 .dk-n p { margin: 0; color: var(--ink); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dk-r { padding-left: 14px; border-left: 2px solid var(--line); margin-left: 2px; }
 .dk-done p { color: var(--dim); }
+/* shared memory */
+.mm { padding: 6px 16px 8px; }
+.mm-h { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0 4px; }
+.mm-h b { color: var(--gold); font-family: var(--serif); font-weight: 600; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+.mm-f { padding: 9px 0; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; }
+.mm-f p { margin: 0; color: var(--ink); line-height: 1.45; overflow-wrap: anywhere; }

@@ -1,7 +1,7 @@
 # Opus helper for Grok
 
 A tiny MCP server on Cloudflare Workers (free plan) so Grok can save to opus-data.
-Tools: read_opus_file (guide, plan, logs, outbox), save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json.
+Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, update_growth, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json.
 
 worker.js is built from worker.src.js by `node build.js` (copies Plan.validate from site/js/core.js). The public copy for pasting is in the opus repo at helper/worker.js.
 
@@ -18,10 +18,10 @@ worker.js is built from worker.src.js by `node build.js` (copies Plan.validate f
 Revoke: delete the token on GitHub, or the worker in Cloudflare.
 
 ## Updates deploy themselves (one-time link, free)
-Cloudflare builds the helper from `helper/` in the public opus repo (wrangler.jsonc there: name opus-helper, keep_vars, hourly check-in).
+Cloudflare builds the helper from `helper/` in the public opus repo (wrangler.jsonc there: name opus-helper, keep_vars, a check every 5 minutes for notifications).
 Workers & Pages > opus-helper > Settings > Builds > Connect > GitHub > repo opus, branch main,
 root directory `helper`, build command empty, deploy command `npx wrangler deploy`, build watch paths include `helper/*`.
 Secrets stay in Cloudflare. Free plan: 3,000 build minutes a month; each build takes about a minute.
-After each new version the helper writes `helper.json` in opus-data (within the hour, or at Grok's next call); Opus warns in Settings if it is behind.
+After each new version the helper writes `helper.json` in opus-data (within 5 minutes, or at Grok's next call); Opus warns in Settings if it is behind.
 
 Last linked to Cloudflare builds: 2026-11-18. A copy of wrangler.jsonc also sits at the repo root, so the build deploys the helper even if its root directory is left blank.

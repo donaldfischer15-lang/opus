@@ -14,6 +14,7 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `growth.json` | **only the teacher** (Cassius) | the Growth page: today's words, the lesson, prompts, creed, reading, notes (section 5). The app only reads it. |
 | `GUIDE.md` | the app | this guide. |
 | `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (see The desk below). |
+| `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (see The shared memory below). |
 | `push.json` | only the app | the phone's notification schedule. Never edit it. |
 | `helper.json` | the Opus helper | which helper version is live (`{ "version", "since" }`). Opus warns the owner when it is behind. |
 | `backups/opus-backup-YYYY-MM.json` | the app, once a month | a full backup (plan, logs and settings, `"format": "opus-data"`) from the first sync of that month. Never edit these. To restore one, the owner imports it in Settings › Your data › Import backup. |
@@ -24,12 +25,13 @@ If you have the opus connector, use its tools; they check everything before savi
 
 | tool | use it to |
 |---|---|
-| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox`, `growth` or `desk`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
+| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox`, `growth`, `desk` or `memory`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`, memory `"Training"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
 | `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
 | `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
 | `add_to_outbox` | log entries for the owner (section 4). |
 | `update_growth` | the Growth page (section 5; Cassius only). |
 | `leave_note` | leave a note on the desk for Claude, answer one (`re`), or mark one of yours done (`close`). |
+| `update_memory` | add facts about the owner to the shared memory (`add`), rewrite a section (`replace`) or delete facts (`remove`). |
 
 ### The desk (`desk.json`, `"format": "opus-desk"`)
 
@@ -50,6 +52,17 @@ Read the desk first (`read_opus_file` file `desk`) so you don't repeat an open n
 ```
 
 `from` is grok, cassius or claude. `status` is open, answered (Claude replied) or done. `re` is the note being answered.
+
+### The shared memory (`memory.md`)
+
+The owner wants you and Claude to know the same things about them. Everything you know about the owner that would help either of you help them goes in `memory.md`, one fact per line, under a heading: About, Work, Training, Food, Health, Money, Home, Pets, People, Goals, Preferences, Other (a new short heading is fine).
+
+- Save with `update_memory` (`section`, then `add`, `replace` or `remove`). The helper adds who wrote each line and the date: `- Trains before work on weekdays (grok, 2026-11-19)`.
+- Write facts the owner told you or showed you, in plain words. Mark a guess as one ("seems to prefer…"). Keep each fact to one line.
+- When a fact changes, remove the old line and add the new one, so the memory stays current rather than growing.
+- Read it at the start of a conversation (`read_opus_file` file `memory`), so you know what Claude added.
+- Never put passwords, sign-in codes, card, bank or account numbers, or ID numbers in it. The helper refuses lines that look like them.
+- Claude reads it each evening and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
 
 If the owner hasn't set up the repo, or your connector can't write files, use the paste route instead: reply with the whole file in one code block and the owner pastes it into Opus (Settings › Plan › Import plan, or Money › Weekly money import).
 

@@ -14,6 +14,44 @@
     if (!o || !Array.isArray(o.notes)) return;
     if (JSON.stringify(o) !== JSON.stringify(Store.data.desk)) { Store.data.desk = o; Store.save(); }
   }
+  /* the shared memory: memory.md, what Grok, Cassius and Claude know about the owner (read only here) */
+  async function memorySync(getFile) {
+    const r = await getFile('memory.md');
+    const t = r.missing ? null : String(r.text || '');
+    if (t !== (Store.data.memory || null)) { Store.data.memory = t; Store.save(); }
+  }
+  function memoryParse(t) {
+    const out = []; if (!t) return out;
+    t.replace(/\r/g, '').split(/\n(?=## )/).forEach(p => {
+      if (!p.startsWith('## ')) return;
+      const lines = p.split('\n'), facts = lines.slice(1).filter(l => /^\s*[-*]\s+\S/.test(l)).map(l => {
+        const x = l.replace(/^\s*[-*]\s+/, '').trim(), m = x.match(/^(.*?)\s*\((grok|cassius|claude),?\s*(\d{4}-\d{2}-\d{2})?\)\s*$/i);
+        return m ? { text: m[1], by: m[2].toLowerCase(), date: m[3] || null } : { text: x, by: null, date: null };
+      });
+      if (facts.length) out.push({ name: lines[0].slice(3).trim(), facts });
+    });
+    return out;
+  }
+  function memorySheet() {
+    ui.sheet({ title: 'Shared memory', kicker: 'What Grok and Claude know', render(api) {
+      const b = api.body, secs = memoryParse(Store.data.memory);
+      b.appendChild(h('<p class="small" style="padding:0 4px">Grok, Cassius and Claude keep what they know about you here, so each knows what the others learned. Tell any of them to change or forget something.</p>'));
+      if (!secs.length) { b.appendChild(h('<div class="card pad"><p class="empty">Nothing yet. Grok fills this in first.</p></div>')); return; }
+      secs.forEach(sc => {
+        const c = h('<div class="card mm"><div class="mm-h"><b></b><span class="small num"></span></div></div>');
+        c.querySelector('b').textContent = sc.name; c.querySelector('.num').textContent = sc.facts.length;
+        sc.facts.forEach(f => { const r = h('<div class="mm-f"><p></p>' + (f.by ? '<span class="small"></span>' : '') + '</div>'); r.querySelector('p').textContent = f.text; if (f.by) r.querySelector('.small').textContent = (WHO[f.by] || f.by) + (f.date ? ' · ' + U.fmtDateShort(f.date) : ''); c.appendChild(r); });
+        b.appendChild(c);
+      });
+    } });
+  }
+  function memoryRow() {
+    const secs = memoryParse(Store.data.memory), n = secs.reduce((a, x) => a + x.facts.length, 0);
+    const r = h('<div class="row tap"><span class="tx"><b>Shared memory</b><small></small></span>' + (n ? '<span class="tag num">' + n + '</span>' : '') + ui.icon('chev', 'chev ico') + '</div>');
+    r.querySelector('small').textContent = n ? 'What Grok, Cassius and Claude know about you, in ' + secs.length + ' part' + (secs.length === 1 ? '' : 's') : 'What Grok and Claude know about you. Nothing yet.';
+    r.onclick = memorySheet;
+    return r;
+  }
   const open = () => notes().filter(n => n.status === 'open' && !n.re);
   const when = iso => { const d = new Date(iso); if (isNaN(d)) return ''; const k = U.key(d); return (k === U.key() ? 'Today' : k === U.key(U.addDays(new Date(), -1)) ? 'Yesterday' : U.fmtDateShort(k)) + ', ' + U.fmtTimeAP(U.pad(d.getHours()) + ':' + U.pad(d.getMinutes())); };
 
@@ -46,5 +84,5 @@
     r.onclick = sheet;
     return r;
   }
-  Opus.desk = { afterSync, sheet, row, notes, open };
+  Opus.desk = { afterSync, sheet, row, notes, open, memorySync, memoryParse, memorySheet, memoryRow };
 })();

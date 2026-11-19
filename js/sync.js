@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
-  const HELPER = '1.9.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.10.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -427,6 +427,7 @@
     if (Opus.notify) { try { await Opus.notify.afterSync(getFile, putFile); } catch (e) { if (e.kind === 'offline' || e.kind === 'conflict') throw e; } }
     // the desk (notes between Grok, Cassius and Claude), read only
     if (Opus.desk) { try { await Opus.desk.afterSync(getFile); } catch (e) { if (e.kind === 'offline') throw e; } }
+    if (Opus.desk) { try { await Opus.desk.memorySync(getFile); } catch (e) { if (e.kind === 'offline') throw e; } }
     cfg.lastSync = new Date().toISOString();
     problem('sync', null);
     saveCfg();

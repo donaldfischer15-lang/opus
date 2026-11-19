@@ -175,7 +175,7 @@
         cr.onclick = () => Opus.changes.history(null);
         const cc = ss.querySelector('.card'); (cc || ss).appendChild(cr);
       }
-      if (Opus.desk) { const cc = ss.querySelector('.card'); (cc || ss).appendChild(Opus.desk.row()); }
+      if (Opus.desk) { const cc = ss.querySelector('.card'); (cc || ss).appendChild(Opus.desk.row()); (cc || ss).appendChild(Opus.desk.memoryRow()); }
 
       // tabs
       const ts = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">Tabs</span><span class="c">on, off and order</span></div><div class="card list-reorder"></div></div>');
