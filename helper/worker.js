@@ -18,7 +18,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.10.0';
+const VERSION = '1.10.1';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -244,10 +244,14 @@ function sinceFilter(v, since) {
   return v.filter(x => !isObj(x) || String(x.date || x.weekEnding || x.weekOf || '') >= since);
 }
 function guideSection(text, section) {
-  const parts = text.split(/\n(?=## )/), want = String(section).toLowerCase();
-  const hit = parts.filter(t => { const head = t.split('\n')[0].toLowerCase(); return head.startsWith('## ' + want + '.') || head.includes(want); });
-  return hit.length ? hit.join('\n') : null;
+  const want = String(section).toLowerCase().replace(/^#+\s*/, '').trim();
+  const match = (t, mark) => { const head = t.split('\n')[0].toLowerCase(); return head.startsWith(mark + want + '.') || head.includes(want); };
+  const hit = text.split(/\n(?=## )/).filter(t => match(t, '## '));
+  if (hit.length) return hit.join('\n');
+  const sub = text.split(/\n(?=#{2,3} )/).filter(t => t.startsWith('### ') && match(t, '### '));
+  return sub.length ? sub.join('\n') : null;
 }
+const guideHeads = t => (t.match(/^#{2,3} .+$/gm) || []).map(x => x.replace(/^#+ /, '')).join(' | ');
 function paged(t, part, label) {
   const total = Math.max(1, Math.ceil(t.length / PAGE)), n = Math.min(Math.max(1, part | 0 || 1), total);
   const body = t.slice((n - 1) * PAGE, n * PAGE);
@@ -383,7 +387,7 @@ async function callTool(name, args, env) {
     let out = r.text, label = f;
     if (args.section != null && String(args.section).trim()) {
       const sec = String(args.section).trim();
-      if (args.file === 'guide' || args.file === 'memory') { out = guideSection(r.text, sec); if (out == null) return text('No heading in ' + f + ' matches "' + sec + '". Headings: ' + (r.text.match(/^## .+$/gm) || []).map(x => x.slice(3)).join(' | '), true); }
+      if (args.file === 'guide' || args.file === 'memory') { out = guideSection(r.text, sec); if (out == null) return text('No heading in ' + f + ' matches "' + sec + '". Headings: ' + guideHeads(r.text), true); }
       else {
         let o; try { o = JSON.parse(r.text); } catch (e) { return text(f + ' is not valid JSON right now: ' + e.message, true); }
         const pk = pick(o, sec); if (pk.err) return text(pk.err, true);

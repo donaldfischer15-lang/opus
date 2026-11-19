@@ -13,8 +13,8 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
 | `growth.json` | **only the teacher** (Cassius) | the Growth page: today's words, the lesson, prompts, creed, reading, notes (section 5). The app only reads it. |
 | `GUIDE.md` | the app | this guide. |
-| `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (see The desk below). |
-| `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (see The shared memory below). |
+| `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (section 6). |
+| `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (section 7). |
 | `push.json` | only the app | the phone's notification schedule. Never edit it. |
 | `helper.json` | the Opus helper | which helper version is live (`{ "version", "since" }`). Opus warns the owner when it is behind. |
 | `backups/opus-backup-YYYY-MM.json` | the app, once a month | a full backup (plan, logs and settings, `"format": "opus-data"`) from the first sync of that month. Never edit these. To restore one, the owner imports it in Settings › Your data › Import backup. |
@@ -32,37 +32,6 @@ If you have the opus connector, use its tools; they check everything before savi
 | `update_growth` | the Growth page (section 5; Cassius only). |
 | `leave_note` | leave a note on the desk for Claude, answer one (`re`), or mark one of yours done (`close`). |
 | `update_memory` | add facts about the owner to the shared memory (`add`), rewrite a section (`replace`) or delete facts (`remove`). |
-
-### The desk (`desk.json`, `"format": "opus-desk"`)
-
-Claude builds and maintains the Opus app itself. You can change the plan, the outbox and the Growth page, but not the app. When something needs the app, leave a note on the desk with `leave_note`:
-
-- something in Opus looks wrong, broken or confusing
-- the owner asks for a feature, screen, field or kind of entry Opus doesn't have
-- you need a place to save something and no section fits
-- a question about how Opus reads a file
-
-Read the desk first (`read_opus_file` file `desk`) so you don't repeat an open note, and read it at the start of a conversation to see Claude's replies. Claude checks it each evening, answers on the desk, and asks the owner before building anything. When a note is settled, close it (`leave_note` with `close`). Never put passwords, tokens or account numbers in a note.
-
-```json
-{ "format": "opus-desk", "version": 1, "updated": "2026-11-19T22:30:00Z",
-  "notes": [
-    { "id": "grok-mhx2k1", "from": "grok", "at": "2026-11-19T22:30:00Z", "about": "app", "text": "The owner wants a sleep tracker.", "re": null, "status": "answered" },
-    { "id": "claude-mhx9a0", "from": "claude", "at": "2026-11-20T01:00:00Z", "about": "app", "text": "Asked the owner; building it this week.", "re": "grok-mhx2k1", "status": "open" } ] }
-```
-
-`from` is grok, cassius or claude. `status` is open, answered (Claude replied) or done. `re` is the note being answered.
-
-### The shared memory (`memory.md`)
-
-The owner wants you and Claude to know the same things about them. Everything you know about the owner that would help either of you help them goes in `memory.md`, one fact per line, under a heading: About, Work, Training, Food, Health, Money, Home, Pets, People, Goals, Preferences, Other (a new short heading is fine).
-
-- Save with `update_memory` (`section`, then `add`, `replace` or `remove`). The helper adds who wrote each line and the date: `- Trains before work on weekdays (grok, 2026-11-19)`.
-- Write facts the owner told you or showed you, in plain words. Mark a guess as one ("seems to prefer…"). Keep each fact to one line.
-- When a fact changes, remove the old line and add the new one, so the memory stays current rather than growing.
-- Read it at the start of a conversation (`read_opus_file` file `memory`), so you know what Claude added.
-- Never put passwords, sign-in codes, card, bank or account numbers, or ID numbers in it. The helper refuses lines that look like them.
-- Claude reads it each evening and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
 
 If the owner hasn't set up the repo, or your connector can't write files, use the paste route instead: reply with the whole file in one code block and the owner pastes it into Opus (Settings › Plan › Import plan, or Money › Weekly money import).
 
@@ -483,6 +452,37 @@ The page, top to bottom: energy, today's lesson, From Cassius (general notes), w
 ---
 
 Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
+
+## 6. The desk (`desk.json`, `"format": "opus-desk"`)
+
+Claude builds and maintains the Opus app itself. You can change the plan, the outbox and the Growth page, but not the app. When something needs the app, leave a note on the desk with `leave_note`:
+
+- something in Opus looks wrong, broken or confusing
+- the owner asks for a feature, screen, field or kind of entry Opus doesn't have
+- you need a place to save something and no section fits
+- a question about how Opus reads a file
+
+Read the desk first (`read_opus_file` file `desk`) so you don't repeat an open note, and read it at the start of a conversation to see Claude's replies. Claude checks it each evening, answers on the desk, and asks the owner before building anything. When a note is settled, close it (`leave_note` with `close`). Never put passwords, tokens or account numbers in a note.
+
+```json
+{ "format": "opus-desk", "version": 1, "updated": "2026-11-19T22:30:00Z",
+  "notes": [
+    { "id": "grok-mhx2k1", "from": "grok", "at": "2026-11-19T22:30:00Z", "about": "app", "text": "The owner wants a sleep tracker.", "re": null, "status": "answered" },
+    { "id": "claude-mhx9a0", "from": "claude", "at": "2026-11-20T01:00:00Z", "about": "app", "text": "Asked the owner; building it this week.", "re": "grok-mhx2k1", "status": "open" } ] }
+```
+
+`from` is grok, cassius or claude. `status` is open, answered (Claude replied) or done. `re` is the note being answered.
+
+## 7. The shared memory (`memory.md`)
+
+The owner wants you and Claude to know the same things about them. Everything you know about the owner that would help either of you help them goes in `memory.md`, one fact per line, under a heading: About, Work, Training, Food, Health, Money, Home, Pets, People, Goals, Preferences, Other (a new short heading is fine).
+
+- Save with `update_memory` (`section`, then `add`, `replace` or `remove`). The helper adds who wrote each line and the date: `- Trains before work on weekdays (grok, 2026-11-19)`.
+- Write facts the owner told you or showed you, in plain words. Mark a guess as one ("seems to prefer…"). Keep each fact to one line.
+- When a fact changes, remove the old line and add the new one, so the memory stays current rather than growing.
+- Read it at the start of a conversation (`read_opus_file` file `memory`), so you know what Claude added.
+- Never put passwords, sign-in codes, card, bank or account numbers, or ID numbers in it. The helper refuses lines that look like them.
+- Claude reads it each evening and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
 
 ## Good requests to expect
 

@@ -229,8 +229,11 @@
   };
   function checkVersion() {
     const s = D().settings, v = Opus.VERSION;
-    const news = s.lastVersion && s.lastVersion !== v && RELEASES[v];
-    if (news) RELEASES[v].forEach(([tab, line]) => record(tab, 'Opus ' + v, [line]));
+    // every release note since the last version this phone saw, so skipping a version loses nothing
+    const cmp = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); } return 0; };
+    const vs = s.lastVersion && s.lastVersion !== v ? Object.keys(RELEASES).filter(r => cmp(r, s.lastVersion) > 0 && cmp(r, v) <= 0).sort(cmp) : [];
+    const news = vs.length > 0;
+    vs.forEach(r => RELEASES[r].forEach(([tab, line]) => record(tab, 'Opus ' + r, [line])));
     if (s.lastVersion !== v) { s.lastVersion = v; Opus.store.save(); }
     if (news) { Opus.renderBar(); Opus.refresh(); }
   }
