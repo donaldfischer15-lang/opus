@@ -247,6 +247,26 @@
     } });
   }
 
+  /* one tap to log something you've had before: extras from the last two weeks, most often first, not yet logged today */
+  function againPicks(d) {
+    const today = U.key(d), from = U.key(U.addDays(d, -14)), by = new Map();
+    (Store.data.eaten || []).filter(e => e.extra && e.name && e.date < today && e.date >= from).forEach(e => {
+      const k = e.name.toLowerCase(), x = by.get(k) || { n: 0, last: null, slots: {} };
+      x.n++; x.slots[e.slot] = (x.slots[e.slot] || 0) + 1;
+      if (!x.last || String(e.date + (e.at || '')) > String(x.last.date + (x.last.at || ''))) x.last = e;
+      by.set(k, x);
+    });
+    const had = new Set(Plan.eatenOn(d).filter(e => e.extra).map(e => String(e.name).toLowerCase()));
+    return Array.from(by.entries()).filter(([k]) => !had.has(k)).map(([, x]) => x)
+      .sort((a, b) => b.n - a.n || String(b.last.date).localeCompare(String(a.last.date))).slice(0, 6);
+  }
+  function logAgain(d, x) {
+    const e0 = x.last, slot = Object.keys(x.slots).sort((a, b) => x.slots[b] - x.slots[a])[0] || e0.slot || slotNow();
+    const e = Object.assign({ id: newId(d), date: U.key(d), extra: true, name: e0.name, amount: e0.amount, unit: e0.unit, slot, macros: e0.macros || null, at: new Date().toISOString() }, e0.micros ? { micros: e0.micros } : {});
+    putEaten(e); Store.save(); ui.buzz(12); Opus.refresh();
+    ui.toast('Added ' + e.name, { label: 'Undo', run: () => { dropEaten(e.id); Store.save(); Opus.refresh(); } });
+  }
+
   function groceryCard(d, onChange) {
     const wk = U.key(U.weekStart(d));
     const checked = Store.data.groceries[wk] = Store.data.groceries[wk] || [];
@@ -368,6 +388,19 @@
       r.onclick = () => addFood(d, { entry: e });
       card.appendChild(r);
     });
+    const again = againPicks(d);
+    if (again.length) {
+      const ag = h('<div class="again"><div class="again-k">Again</div><div class="chips"></div></div>');
+      again.forEach(x => {
+        const ch = h('<button class="chip" type="button"><span></span><small class="num"></small></button>');
+        ch.querySelector('span').textContent = x.last.name;
+        ch.querySelector('small').textContent = kcal(x.last.macros);
+        ch.setAttribute('aria-label', 'Log ' + x.last.name + ' again');
+        ch.onclick = () => logAgain(d, x);
+        ag.querySelector('.chips').appendChild(ch);
+      });
+      t.appendChild(ag);
+    }
     const add = h('<button class="btn ghost add-food" type="button">' + ui.icon('plus', 'ico') + ' Add food</button>');
     add.onclick = () => addFood(d);
     t.appendChild(add);
@@ -436,6 +469,6 @@
     }
   }
 
-  Opus.food = { weighIn, prepSheet, groceryCard, mealSheet, eatSheet, addFood, eatenLine };
+  Opus.food = { againPicks, logAgain, weighIn, prepSheet, groceryCard, mealSheet, eatSheet, addFood, eatenLine };
   Opus.tab({ id: 'food', title: 'Food', icon: 'food', render });
 })();

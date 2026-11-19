@@ -40,6 +40,36 @@
     renderBar();
   }
   function refresh() { if (current && !Opus.ui.topSheet()) { const y = window.scrollY; go(current, { refresh: true }); window.scrollTo(0, y); } }
+  /* swipe left or right on the page to move to the next or previous tab */
+  function swipeable(t) {
+    const v = view();
+    for (let el = t; el && el !== v && el !== document.body; el = el.parentElement) {
+      if (el.matches('input, textarea, select, [contenteditable], .chart, .trend, .stepper, [data-noswipe]')) return false;
+      const ox = getComputedStyle(el).overflowX;
+      if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) return false;
+    }
+    return true;
+  }
+  function swipes() {
+    let s = null;
+    document.addEventListener('touchstart', e => {
+      s = null;
+      if (e.touches.length !== 1 || Opus.ui.topSheet() || !view().contains(e.target)) return;
+      const p = e.touches[0];
+      if (p.clientX < 18 || p.clientX > window.innerWidth - 18 || !swipeable(e.target)) return;
+      s = { x: p.clientX, y: p.clientY, t: Date.now() };
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      if (!s) return; const p = e.changedTouches[0], dx = p.clientX - s.x, dy = p.clientY - s.y, dt = Date.now() - s.t; s = null;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 700 || Opus.ui.topSheet()) return;
+      const tabs = enabledTabs(), i = tabs.indexOf(current), j = i + (dx < 0 ? 1 : -1);
+      if (i < 0 || j < 0 || j >= tabs.length) return;
+      go(tabs[j]);
+      const v = view(); v.classList.add(dx < 0 ? 'from-r' : 'from-l');
+      Opus.ui.buzz(6);
+    }, { passive: true });
+    document.addEventListener('touchcancel', () => { s = null; }, { passive: true });
+  }
   Opus.go = go;
   Opus.refresh = refresh;
   Opus.current = () => current;
@@ -56,6 +86,7 @@
     go(registry[start] ? start : 'today');
     hooks.boot.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
     Opus.rest.resume();
+    swipes();
     let lastDay = Opus.util.key();
     setInterval(() => {
       const k = Opus.util.key();

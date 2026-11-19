@@ -103,8 +103,15 @@
     const isRvDay = (p.review || {}).day === U.dayKey(d);
     const ws = U.key(U.weekStart(d));
     const thisRv = (Store.data.reviews || []).find(r => r.weekOf === ws);
-    const week = h('<div class="sec"><div class="sh"><span class="r">IV</span><span class="t">The week</span></div><div class="card"></div></div>');
+    const wa = Opus.weekAhead, waDay = wa && wa.isDay(d);
+    if (waDay) wa.section(v, 'IV');
+    const week = h('<div class="sec"><div class="sh"><span class="r">' + (waDay ? 'V' : 'IV') + '</span><span class="t">The week</span></div><div class="card"></div></div>');
     const wc = week.querySelector('.card');
+    if (wa && !waDay) {
+      const waRow = h('<div class="row tap"><span class="tx"><b>Week ahead</b><small>Training, bills, payday and pet care for the next seven days</small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+      waRow.onclick = () => wa.sheet();
+      wc.appendChild(waRow);
+    }
     const rvRow = h('<div class="row tap"><span class="tx"><b>Weekly review</b><small>' +
       (thisRv ? 'Done for this week. Tap to read or edit.' : isRvDay ? 'Today. Five minutes: what worked, what slipped, one change.' : 'Sunday. Five minutes: what worked, what slipped, one change.') +
       '</small></span>' + ui.icon('chev', 'chev ico') + '</div>');
