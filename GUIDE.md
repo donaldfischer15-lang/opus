@@ -299,14 +299,15 @@ The app previews the block and lists any problems before saving.
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
 | `reviews` | `[{ "weekOf", "worked", "slipped", "change", "saved" }]` |
-| `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; no `kind` = the day's writing practice) |
+| `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; `"kind": "recall"` = an answer to the Growth page's recall question, written from memory, and `prompt` is that question; no `kind` = the day's writing practice) |
+| `ledger` | `[{ "week", "virtue", "date", "mark", "at" }]` the owner's nightly marks on the week's virtue (Growth › The Ledger): one per date, `mark` is `"clean"` or `"dot"` (a fault), `week` is that week's Monday and `virtue` the virtue it was marked against. Count the dots per virtue to see which one keeps collecting them. |
 | `reading` | `[{ "id", "page", "date", "done" }]` the owner's page in each book from `growth.json` `reading` (`done` true = finished) |
 | `kept` | `[{ "date", "text", "from" }]` the Growth words the owner chose to keep |
 | `eaten` | what was actually eaten, when it differs from the plan. **A planned meal:** `{ "id": "<date>:<routine item id>", "date", "item", "meal", "name", "parts": [{ "name", "unit", "planned", "ate", "macros" }], "macros", "at" }` (part of it was eaten, or more or less; `macros` is what was eaten), or the same with `"skipped": true` (not eaten). A planned meal that is ticked in `checks` with no entry here was eaten as planned. **Something extra:** `{ "id", "date", "extra": true, "name", "amount", "unit", "slot", "macros", "at" }` (`macros` may be `null`; `slot` is breakfast, lunch, snack or dinner). |
 | `labs` | blood test results: `{ "date", "lab", "markers": [{ "name", "value", "unit", "range", "low", "high" }], "note", "at" }`, one entry per test date. `range` is the lab's reference range as printed; `low` and `high` are its numbers. A value below `low` or above `high` shows as outside the lab's range. |
 | `pets` | pet care done, weigh-ins and vet visits: `{ "id": "<date>:<pet id>:<care id>", "date", "pet", "care", "lb", "note", "at" }`. `care` is a care id from the pet, or `"weight"` (with `lb`) or `"vet"` (with `note`). |
 | `supps` | supplements taken: `{ "id": "<date>:<supplement id>", "date", "supp", "at" }`, one per supplement per day. A row on Today counts as done when every supplement in it was taken. |
-| `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" }, "labs": { "<date>": "<when>" }, "pets": { "<id>": "<when>" }, "supps": { "<id>": "<when>" } }` entries the owner removed, so they stay removed |
+| `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" }, "labs": { "<date>": "<when>" }, "pets": { "<id>": "<when>" }, "supps": { "<id>": "<when>" }, "ledger": { "<date>": "<when>" } }` entries the owner removed (a cleared ledger box is in `ledger`), so they stay removed |
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
 Entries that came from you carry `"by": "grok"`.
@@ -333,7 +334,8 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | updated a debt balance | `logs.json` `money.balances`, and the debt's `balance` in `plan.json` |
 | changed money numbers, a bill, a debt, a meal, an exercise or a home job | `plan.json` |
 | ticked groceries or prep | `logs.json` `groceries`, `prep` |
-| wrote, answered a lesson, kept words, moved a bookmark | `logs.json` `writing`, `kept`, `reading` |
+| wrote, answered a lesson or the recall question, kept words, moved a bookmark | `logs.json` `writing`, `kept`, `reading` |
+| marked a night clean or with a dot in The Ledger | `logs.json` `ledger` |
 | did the weekly review | `logs.json` `reviews` |
 | changed rest timers, tabs or sound | `logs.json` `prefs` |
 
@@ -406,25 +408,38 @@ The Growth tab is the teacher's page. The teacher (Cassius) fills it in; the own
 {
   "format": "opus-growth", "version": 1, "updated": "2026-11-24T07:30:00Z",
   "energy":  { "text": "Start the hard thing small.", "from": null, "date": "2026-11-24" },
-  "creed":   { "lines": ["I keep my word.", "I do the hard thing first."] },
+  "creed":   { "lines": ["I keep my word.", "I do the hard thing first."], "today": null },
   "lesson":  { "date": "2026-11-24", "subject": "Logic and argument", "title": "Claims need reasons", "minutes": 4,
                "body": "Paragraphs split by a blank line.\n\n- lists start with a dash\n\n> a quote starts with >\n\n**bold** and *italic* work.",
-               "question": "One question for the owner to answer in writing." },
+               "question": "One question for the owner to answer in writing.", "takeaway": "One line to remember." },
   "prompt":  { "date": "2026-11-24", "text": "Today's writing prompt." },
   "prompts": [ { "id": "door", "text": "A prompt for other days." } ],
+  "ledger":  { "week": "2026-11-23", "virtue": "Order", "why": "One line on why this virtue, this week." },
+  "recall":  { "date": "2026-11-24", "question": "One question from a past lesson.", "from": "lesson:2026-11-17" },
   "subjects":[ { "id": "logic", "name": "Logic and argument", "now": "What makes an argument valid", "next": "Common fallacies" } ],
   "reading": [ { "id": "enchiridion", "title": "The Enchiridion", "author": "Epictetus", "status": "reading", "pages": 60, "why": "One line on why this book." } ],
   "lessons": [ { "date": "2026-11-23", "subject": "...", "title": "...", "body": "...", "question": "...", "takeaway": "One line to remember." } ],
   "notes":   [ { "date": "2026-11-24", "text": "An honest note on the owner's writing.", "on": "writing:2026-11-24" } ]
 }
 ```
+
+The page, top to bottom: energy, today's lesson, From Cassius (general notes), writing, The Ledger, Recall, the creed of the day, reading, subjects. Section numbers follow the page.
+
 - **energy** sits at the top of the page: one short piece of positive energy for the day, motivational or just good. If it is a quote, `from` names who said it, and it must be real and worded right. Leave `from` null when the words are yours.
-- **lesson** is today's lesson. When a new one arrives on a new date, the old one moves into `lessons` by itself. `minutes` is optional (the app works it out). `takeaway` is optional.
+- **lesson** is today's lesson. When a new one arrives on a new date, the old one moves into `lessons` by itself. `minutes` is optional (the app works it out). Give every lesson a `takeaway`: it shows under the lesson's title in the Past list, and Recall uses it as the answer to check against.
 - **prompt** is today's writing prompt; it comes first in the owner's writing sheet on that date. `prompts` are for the other days.
-- **reading** `status` is `reading`, `next` or `done`. The owner logs the page they're on (logs `reading`).
-- **notes**: a note with `"on": "writing:<date>"` or `"on": "lesson:<date>"` shows under that piece of writing; a note with no `on` shows under *From Cassius*. Read the owner's writing in `logs.json` before you comment on it.
-- Lists are matched by key: `prompts`, `subjects` and `reading` by `id`; `lessons` by `date`; `notes` by `date` and `on`. Same key again replaces an entry, `{ "id": "door", "delete": true }` removes one. The helper keeps the last 120 lessons and 60 notes.
-- Change `creed`, `subjects` and `reading` only when you and the owner have talked it through. Never invent facts about the owner.
+- **creed** shows one line a day as *Creed of the day*; the owner can tap to read all of them. The lines take turns in order, one per day. To pick the day's line yourself, set `today` to its number counting from 0 (send `{ "creed": { "today": 3 } }` alone to keep the lines as they are); `null` goes back to taking turns. Sending new `lines` without `today` also goes back to taking turns.
+- **ledger** is the week's virtue, after Benjamin Franklin's book of virtues. Set it each Monday: `week` is that Monday (the helper moves any other date back to its Monday, and uses this week when it's missing), `virtue` is the name, `why` is one line from you. The owner marks each night clean or with a black dot (a fault); the marks are in `logs.json` `ledger`. Before you pick the next virtue, count the dots per virtue there and lean toward the one that keeps collecting them. If Monday comes and you haven't set a new one, the page keeps last week's virtue and says a new one comes Monday.
+- **recall** is one question from a past lesson, answered from memory. `from` is `"lesson:<date>"` of that lesson, which must be in `lessons` (or be today's lesson) with a `takeaway`: after the owner answers, the page shows that takeaway so they can check themselves. The answer is in `logs.json` `writing` with `"kind": "recall"` and `prompt` set to your question. Change the question when you want a new one; an answer belongs to the question it was written for.
+- **reading** `status` is `reading`, `next` or `done`, and every book on the list shows. Give each book its `pages` when you know them: once the owner logs a page (logs `reading`) the book they're reading shows a progress bar.
+- **notes**: where a note shows depends on `on`.
+  - `"on": "lesson:<date>"` shows inside the lesson card (and the lesson's sheet) for the lesson of that date, or the owner's answer written that day.
+  - `"on": "recall:<date>"` shows in the Recall card under the owner's recall answer of that date.
+  - `"on": "writing:<date>"` shows inside the writing card under that day's writing, and in that piece in the writing history.
+  - no `on`: a general note, shown under *From Cassius*, just below today's lesson (the newest three, with the rest a tap away).
+  - A note the owner hasn't seen yet carries a gold dot. Read the owner's writing in `logs.json` before you comment on it.
+- Lists are matched by key: `prompts`, `subjects` and `reading` by `id`; `lessons` by `date`; `notes` by `date` and `on`. Same key again replaces an entry, `{ "id": "door", "delete": true }` removes one. The helper keeps the last 120 lessons and 60 notes. `energy`, `creed`, `lesson`, `prompt`, `ledger` and `recall` are replaced whole; `null` clears one.
+- Change the creed `lines`, `subjects` and `reading` only when you and the owner have talked it through. Never invent facts about the owner.
 
 ---
 

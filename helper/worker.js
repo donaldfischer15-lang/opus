@@ -3,7 +3,7 @@
   It lets Grok read the owner's private opus-data repo and save two files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
     - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
-    - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, reading, notes)
+    - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, ledger, recall, reading, notes)
   It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
   when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
 
@@ -15,7 +15,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -105,6 +105,7 @@ Plan.validate = function (p) {
     if (!['barbell-lower', 'barbell-upper', 'dumbbell', 'machine', 'cable', 'bodyweight'].includes(e.load)) warnings.push('exercise "' + id + '": load should be barbell-lower, barbell-upper, dumbbell, machine, cable or bodyweight.');
   }
   const mo = p.money || {};
+  if (mo.cushion != null && !(typeof mo.cushion === 'number' && mo.cushion >= 0)) errors.push('money.cushion must be a number of dollars, 0 or more, or null.');
   (mo.debts || []).forEach((d, i) => { if (!d.name) errors.push('money.debts item ' + (i + 1) + ' needs a "name".'); });
   (mo.bills || []).forEach((b, i) => { if (!b.name) errors.push('money.bills item ' + (i + 1) + ' needs a "name".'); if (b.every && !['week', 'month', 'year'].includes(b.every)) errors.push('bill "' + b.name + '": every must be week, month or year.'); });
   const hids = new Set();
@@ -253,9 +254,10 @@ function paged(t, part, label) {
 /* ---------- the Growth page (Cassius) ---------- */
 const G_LISTS = { lessons: 'date', notes: 'date', prompts: 'id', reading: 'id', subjects: 'id' };
 const G_CAP = { lessons: 120, notes: 60, prompts: 40, reading: 60, subjects: 12 };
-const G_ONE = ['energy', 'creed', 'lesson', 'prompt'];
+const G_ONE = ['energy', 'creed', 'lesson', 'prompt', 'ledger', 'recall'];
 const slug = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
-function blankGrowth() { return { format: 'opus-growth', version: 1, updated: null, energy: null, creed: { lines: [] }, lesson: null, prompt: null, prompts: [], subjects: [], reading: [], lessons: [], notes: [] }; }
+function mondayOf(k) { const [y, m, d] = k.split('-').map(Number); const x = new Date(Date.UTC(y, m - 1, d)); x.setUTCDate(x.getUTCDate() - (x.getUTCDay() + 6) % 7); return x.toISOString().slice(0, 10); }
+function blankGrowth() { return { format: 'opus-growth', version: 1, updated: null, energy: null, creed: { lines: [] }, lesson: null, prompt: null, ledger: null, recall: null, prompts: [], subjects: [], reading: [], lessons: [], notes: [] }; }
 function mergeGrowth(old, add, today) {
   const out = Object.assign(blankGrowth(), isObj(old) && old.format === 'opus-growth' ? old : {});
   const done = [], bad = [];
@@ -264,9 +266,28 @@ function mergeGrowth(old, add, today) {
     if (G_ONE.includes(k)) {
       if (v === null) { out[k] = k === 'creed' ? { lines: [] } : null; done.push(k + ' cleared'); continue; }
       if (k === 'creed') {
-        const lines = Array.isArray(v) ? v : isObj(v) && Array.isArray(v.lines) ? v.lines : null;
-        if (!lines || !lines.every(x => typeof x === 'string')) { bad.push('creed needs { "lines": ["...", "..."] }'); continue; }
-        out.creed = { lines: lines.map(x => x.trim()).filter(Boolean).slice(0, 20) }; done.push('creed'); continue;
+        // { lines } replaces the lines; { today: n } alone picks the line of the day and keeps the lines
+        const prev = isObj(out.creed) ? out.creed : { lines: [] };
+        const given = Array.isArray(v) ? v : isObj(v) && Array.isArray(v.lines) ? v.lines : null;
+        if (given ? !given.every(x => typeof x === 'string') : !(isObj(v) && 'today' in v)) { bad.push('creed needs { "lines": ["...", "..."] } and/or { "today": <line number from 0> }'); continue; }
+        const lines = given ? given.map(x => x.trim()).filter(Boolean).slice(0, 20) : (Array.isArray(prev.lines) ? prev.lines : []);
+        let t = isObj(v) && 'today' in v ? v.today : (given ? null : prev.today);
+        if (t !== null && t !== undefined && !(Number.isInteger(t) && t >= 0 && t < lines.length)) { bad.push('creed "today" must be a line number from 0 to ' + (lines.length - 1) + ', or null to let the lines take turns'); continue; }
+        out.creed = { lines, today: Number.isInteger(t) ? t : null }; done.push(given ? 'creed' : 'creed of the day'); continue;
+      }
+      if (k === 'ledger') {
+        const o = typeof v === 'string' ? { virtue: v } : v;
+        if (!isObj(o) || !(typeof o.virtue === 'string' && o.virtue.trim())) { bad.push('ledger needs { "week": "<the Monday>", "virtue": "Order", "why": "one line" }'); continue; }
+        const e = { week: mondayOf(isDate(o.week) ? o.week : today), virtue: o.virtue.trim(), why: typeof o.why === 'string' && o.why.trim() ? o.why.trim() : null };
+        out.ledger = e; done.push('ledger (' + e.virtue + ', week of ' + e.week + ')'); continue;
+      }
+      if (k === 'recall') {
+        const o = typeof v === 'string' ? { question: v } : v;
+        if (!isObj(o) || !(typeof o.question === 'string' && o.question.trim())) { bad.push('recall needs { "question": "...", "from": "lesson:YYYY-MM-DD" }'); continue; }
+        if (o.from != null && !/^lesson:\d{4}-\d{2}-\d{2}$/.test(String(o.from))) { bad.push('recall "from" must look like "lesson:2026-11-17"'); continue; }
+        const e = { date: isDate(o.date) ? o.date : today, question: o.question.trim(), from: o.from || null };
+        const ld = e.from && e.from.slice(7), src = ld && [].concat(out.lessons || [], out.lesson ? [out.lesson] : []).find(x => x && x.date === ld);
+        out.recall = e; done.push('recall' + (e.from && !src ? ' (no lesson on ' + ld + ' yet, so there is no takeaway to check against)' : src && !src.takeaway ? ' (the ' + ld + ' lesson has no takeaway yet, so add one in lessons)' : '')); continue;
       }
       const o = typeof v === 'string' ? { text: v } : v;
       if (!isObj(o)) { bad.push(k + ' must be an object'); continue; }
@@ -305,7 +326,7 @@ function mergeGrowth(old, add, today) {
       continue;
     }
     if (['format', 'version', 'updated'].includes(k)) continue;
-    bad.push('"' + k + '" is not a Growth section (use energy, creed, lesson, prompt, prompts, subjects, reading, lessons, notes)');
+    bad.push('"' + k + '" is not a Growth section (use energy, creed, lesson, prompt, ledger, recall, prompts, subjects, reading, lessons, notes)');
   }
   out.format = 'opus-growth'; out.version = 1; out.updated = new Date().toISOString();
   return { out, done, bad };
@@ -318,8 +339,8 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
   { name: 'update_plan_section', description: 'Change one part of plan.json without sending the whole plan. section is a top-level key ("money", "training", "food", "home", "routine", "schedule", "mind", "review", "profile", "notes", "name") or a dotted path inside one ("money.debts", "money.takeHomePerWeek", "training.schedule"). value replaces that part whole, so read that section first, change it, and send it back. Everything else in the plan stays exactly as it is, including edits the owner or Claude made meanwhile. Opus checks the whole plan with its own rules before saving and refuses a broken one, naming the problem. Never invent numbers; use null when unknown.',
     inputSchema: { type: 'object', properties: { section: { type: 'string' }, value: { description: 'The new value for that section (object, list, number, text or null).' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['section', 'value', 'change'] } },
-  { name: 'update_growth', description: 'Save to the Growth page (growth.json), the teacher\'s page in Opus. Send only the sections you change, as in GUIDE.md section 5. energy, creed, lesson and prompt are replaced whole (a missing "date" becomes today; a new lesson files the old one in "lessons"). prompts, subjects, reading, lessons and notes are lists: an entry with the same key replaces the old one (prompts, subjects and reading by "id"; lessons by "date"; notes by "date" and "on"), new ones are added, and { key, "delete": true } removes one. Never invent facts about the owner.',
-    inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
+  { name: 'update_growth', description: 'Save to the Growth page (growth.json), the teacher\'s page in Opus. Send only the sections you change, as in GUIDE.md section 5. energy, creed, lesson, prompt, ledger and recall are replaced whole (a missing "date" becomes today; a new lesson files the old one in "lessons"; creed { "today": n } alone picks the line of the day and keeps the lines; ledger { "week" (the Monday, defaults to this week), "virtue", "why" } is set each Monday; recall { "question", "from": "lesson:DATE" } asks one question from a past lesson, so that lesson needs a takeaway). prompts, subjects, reading, lessons and notes are lists: an entry with the same key replaces the old one (prompts, subjects and reading by "id"; lessons by "date"; notes by "date" and "on", where "on" is "writing:DATE", "lesson:DATE" or "recall:DATE", or left out for a general note), new ones are added, and { key, "delete": true } removes one. Never invent facts about the owner.',
+    inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "ledger": { "week": "2026-11-23", "virtue": "Order", "why": "..." }, "recall": { "question": "...", "from": "lesson:2026-11-17" }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
   { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), and supplements taken (supps). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',

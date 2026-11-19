@@ -1079,7 +1079,9 @@ window.OPUS_EXAMPLE_GROWTH = (function () {
   return {
     format: 'opus-growth', version: 1, updated: new Date().toISOString(),
     energy: { text: 'You don’t have to feel ready to begin. Start the hard thing small, and let it make you ready.', from: null, date: k(0) },
-    creed: { lines: ['I keep my word, first of all to myself.', 'I do the hard thing before the easy one.', 'I protect the people in my care.'] },
+    creed: { lines: ['I keep my word, first of all to myself.', 'I do the hard thing before the easy one.', 'I protect the people in my care.'], today: null },
+    ledger: { week: (() => { const d = new Date(); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })(), virtue: 'Order', why: 'Let all your things have their places, and each part of your work its time.' },
+    recall: { date: k(0), question: 'What should you ask of every claim you hear?', from: 'lesson:' + k(1) },
     lesson: {
       date: k(0), subject: 'Philosophy and how to live', title: 'What is up to you', minutes: 4,
       body: 'Epictetus opens his handbook with one line: some things are within our power and some are not.\n\nYour judgments, your effort and your choices are yours. Other people’s opinions, the weather and the past are not.\n\nThe whole skill is sorting, quickly and honestly, which pile a worry belongs in. Then you spend your strength only on the first pile.\n\n- **In your power:** what you do next, how you answer, what you practice.\n- **Not in your power:** how others take it, what already happened.',
@@ -1098,7 +1100,9 @@ window.OPUS_EXAMPLE_GROWTH = (function () {
     ],
     reading: [
       { id: 'enchiridion', title: 'The Enchiridion', author: 'Epictetus', status: 'reading', pages: 60, why: 'Short, plain and practical. It is the base for the lessons this month.' },
-      { id: 'meditations', title: 'Meditations', author: 'Marcus Aurelius', status: 'next', pages: 250, why: 'A ruler’s private notes on doing his duty well.' }
+      { id: 'meditations', title: 'Meditations', author: 'Marcus Aurelius', status: 'next', pages: 250, why: 'A ruler’s private notes on doing his duty well.' },
+      { id: 'autobiography', title: 'The Autobiography', author: 'Benjamin Franklin', status: 'next', pages: 200, why: 'Where the virtue ledger comes from, in his own words.' },
+      { id: 'thinking', title: 'How to Think', author: 'Alan Jacobs', status: 'next', why: 'Thinking with other people, not against them.' }
     ],
     lessons: [
       { date: k(1), subject: 'Logic and argument', title: 'Claims need reasons', body: 'An argument is a claim plus the reasons for it. If you can’t say the reasons, you have an opinion, not an argument.', question: 'Write one claim you believe and the two best reasons for it.', takeaway: 'Ask of every claim: what are the reasons?' }

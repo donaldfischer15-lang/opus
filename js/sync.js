@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
-  const HELPER = '1.6.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.7.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -65,9 +65,10 @@
     ['eaten', e => e.id],
     ['labs', l => l.date],
     ['pets', e => e.id],
-    ['supps', e => e.id]
+    ['supps', e => e.id],
+    ['ledger', e => e.date]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));

@@ -254,7 +254,7 @@
   /* opts (from Growth): { prompt, kind: 'lesson', title, kicker } — a lesson answer is kept beside the day's writing, not over it */
   function writeSheet(after, opts) {
     opts = opts || {};
-    const wr = ((Plan.p.mind || {}).writing) || {}; const need = wr.sentences || 5;
+    const wr = ((Plan.p.mind || {}).writing) || {}; const need = opts.free ? 1 : (wr.sentences || 5); // free: an answer with no sentence goal (Growth's Recall)
     const kind = opts.kind || '';
     const prompts = opts.prompt ? [opts.prompt] : (Opus.growth && Opus.growth.prompts().length ? Opus.growth.prompts() : (wr.prompts || []));
     const dayNum = Math.floor(U.parseKey(U.key()).getTime() / 864e5);
@@ -268,26 +268,26 @@
       title: opts.title || 'Write', kicker: opts.kicker || wr.goal || 'Writing practice', foot: true,
       render(api) {
         const b = api.body;
-        const pr = h('<div class="card pad" style="display:flex;gap:12px;align-items:flex-start"><div style="flex:1"><div class="tag">' + (kind === 'lesson' ? 'Cassius asks' : 'Today’s prompt') + '</div><div class="serif-h" style="font-size:22px;margin-top:6px"></div></div><button class="mini" type="button" aria-label="Another prompt">' + ui.I.spark.replace(/^/, '<svg viewBox="0 0 24 24">') + '</svg></button></div>');
+        const pr = h('<div class="card pad" style="display:flex;gap:12px;align-items:flex-start"><div style="flex:1"><div class="tag">' + U.esc(opts.tag || (kind === 'lesson' ? 'Cassius asks' : 'Today’s prompt')) + '</div><div class="serif-h" style="font-size:22px;margin-top:6px"></div></div><button class="mini" type="button" aria-label="Another prompt">' + ui.I.spark.replace(/^/, '<svg viewBox="0 0 24 24">') + '</svg></button></div>');
         const setP = () => { pr.querySelector('.serif-h').textContent = prompts[pi] || 'Write about anything from today.'; };
         if (prompts.length < 2) pr.querySelector('button').hidden = true;
         setP(); pr.querySelector('button').onclick = () => { pi = (pi + 1) % Math.max(1, prompts.length); setP(); };
         b.appendChild(pr);
-        const ta = h('<textarea class="input" id="write-text" style="min-height:40vh;font-family:var(--serif);font-size:19px;line-height:1.5" placeholder="Start with one plain sentence."></textarea>');
+        const ta = h('<textarea class="input" id="write-text" style="min-height:40vh;font-family:var(--serif);font-size:19px;line-height:1.5" placeholder="' + U.esc(opts.placeholder || 'Start with one plain sentence.') + '"></textarea>');
         ta.value = existing ? existing.text : '';
         b.appendChild(ta);
         const cnt = h('<div class="small num"></div>'); b.appendChild(cnt);
         b.appendChild(h('<p class="note">Clear writing: one idea per sentence, the point first, plain words. Read it once out loud before you save.</p>'));
         const save = h('<button class="btn block" type="button">Save</button>');
-        const upd = () => { const n = countSentences(ta.value), w = ta.value.trim() ? ta.value.trim().split(/\s+/).length : 0; cnt.textContent = n + ' of ' + need + ' sentences · ' + w + ' words'; cnt.style.color = n >= need ? 'var(--gold-2)' : ''; };
+        const upd = () => { const n = countSentences(ta.value), w = ta.value.trim() ? ta.value.trim().split(/\s+/).length : 0; cnt.textContent = opts.free ? w + ' words' : n + ' of ' + need + ' sentences · ' + w + ' words'; cnt.style.color = n >= need ? 'var(--gold-2)' : ''; };
         ta.addEventListener('input', upd); upd();
         save.onclick = () => {
           const text = ta.value.trim(); if (!text) { api.close(); return; }
           const entry = { date: today, text, words: text.split(/\s+/).length, sentences: countSentences(text), prompt: prompts[pi] || '' };
           if (kind) entry.kind = kind;
           Store.data.writing = (Store.data.writing || []).filter(w => !same(w)).concat([entry]);
-          if (entry.sentences >= need && Plan.kindId('writing')) Plan.setChecked(new Date(), Plan.kindId('writing'), true);
-          Store.save(); api.close(); ui.toast(entry.sentences >= need ? 'Saved. Writing is done for today.' : 'Saved. ' + (need - entry.sentences) + ' more sentences to finish.'); after && after();
+          if (!opts.free && entry.sentences >= need && Plan.kindId('writing')) Plan.setChecked(new Date(), Plan.kindId('writing'), true);
+          Store.save(); api.close(); ui.toast(opts.free ? (opts.saved || 'Saved') : entry.sentences >= need ? 'Saved. Writing is done for today.' : 'Saved. ' + (need - entry.sentences) + ' more sentences to finish.'); after && after();
         };
         api.foot.appendChild(save);
       }
