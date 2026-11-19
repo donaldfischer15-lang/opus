@@ -4,6 +4,7 @@
     - plan.json  (checked with the same rules Opus uses before it is saved)
     - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
     - growth.json (Cassius's Growth page: today's words, the lesson, prompts, creed, ledger, recall, reading, notes)
+  - desk.json  (the shared desk: notes for Claude, who builds the app, and Claude's replies)
   It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
   when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
 
@@ -16,7 +17,7 @@
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.8.0';
+const VERSION = '1.9.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -334,12 +335,14 @@ function mergeGrowth(old, add, today) {
 }
 
 /* ---------- tools ---------- */
-const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json' };
+const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json', desk: 'desk.json' };
 const TOOLS = [
   { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page that Cassius fills in. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
-    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
+    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth', 'desk'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
   { name: 'update_plan_section', description: 'Change one part of plan.json without sending the whole plan. section is a top-level key ("money", "training", "food", "home", "routine", "schedule", "mind", "review", "profile", "notes", "name") or a dotted path inside one ("money.debts", "money.takeHomePerWeek", "training.schedule"). value replaces that part whole, so read that section first, change it, and send it back. Everything else in the plan stays exactly as it is, including edits the owner or Claude made meanwhile. Opus checks the whole plan with its own rules before saving and refuses a broken one, naming the problem. Never invent numbers; use null when unknown.',
     inputSchema: { type: 'object', properties: { section: { type: 'string' }, value: { description: 'The new value for that section (object, list, number, text or null).' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['section', 'value', 'change'] } },
+  { name: 'leave_note', description: 'Leave a note on the shared desk (desk.json) for Claude, who builds and maintains the Opus app. Use it for anything you cannot do through the plan, outbox or Growth page: something in the app that looks wrong or broken, a feature or screen the owner asked for, a field or kind of entry Opus does not have, or a question about how Opus works. Claude checks the desk each evening, answers on the desk, and asks the owner before building anything. Read the desk first (read_opus_file with file "desk") so you do not repeat an open note. re answers an earlier note by its id. close marks one of your notes done once it is settled. Write plain sentences; never put passwords, tokens or account numbers in a note.',
+    inputSchema: { type: 'object', properties: { text: { type: 'string', description: 'The note, in plain sentences (up to 1,000 characters).' }, about: { type: 'string', enum: ['app', 'plan', 'data', 'question', 'other'], description: 'Optional: what it is about.' }, re: { type: 'string', description: 'Optional: the id of the note this answers.' }, from: { type: 'string', enum: ['grok', 'cassius'], description: 'Who is writing (default grok).' }, close: { type: 'string', description: 'Optional: the id of a note to mark done. text can be left out when you only close one.' } } } },
   { name: 'update_growth', description: 'Save to the Growth page (growth.json), the teacher\'s page in Opus. Send only the sections you change, as in GUIDE.md section 5. energy, creed, lesson, prompt, ledger and recall are replaced whole (a missing "date" becomes today; a new lesson files the old one in "lessons"; creed { "today": n } alone picks the line of the day and keeps the lines; ledger { "week" (the Monday, defaults to this week), "virtue", "why" } is set each Monday; recall { "question", "from": "lesson:DATE" } asks one question from a past lesson, so that lesson needs a takeaway). prompts, subjects, reading, lessons and notes are lists: an entry with the same key replaces the old one (prompts, subjects and reading by "id"; lessons by "date"; notes by "date" and "on", where "on" is "writing:DATE", "lesson:DATE" or "recall:DATE", or left out for a general note), new ones are added, and { key, "delete": true } removes one. Never invent facts about the owner.',
     inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "text": "...", "from": null }, "lesson": { "subject": "...", "title": "...", "body": "...", "question": "..." }, "prompt": { "text": "..." }, "ledger": { "week": "2026-11-23", "virtue": "Order", "why": "..." }, "recall": { "question": "...", "from": "lesson:2026-11-17" }, "notes": [ { "text": "...", "on": "writing:2026-11-18" } ] }' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['sections', 'change'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
@@ -354,9 +357,9 @@ async function callTool(name, args, env) {
   const G = gh(env);
   args = args || {};
   if (name === 'read_opus_file') {
-    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox or growth.', true);
+    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox, growth or desk.', true);
     const r = await G.get(f);
-    if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Use update_growth to start it.' : ''));
+    if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Use update_growth to start it.' : args.file === 'desk' ? ' Nobody has left a note yet. Use leave_note to start it.' : ''));
     let out = r.text, label = f;
     if (args.section != null && String(args.section).trim()) {
       const sec = String(args.section).trim();
@@ -420,6 +423,31 @@ async function callTool(name, args, env) {
     const change = String(args.change || 'outbox').replace(/\s+/g, ' ').slice(0, 100);
     await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, 'Grok: ' + change);
     return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' NOT saved:\n- ' + report.bad.join('\n- ') + '\n' : ' ') + 'Opus copies them in the next time the owner opens it; logs.json section "sync" then shows what it picked up.');
+  }
+  if (name === 'leave_note') {
+    const cur = await G.get(FILES.desk);
+    let desk = { format: 'opus-desk', version: 1, notes: [] };
+    if (!cur.missing) { try { const o = JSON.parse(cur.text); if (o && Array.isArray(o.notes)) desk = o; } catch (e) { return text('desk.json is not valid JSON right now, so nothing was saved. Tell the owner.', true); } }
+    const from = args.from === 'cassius' ? 'cassius' : 'grok', who = from === 'cassius' ? 'Cassius' : 'Grok', done = [];
+    if (args.close != null && String(args.close).trim()) {
+      const n = desk.notes.find(x => x.id === String(args.close).trim());
+      if (!n) return text('No note on the desk has the id "' + args.close + '". Read the desk to see the ids.', true);
+      n.status = 'done'; n.closed = new Date().toISOString(); done.push('closed ' + n.id);
+    }
+    const t = String(args.text == null ? '' : args.text).trim();
+    if (t) {
+      if (t.length > 1000) return text('A note can be up to 1,000 characters (this one is ' + t.length + '). Split it or shorten it.', true);
+      if (/(github_pat_|ghp_|sk-[A-Za-z0-9]{10,}|\b\d{13,19}\b)/.test(t)) return text('That note looks like it holds a token, key or card number, so it was not saved. Leave secrets out of notes.', true);
+      const re = args.re != null && String(args.re).trim() ? String(args.re).trim() : null;
+      if (re && !desk.notes.some(x => x.id === re)) return text('No note on the desk has the id "' + re + '".', true);
+      let id = from + '-' + Date.now().toString(36); while (desk.notes.some(x => x.id === id)) id += 'x';
+      desk.notes.push({ id, from, at: new Date().toISOString(), about: ['app', 'plan', 'data', 'question', 'other'].includes(args.about) ? args.about : 'other', text: t, re, status: 'open' });
+      done.push('left note ' + id);
+    }
+    if (!done.length) return text('Send text for a new note, or close with a note id.', true);
+    desk.notes = desk.notes.slice(-200); desk.updated = new Date().toISOString();
+    await G.put(FILES.desk, JSON.stringify(desk, null, 1) + '\n', cur.missing ? null : cur.sha, who + ': desk ' + done.join(', '));
+    return text('Done: ' + done.join(', ') + '. Claude reads the desk each evening and answers there; read it again with read_opus_file file "desk".');
   }
   if (name === 'update_growth') {
     let add; try { add = parseMaybe(args.sections); } catch (e) { return text('The sections are not valid JSON: ' + e.message, true); }
@@ -568,7 +596,7 @@ async function handleRpc(msg, env, ctx) {
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return err(-32600, 'Invalid request');
   if (id === undefined) return null; // a notification: nothing to answer
-  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan), things you log with add_to_outbox, and the Growth page with update_growth. You can never change logs.json.' });
+  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan), things you log with add_to_outbox, and the Growth page with update_growth. Leave anything about the app itself for Claude, who builds it, with leave_note, and read Claude\'s replies with read_opus_file file "desk". You can never change logs.json.' });
   if (method === 'ping') return ok({});
   if (method === 'tools/list' || method === 'tools/call') { const p = report(env); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p; }
   if (method === 'tools/list') return ok({ tools: TOOLS });

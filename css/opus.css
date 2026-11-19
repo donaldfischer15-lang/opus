@@ -659,3 +659,13 @@ button.row { width: 100%; background: none; border: 0; border-top: 1px solid var
 .wa-pay b { color: var(--gold); }
 .wa-late small { color: var(--warn); }
 .wa-note { padding: 10px 0 4px; }
+
+/* the desk */
+.dk { padding: 4px 16px 8px; }
+.dk-n { padding: 12px 0 6px; display: flex; flex-direction: column; gap: 4px; }
+.dk-n + .dk-n { border-top: 1px solid var(--line-soft); }
+.dk-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dk-h b { color: var(--gold); font-weight: 600; font-size: 13px; letter-spacing: .04em; }
+.dk-n p { margin: 0; color: var(--ink); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dk-r { padding-left: 14px; border-left: 2px solid var(--line); margin-left: 2px; }
+.dk-done p { color: var(--dim); }
