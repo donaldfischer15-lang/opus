@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.12.0';
+  Opus.VERSION = '1.13.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];

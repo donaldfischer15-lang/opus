@@ -208,6 +208,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - **Yours this week** (Money, section III) = today's Free cash − food until payday (the top of `food.budgetPerWeek`, per day) − this week's `plannedDebtPerWeek` (less any `debtPayments` already in the current money week). It is what the owner can spend on anything, or put toward debt as extra.
 - The plan's average week (shown under it) = take-home − bills (weekly share) − `plannedDebtPerWeek` − normal spending (average of the last 4 imported weeks; the grocery budget until then).
 - `dueDay` (optional) is the day of the month a bill comes out. Give it whenever you know it: the week ahead on Today lists bills by due day (dated `held` items in the latest `money.cash` come first), and it says when no bill has one.
+- Notifications: the owner's phone writes `push.json` in this repo (its push address and the next week of reminders, worked out from the plan). Never edit `push.json`. Reminders follow the plan, so a time on a routine item, a bill's `dueDay` and a pet's care `every` all become reminders. When you save a change, the `change` line you send is shown to the owner as a notification, so write it as a short plain sentence ("Credit card rate set to 24.99%").
 - Debt-free date: each month pays every minimum, then the rest of the debt money goes to the first debt in order. Interest uses `apr` when set.
 
 ### home

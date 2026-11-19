@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
-  const HELPER = '1.7.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.8.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -306,7 +306,7 @@
 
     // which helper is live (it writes helper.json when it starts a new version)
     if (rh.missing) cfg.helper = null;
-    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null }; }
+    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null, push: hj.push && typeof hj.push.key === 'string' ? hj.push.key : null }; }
 
     // Cassius's growth page (read only: only Cassius writes growth.json)
     if (!rgw.missing) {
@@ -423,6 +423,8 @@
         cfg.backupMonth = month;
       } catch (e) { if (e.kind === 'offline') throw e; }
     }
+    // the notification schedule for the helper (only when notifications are on, and only when it changed)
+    if (Opus.notify) { try { await Opus.notify.afterSync(getFile, putFile); } catch (e) { if (e.kind === 'offline' || e.kind === 'conflict') throw e; } }
     cfg.lastSync = new Date().toISOString();
     problem('sync', null);
     saveCfg();

@@ -10,12 +10,13 @@
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
     ACCESS_KEY    a long random string; the helper only answers at https://<worker>/<ACCESS_KEY>/mcp
+  Notifications: Opus writes push.json (push address + schedule); this helper sends what falls due every five minutes.
   Plain variables (optional):
     REPO          donaldfischer15-lang/opus-data   (default below)
     TIME_ZONE     the owner's time zone for "today" on the Growth page (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -435,6 +436,118 @@ async function callTool(name, args, env) {
   return text('Unknown tool ' + name, true);
 }
 
+/* ---------- notifications (Web Push) ----------
+   Opus writes push.json: the phone's push address and its own list of what should buzz when, for the next week.
+   Every five minutes (wrangler.jsonc) the helper sends what falls due, skipping anything the owner already ticked off
+   in logs.json, and it sends a line whenever Grok or Cassius saves a change. The push signing key (VAPID) is worked out
+   from the ACCESS_KEY secret, so there is nothing new to set up; its public half goes into helper.json for Opus. */
+const P256 = { p: 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn, n: 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n,
+  gx: 0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296n, gy: 0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5n };
+const mod = (a, m) => ((a % m) + m) % m;
+function inv(a, m) { let [x, y, r0, r1] = [1n, 0n, mod(a, m), m]; while (r1) { const q = r0 / r1; [r0, r1] = [r1, r0 - q * r1]; [x, y] = [y, x - q * y]; } return mod(x, m); }
+/* d·G on P-256 in Jacobian coordinates (one inverse at the end, so it stays well inside the free CPU limit) */
+function pmul(k) {
+  const p = P256.p, gx = P256.gx, gy = P256.gy, m = x => mod(x, p);
+  let X = gx, Y = gy, Z = 1n;
+  for (let i = k.toString(2).length - 2; i >= 0; i--) {
+    { const dl = m(Z * Z), gm = m(Y * Y), bt = m(X * gm), al = m(3n * (X - dl) * (X + dl));
+      const X3 = m(al * al - 8n * bt), Z3 = m((Y + Z) * (Y + Z) - gm - dl), Y3 = m(al * (4n * bt - X3) - 8n * gm * gm); X = X3; Y = Y3; Z = Z3; }
+    if ((k >> BigInt(i)) & 1n) {
+      const z1 = m(Z * Z), u2 = m(gx * z1), s2 = m(gy * Z * z1), H = m(u2 - X), HH = m(H * H), I = m(4n * HH), J = m(H * I), r = m(2n * (s2 - Y)), V = m(X * I);
+      const X3 = m(r * r - J - 2n * V), Y3 = m(r * (V - X3) - 2n * Y * J), Z3 = m((Z + H) * (Z + H) - z1 - HH); X = X3; Y = Y3; Z = Z3;
+    }
+  }
+  const zi = inv(Z, p), zi2 = m(zi * zi);
+  return [m(X * zi2), m(Y * zi2 * zi)];
+}
+const big2b = (v, len) => { const b = new Uint8Array(len); for (let i = len - 1; i >= 0; i--) { b[i] = Number(v & 0xffn); v >>= 8n; } return b; };
+const b2big = b => b.reduce((a, x) => (a << 8n) | BigInt(x), 0n);
+const b64u = b => { let s = ''; for (const x of b) s += String.fromCharCode(x); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = s => { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); const x = atob(s + '='.repeat((4 - s.length % 4) % 4)); return Uint8Array.from(x, c => c.charCodeAt(0)); };
+const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of a) { o.set(x, i); i += x.length; } return o; };
+const utf8 = s => new TextEncoder().encode(s);
+let vapidCache = null;
+async function vapid(env) {
+  if (vapidCache && vapidCache.from === env.ACCESS_KEY) return vapidCache;
+  const k = await crypto.subtle.importKey('raw', utf8(String(env.ACCESS_KEY)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const raw = new Uint8Array(await crypto.subtle.sign('HMAC', k, utf8('opus web push key 1')));
+  const d = mod(b2big(raw), P256.n - 1n) + 1n, Q = pmul(d);
+  const pub = cat(new Uint8Array([4]), big2b(Q[0], 32), big2b(Q[1], 32));
+  const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', d: b64u(big2b(d, 32)), x: b64u(big2b(Q[0], 32)), y: b64u(big2b(Q[1], 32)), ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  vapidCache = { from: env.ACCESS_KEY, pub: b64u(pub), key };
+  return vapidCache;
+}
+async function hkdf(salt, ikm, info, len) {
+  const k = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, k, len * 8));
+}
+/* RFC 8291 (aes128gcm) */
+async function encryptPush(sub, text) {
+  const ua = unb64u(sub.keys.p256dh), auth = unb64u(sub.keys.auth);
+  const eph = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', eph.publicKey));
+  const uaKey = await crypto.subtle.importKey('raw', ua, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, eph.privateKey, 256));
+  const ikm = await hkdf(auth, shared, cat(utf8('WebPush: info\0'), ua, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, utf8('Content-Encoding: aes128gcm\0'), 16), nonce = await hkdf(salt, ikm, utf8('Content-Encoding: nonce\0'), 12);
+  const aes = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aes, cat(utf8(text), new Uint8Array([2]))));
+  return cat(salt, new Uint8Array([0, 0, 16, 0]), new Uint8Array([asPub.length]), asPub, ct);
+}
+async function vapidHeader(env, endpoint) {
+  const v = await vapid(env), aud = new URL(endpoint).origin;
+  const part = o => b64u(utf8(JSON.stringify(o)));
+  const unsigned = part({ typ: 'JWT', alg: 'ES256' }) + '.' + part({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'mailto:opus-helper@users.noreply.github.com' });
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, v.key, utf8(unsigned)));
+  return 'vapid t=' + unsigned + '.' + b64u(sig) + ', k=' + v.pub;
+}
+async function sendPush(env, sub, msg) {
+  if (!sub || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || !sub.keys) return { status: 0 };
+  const body = await encryptPush(sub, JSON.stringify(msg));
+  const r = await fetch(sub.endpoint, { method: 'POST', headers: { 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '3600', Urgency: 'normal', Authorization: await vapidHeader(env, sub.endpoint) }, body });
+  return { status: r.status };
+}
+async function readPush(G) { const cur = await G.get('push.json'); if (cur.missing) return null; try { return Object.assign(JSON.parse(cur.text), { _sha: cur.sha }); } catch (e) { return null; } }
+/* a push address the push service has dropped (404 or 410) is taken out of push.json so Opus asks for a new one */
+async function dropSubs(G, push, gone) {
+  if (!gone.length) return;
+  const subs = (push.subs || []).filter(s => !gone.includes(s.endpoint));
+  const out = Object.assign({}, push, { subs, dropped: new Date().toISOString() }); delete out._sha;
+  try { await G.put('push.json', JSON.stringify(out, null, 1) + '\n', push._sha, 'Helper: a notification address expired'); } catch (e) {}
+}
+async function fanOut(env, G, push, msg) {
+  const gone = []; let sent = 0;
+  for (const s of push.subs || []) { try { const r = await sendPush(env, s, msg); if (r.status === 404 || r.status === 410) gone.push(s.endpoint); else if (r.status >= 200 && r.status < 300) sent++; } catch (e) {} }
+  await dropSubs(G, push, gone);
+  return sent;
+}
+/* every five minutes: send what fell due since the last run */
+async function sendDue(env, when) {
+  const G = gh(env), push = await readPush(G);
+  if (!push || !Array.isArray(push.subs) || !push.subs.length || !Array.isArray(push.events)) return 0;
+  const to = when, from = when - 5 * 60000;
+  const due = push.events.filter(e => { const t = Date.parse(e.at); return t >= from && t < to; });
+  if (!due.length) return 0;
+  let checks = null;
+  if (due.some(e => e.check)) { try { const l = await G.get('logs.json'); checks = l.missing ? {} : (JSON.parse(l.text).checks || {}); } catch (e) { checks = {}; } }
+  let sent = 0;
+  for (const e of due) {
+    if (e.kind !== 'test' && push.kinds && push.kinds[e.kind] === false) continue;
+    if (e.check && Array.isArray(checks[e.check.date]) && checks[e.check.date].includes(e.check.id)) continue;
+    sent += await fanOut(env, G, push, { title: e.title, body: e.body || '', tab: e.tab || 'today', tag: e.check ? e.check.date + ':' + e.check.id : e.kind + ':' + e.at });
+  }
+  return sent;
+}
+const SECTION_TAB = { food: 'food', training: 'train', money: 'money', home: 'home', mind: 'growth', health: 'food' };
+async function notifyChange(env, who, change, tab) {
+  try {
+    const G = gh(env), push = await readPush(G);
+    if (!push || !(push.subs || []).length || (push.kinds && push.kinds.changes === false)) return;
+    await fanOut(env, G, push, { title: who + ' changed ' + (tab === 'growth' ? 'your Growth page' : 'Opus'), body: change, tab: tab || 'today', tag: 'change:' + Date.now() });
+  } catch (e) {}
+}
+
 /* ---------- helper.json: tell Opus which version is live (written once per version) ---------- */
 let reported = null;
 async function report(env) {
@@ -442,7 +555,8 @@ async function report(env) {
   try {
     const G = gh(env), cur = await G.get('helper.json');
     let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) {} }
-    if (!old || old.version !== VERSION) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: new Date().toISOString() }, null, 2) + '\n', cur.sha, 'Helper: now ' + VERSION);
+    const key = (await vapid(env)).pub;
+    if (!old || old.version !== VERSION || !old.push || old.push.key !== key) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: old && old.version === VERSION && old.since ? old.since : new Date().toISOString(), push: { key } }, null, 2) + '\n', cur.sha, 'Helper: now ' + VERSION);
     reported = VERSION;
   } catch (e) { /* try again next time */ }
 }
@@ -462,6 +576,13 @@ async function handleRpc(msg, env, ctx) {
     try {
       let r;
       for (let i = 0; i < 2; i++) { try { r = await callTool(params && params.name, params && params.arguments, env); break; } catch (e) { if (!e.conflict || i === 1) throw e; } }
+      const tn = params && params.name, a = (params && params.arguments) || {};
+      if (r && !r.isError && ['save_plan', 'update_plan_section', 'add_to_outbox', 'update_growth'].includes(tn) && !/^Nothing saved/.test(((r.content || [])[0] || {}).text || '')) {
+        const who = tn === 'update_growth' ? 'Cassius' : 'Grok';
+        const change = String(a.change || (tn === 'update_growth' ? 'Updated your Growth page' : tn === 'add_to_outbox' ? 'Logged something for you' : 'Updated your plan')).replace(/\s+/g, ' ').slice(0, 140);
+        const tab = tn === 'update_growth' ? 'growth' : tn === 'update_plan_section' ? (SECTION_TAB[String(a.section || '').split('.')[0]] || 'today') : 'today';
+        const p = notifyChange(env, who, change, tab); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p;
+      }
       return ok(r);
     } catch (e) { return ok(text(String(e.message || e), true)); }
   }
@@ -472,8 +593,13 @@ async function handleRpc(msg, env, ctx) {
 function same(a, b) { a = String(a || ''); b = String(b || ''); if (!a || a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; }
 
 export default {
-  // Cloudflare runs this every hour (see wrangler.jsonc), so a new version reports in without waiting for Grok
-  async scheduled(event, env, ctx) { if (env.GITHUB_TOKEN) ctx.waitUntil(report(env)); },
+  // Cloudflare runs this every five minutes (see wrangler.jsonc): a new version reports in without waiting for Grok,
+  // and notifications that fell due go out
+  async scheduled(event, env, ctx) {
+    if (!env.GITHUB_TOKEN || !env.ACCESS_KEY) return;
+    ctx.waitUntil(report(env));
+    ctx.waitUntil(sendDue(env, event.scheduledTime || Date.now()).catch(() => 0));
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);

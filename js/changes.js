@@ -221,6 +221,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.13.0': [['today', 'Notifications: Opus can now buzz your lock screen for workouts, meals, bills, pet care and more, even when it is closed. Turn them on in Settings › Notifications.']],
     '1.12.0': [['today', 'Swipe left or right to move between tabs. Week ahead is under The week, and on Sundays it has its own card here.'], ['food', 'Under Today, tap anything in Again to log it once more, with its macros.']],
     '1.11.0': [['today', 'Each tab now shows what changed when Grok, Cassius or an update changes something, right here at the top.']]
   };

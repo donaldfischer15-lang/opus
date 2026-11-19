@@ -97,6 +97,7 @@
       else Opus.store.flush();
     });
     window.addEventListener('pagehide', () => Opus.store.flush());
+    try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', e => { const m = e.data || {}; if (m.opus === 'go' && registry[m.tab]) go(m.tab); }); } catch (e) {}
     window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (registry[id] && id !== current) go(id); });
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/claudeusercontent|claude\.ai/.test(location.host)) {
       try { navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
