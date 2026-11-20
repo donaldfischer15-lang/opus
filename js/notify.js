@@ -74,7 +74,8 @@
       }
     }
     const t = st().test;
-    if (t && new Date(t) > U.addDays(now, -1 / 96)) out.push({ at: new Date(Math.max(new Date(t).getTime(), now.getTime())).toISOString(), kind: 'test', title: 'Opus', body: 'Notifications work. You can switch each kind on or off in Settings.', tab: 'today' });
+    // pinned to 20 seconds after the tap, so every sync writes the same time and the helper sends it exactly once
+    if (t && new Date(t).getTime() > now.getTime() - 15 * 60000) out.push({ at: new Date(new Date(t).getTime() + 20000).toISOString(), kind: 'test', title: 'Opus', body: 'Notifications work. You can switch each kind on or off in Settings.', tab: 'today' });
     out.sort((a, b) => a.at.localeCompare(b.at));
     return out;
   }
