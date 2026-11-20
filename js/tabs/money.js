@@ -264,11 +264,9 @@
   function checkIn() {
     ui.sheet({ title: 'Money check-in', kicker: 'Week ending ' + U.fmtDateShort(weekEnding()), full: true, onClose: () => Opus.refresh(), render(api) {
       const b = api.body, c = calc();
-      b.appendChild(h('<p class="note">Three steps: bring in the week from Grok, look over your week, update a balance if it changed. If Grok already logged the week, it shows here.</p>'));
-      b.appendChild(h('<div class="sh"><span class="r">I</span><span class="t">This week from Grok</span></div>'));
-      if (c.cur) b.appendChild(h('<div class="banner gold">This week is already in (' + U.money(weekSpent(c.cur), { cents: true }) + ' spent). Paste again to replace it.</div>'));
-      b.appendChild(importBox(() => api.rerender()));
-      const man = h('<details class="fold"><summary class="link">Or enter it by hand</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px"></div></details>');
+      b.appendChild(h('<p class="note">Look over your week, then update a balance if it changed.</p>'));
+      b.appendChild(h('<div class="sh"><span class="r">I</span><span class="t">Your week</span></div>'));
+      const man = h('<details class="fold"><summary class="link">This week isn’t in yet? Enter it by hand</summary><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px"></div></details>');
       const mb = man.querySelector('div');
       mb.appendChild(h('<div class="grid2"><div class="field"><label for="mi-pay">Paycheck</label><input class="input" id="mi-pay" inputmode="decimal"></div><div class="field"><label for="mi-spent">Spent this week</label><input class="input" id="mi-spent" inputmode="decimal"></div></div>'));
       const ms = h('<button class="btn quiet" type="button">Save by hand</button>');
@@ -279,10 +277,9 @@
         saveWeek({ weekEnding: c.we, paycheck: pay != null ? pay : prev.paycheck ?? null, spent: sp != null ? [{ cat: 'everyday', amount: sp }] : (prev.spent || []), bills: prev.bills || [], debtPayments: prev.debtPayments || [], balances: [], notes: [], source: 'manual' });
         ui.toast('Week saved'); api.rerender();
       };
-      mb.appendChild(ms); b.appendChild(man);
-      b.appendChild(h('<div class="sh"><span class="r">II</span><span class="t">Your week</span></div>'));
+      mb.appendChild(ms); if (!c.cur) b.appendChild(man);
       b.appendChild(freeCard(calc()));
-      b.appendChild(h('<div class="sh"><span class="r">III</span><span class="t">Debts</span></div>'));
+      b.appendChild(h('<div class="sh"><span class="r">II</span><span class="t">Debts</span></div>'));
       b.appendChild(debtCard(() => api.rerender()));
       const done = h('<button class="btn block" type="button">Done</button>');
       done.onclick = () => { const d = new Date(); if (M().checkInDay === U.dayKey(d)) Plan.setChecked(d, 'money-checkin', true); Store.save(); api.close(); Opus.todayRefresh && Opus.todayRefresh(); };
