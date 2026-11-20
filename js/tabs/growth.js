@@ -316,7 +316,7 @@
     if (n.kind === 'letter') {
       const c = h('<button class="g-letter" type="button"><span class="g-fold" aria-hidden="true"></span><span class="tag"></span><span class="serif-h"></span><span class="small">Tap to unfold</span></button>');
       c.querySelector('.tag').innerHTML = dot(n) + 'A letter · ' + U.esc(ago(n.date));
-      set(c, '.serif-h', n.title || 'Donald.');
+      set(c, '.serif-h', n.title || (((Plan.p && Plan.p.profile && Plan.p.profile.firstName) || (Plan.p && Plan.p.profile && Plan.p.profile.name) || '').split(' ')[0] || 'A letter') + (n.title ? '' : '.'));
       c.onclick = () => ui.sheet({ title: n.title || 'A letter', kicker: 'From Cassius · ' + U.fmtDateShort(n.date), render(api) { api.body.appendChild(h('<div class="g-prose g-paper">' + prose(n.text) + '</div>')); } });
       return c;
     }
