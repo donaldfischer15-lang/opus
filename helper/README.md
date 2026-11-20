@@ -1,7 +1,7 @@
 # Opus helper for Grok
 
 A tiny MCP server on Cloudflare Workers (free plan) so Grok can save to opus-data.
-Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, update_growth, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json.
+Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json or growth.json: since 1.11.0 the Growth page is Cassius's alone (the owner's choice, 2026-11-20), and everything the helper saves is signed Grok.
 
 worker.js is built from worker.src.js by `node build.js` (copies Plan.validate from site/js/core.js). The public copy for pasting is in the opus repo at helper/worker.js.
 
