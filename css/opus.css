@@ -889,3 +889,30 @@ button.g-pline:active { color: var(--gold-2); }
 @media (prefers-reduced-motion: reduce) {
   .g-lamp::before, .g-lampic .fl, .g-wp.now i, .g-reg::after, .g-col.wet .ink, .g-star::before, .g-star.new::after, .g-lwhy { animation: none; }
 }
+
+/* Money: bill calendar, pay weeks, where a week went */
+.bc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.bc-head b { font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-2); }
+.bc-nav { width: 40px; height: 36px; border-radius: 10px; color: var(--gold); font-size: 22px; line-height: 1; display: grid; place-items: center; }
+.bc-nav:disabled { opacity: .25; }
+.bc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.bc-wd { font-family: var(--display); font-size: 10px; letter-spacing: .1em; color: var(--faint); text-align: center; padding-bottom: 4px; }
+.bc-d { min-height: 46px; min-width: 0; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 4px; font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; position: relative; -webkit-tap-highlight-color: transparent; }
+.bc-d.bill { background: rgba(214, 163, 94, .09); color: var(--ink); }
+.bc-d i { font-style: normal; font-size: 10px; font-weight: 600; color: var(--gold-2); letter-spacing: -.01em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.bc-d.pay::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 3px; height: 2px; border-radius: 2px; background: var(--good); }
+.bc-d.today { box-shadow: inset 0 0 0 1px var(--gold); }
+.bc-d.past { opacity: .4; }
+.bc-key { display: flex; gap: 16px; justify-content: center; margin-top: 10px; font-size: 11.5px; color: var(--dim); }
+.bc-key span { display: inline-flex; align-items: center; gap: 6px; }
+.bc-key i { display: inline-block; width: 14px; height: 8px; border-radius: 3px; }
+.bc-key .k-pay { height: 2px; background: var(--good); }
+.bc-key .k-bill { background: rgba(214, 163, 94, .22); }
+.bc-weeks { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.bc-wk { display: flex; flex-direction: column; gap: 6px; }
+.bc-wk small { font-size: 12px; color: var(--dim); }
+.bc-wk.past { opacity: .45; }
+.wg { display: flex; flex-direction: column; gap: 6px; padding: 14px 0 4px; border-top: 1px solid var(--line); }
+.wg:first-child { border-top: 0; padding-top: 4px; }
+.wg-i { min-height: 40px; padding: 8px 0 8px 12px; }
+.wg-i .tx b { font-size: 14px; }
