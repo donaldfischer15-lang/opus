@@ -11,7 +11,7 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `plan.json` | **you** and the app | the plan (section 1). Edit it in place. |
 | `logs.json` | **only the app** | everything logged on the phone (section 3). Read it, never edit it. |
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
-| `growth.json` | **only the teacher** (Cassius) | the Growth page: the Lamp, Before class, the Seal, the Season, the Map, the Portrait, the Library and Cassius's notes (section 5). Cassius commits it whole; the app only reads it. **Grok never writes it** (the owner's choice, 2026-11-20): the helper can read it but refuses every change. |
+| `growth.json` | **only the teacher** (Cassius) | the Growth page: the Lamp, Before class, the Seal, the Season, the Map, the Portrait, the Library and Cassius's notes (section 5). Cassius commits it whole; the app only reads it. |
 | `GUIDE.md` | the app | this guide. |
 | `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (section 6). |
 | `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (section 7). |
@@ -29,6 +29,7 @@ If you have the opus connector, use its tools; they check everything before savi
 | `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
 | `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
 | `add_to_outbox` | log entries for the owner (section 4). |
+| `update_growth` | the older, version 1 sections of the Growth page only (section 5). Cassius now commits `growth.json` directly instead. |
 | `leave_note` | leave a note on the desk for Claude, answer one (`re`), or mark one of yours done (`close`). |
 | `update_memory` | add facts about the owner to the shared memory (`add`), rewrite a section (`replace`) or delete facts (`remove`). |
 
@@ -212,6 +213,8 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - `sub: true` on a bill marks a subscription. Money totals them in one line.
 - `due` (optional) lists one-time amounts with a date, such as the rest of a card statement: `[{ "name": "…", "amount": 262.38, "date": "YYYY-MM-DD" }]`. They show on the bill calendar on that day and are never counted as a monthly bill. Remove an entry once it is paid or past.
 - `spendGroups` sorts spending: the store name exactly as you log it in `spent`, in lower case, mapped to one group: Groceries, Eating out, Pets, Gas, Clothes & gear, Health, Fun, Home, Gifts, Cash, Transfers or Other. Add a store only when you are sure what it is. Leave the rest out: Opus shows them as "Not sorted yet" and Claude asks the owner.
+- `split` is the plan for one paycheck: `{ "bills": …, "food": …, "spending": …, "debt": … }`. The check-in shows each week's actual against it (food is the Groceries and Eating out groups).
+- `checkins` holds the owner's weekly check-in, keyed by week ending (the payday): `extra` (an extra amount planned to the focus debt that week, taken out of Yours this week), `to` (which debt), `note` (the owner's one line for the week) and `done`. The phone writes these; read them, don't change them. A planned `extra` is what the owner means to pay, not a payment: log the payment in the money week when it happens.
 - `oneOff` marks single purchases the owner chose to leave out of the average week, keyed `week_ending|store in lower case|amount with 2 decimals` (for example `2026-11-12|hardware store|42.50`). The owner sets these on the phone; don't add or remove them.
 - Take-home on Money is the average of the last 4 logged paychecks. The debt-free date and each debt's payoff month follow the owner's pace: the average of `debtPayments` (to counted debts, not bills) over the last 4 logged weeks, or `plannedDebtPerWeek` until 2 weeks are logged. So log every debt payment in the money week, named as the debt is named here.
 - `cushion`: cash to keep before any extra debt payment (the owner's rule). Money shows when extra can go to debt.
@@ -416,7 +419,7 @@ Put only new or corrected entries here. You may replace the whole file each time
 
 ## 5. The Growth page (`growth.json`, `"format": "opus-growth"`)
 
-The Growth tab is Cassius's room. Cassius writes `growth.json` in the data repository directly, as a whole file, with `"version": 2`. The owner reads it, writes and logs, and what they do goes in `logs.json`. Only Cassius writes this page, and he commits the file himself. Since helper 1.11.0 the Opus helper has no way to change it: `update_growth` is gone and refuses if called, and notes and memory saved through the helper are always signed Grok. Grok may read the page, and leaves anything about it for Claude on the desk. Keep `updated` current: the tab shows a dot when it changes.
+The Growth tab is Cassius's room. Cassius writes `growth.json` in the data repository directly, as a whole file, with `"version": 2`. The owner reads it, writes and logs, and what they do goes in `logs.json`. The Opus helper's `update_growth` only takes the version 1 sections (energy, creed, lesson, prompt, prompts, ledger, recall, subjects, reading, lessons, notes) and rejects the rest, so don't use it for this page; commit the file instead. Keep `updated` current: the tab shows a dot when it changes.
 
 ```json
 {

@@ -916,3 +916,8 @@ button.g-pline:active { color: var(--gold-2); }
 .wg:first-child { border-top: 0; padding-top: 4px; }
 .wg-i { min-height: 40px; padding: 8px 0 8px 12px; }
 .wg-i .tx b { font-size: 14px; }
+.pa { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.pa:first-child { border-top: 0; padding-top: 4px; }
+.pa small { font-size: 12px; color: var(--dim); }
+.pa .muted { color: var(--faint); font-weight: 400; }
+.bar.over i { background: linear-gradient(90deg, var(--bronze), var(--warn)); }
