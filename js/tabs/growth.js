@@ -1,5 +1,7 @@
-/* Growth tab: Cassius's page. Words for the day at the top, then the lesson, his notes, writing, the ledger, recall, the creed of the day, reading and subjects.
-   Cassius writes growth.json (through the Opus helper). The phone only reads it; what you do here goes in the logs. */
+/* Growth tab: Cassius's room. The Lamp at the top, then Before class, the Seal, his notes, the Season, the Map,
+   the Scroll (your words), Glimpses, the Portrait with your creed, the Library and what you've made.
+   Cassius writes growth.json. The phone only reads it; what you do here goes in the logs (writing, glimpses, kept, reading).
+   Nothing here counts streaks or scores: only what you write or log shows, and a blank stays blank. */
 (function () {
   'use strict';
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, h = ui.h;
@@ -7,11 +9,22 @@
   const G = () => Store.data.growth || ((Plan.p && Plan.p.name === 'Example plan') || window.OPUS_PREVIEW ? window.OPUS_EXAMPLE_GROWTH : null) || null;
   const today = () => U.key();
   const arr = x => (Array.isArray(x) ? x : []);
+  const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const words = t => (String(t || '').trim() ? String(t).trim().split(/\s+/).length : 0);
-  const ago = k => { const n = U.daysBetween(U.parseKey(k), new Date()); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 7 ? U.DAY_NAMES[U.parseKey(k).getDay()] : U.fmtDateShort(k); };
-  const LESSON_ID = 'growth-lesson';
+  const ago = k => { const n = U.daysBetween(U.parseKey(k), new Date()); return n === 0 ? 'today' : n === 1 ? 'yesterday' : n === -1 ? 'tomorrow' : n > 1 && n < 7 ? U.DAY_NAMES[U.parseKey(k).getDay()] : U.fmtDateShort(k); };
+  const longDay = k => U.DAY_NAMES[U.parseKey(k).getDay()] + ', ' + U.fmtDateShort(k);
+  const set = (el, sel, text) => { const x = sel ? el.querySelector(sel) : el; if (x) x.textContent = text; return x; };
+  const hash = s => { let x = 2166136261; for (const c of String(s)) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619); } x ^= x >>> 16; x = Math.imul(x, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; }; // a stable place in the sky for each id
+  /* press and hold: fn runs after ms. Returns a check that says whether the last press was a hold, so its click can be ignored */
+  const hold = (el, fn, ms) => {
+    let t = null, held = false;
+    el.addEventListener('pointerdown', () => { held = false; clearTimeout(t); t = setTimeout(() => { held = true; fn(); }, ms || 550); });
+    ['pointerup', 'pointerleave', 'pointercancel', 'scroll'].forEach(e => el.addEventListener(e, () => clearTimeout(t)));
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    return () => { const was = held; held = false; return was; };
+  };
 
-  /* Cassius may write a little markdown: paragraphs, "- " lists, "> " quotes, **bold**, *italic* */
+  /* Cassius may write a little markdown: paragraphs, "- " lists, "> " quotes, "### " headings, **bold**, *italic* */
   function prose(text) {
     const inline = s => U.esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>');
     return String(text || '').trim().split(/\n\s*\n/).map(block => {
@@ -23,8 +36,9 @@
     }).join('');
   }
   const readMins = l => (l && l.minutes) || Math.max(1, Math.round(words(l && l.body) / 200));
+  const firstPara = t => (String(t || '').trim().split(/\n\s*\n/)[0] || '').replace(/[*>#]/g, '').replace(/^\s*-\s+/gm, '').trim();
 
-  /* ---------- what the rest of Opus asks of Growth ---------- */
+  /* ---------- what the rest of Opus asks of Growth (the Today tab's writing sheet) ---------- */
   function todayPrompt() { const g = G(); return g && g.prompt && g.prompt.text && g.prompt.date === today() ? g.prompt.text : null; }
   function prompts() {
     const g = G(); if (!g) return [];
@@ -32,489 +46,731 @@
     const t = todayPrompt();
     return t ? [t].concat(list.filter(x => x !== t)) : list;
   }
-  const learned = l => !!(l && l.date && (Store.data.checks[l.date] || []).includes(LESSON_ID));
-  const answerOf = l => l && l.question ? arr(Store.data.writing).filter(w => w.kind === 'lesson' && w.prompt === l.question).sort((a, b) => b.date.localeCompare(a.date))[0] : null;
+
+  /* ---------- the logs this page reads and writes ---------- */
+  const writing = () => arr(Store.data.writing).filter(w => w && w.date && w.text);
+  const glimpses = () => arr(Store.data.glimpses).filter(x => x && x.id && x.line).sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id));
+  const kept = () => arr(Store.data.kept).filter(k => k && k.text);
   const pageOf = id => arr(Store.data.reading).find(r => r.id === id) || null;
 
-  /* ---------- sheets ---------- */
-  function lessonSheet(l, after) {
-    ui.sheet({
-      title: l.title || 'Lesson', kicker: [l.subject, ago(l.date) === 'today' ? null : ago(l.date), readMins(l) + ' min'].filter(Boolean).join(' · '), foot: !!l.question,
-      render(api) {
-        const b = api.body;
-        b.appendChild(h('<div class="g-prose">' + (prose(l.body) || '<p class="note">Cassius left a title but no lesson yet.</p>') + '</div>'));
-        if (l.takeaway) b.appendChild(h('<div class="g-take"><div class="tag">Take with you</div><div>' + U.esc(l.takeaway) + '</div></div>'));
-        if (l.question) {
-          const ans = answerOf(l);
-          b.appendChild(h('<div class="card pad g-ask"><div class="tag">Cassius asks</div><div class="serif-h">' + U.esc(l.question) + '</div>' +
-            (ans ? '<div class="small" style="margin-top:8px">You answered ' + ago(ans.date) + ' · ' + ans.words + ' words</div>' : '') + '</div>'));
-          const an = lessonNote(l, ans); if (an) b.appendChild(noteBox(an, ans ? 'Cassius on your answer' : 'Cassius on this lesson'));
-          const btns = h('<div class="btns"><button class="btn quiet" type="button"></button><button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button></div>');
-          const [lb, wb] = btns.children;
-          const drawL = () => { lb.textContent = learned(l) ? 'Learned ✓' : 'I learned it'; };
-          drawL();
-          lb.onclick = () => { const on = !learned(l); Plan.setChecked(U.parseKey(l.date), LESSON_ID, on); ui.buzz(10); drawL(); if (on) ui.toast('Marked as learned. Cassius will see it.'); after && after(); };
-          wb.onclick = () => { api.close(true); Opus.today.writeSheet(after, { prompt: l.question, kind: 'lesson', title: 'Answer', kicker: l.title || 'Cassius asks' }); };
-          api.foot.appendChild(btns);
-        }
-      }
-    });
-  }
+  /* the kind of writing a sitting asks for decides where the answer is filed in the logs */
+  const FORM_KIND = { 'teach-back': 'teachback', teachback: 'teachback', workshop: 'workshop', walk: 'walk', seal: 'seal' };
+  const kindFor = l => FORM_KIND[String((l && l.form) || '').toLowerCase()] || 'lesson';
+  const KIND_NAME = { lesson: 'Answer', recall: 'Explained again', teachback: 'Teach-back', workshop: 'Workshop', walk: 'From the Walk', seal: 'Sealed question', '': 'Writing' };
+  const answerTo = (kind, q) => q ? writing().filter(w => (w.kind || '') === kind && w.prompt === q).sort((a, b) => b.date.localeCompare(a.date))[0] || null : null;
 
-  function pastLessons() {
-    const g = G(), list = arr(g && g.lessons).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    ui.sheet({ title: 'Past lessons', kicker: list.length + ' from Cassius', render(api) {
-      const b = api.body;
-      if (!list.length) { b.appendChild(h('<p class="empty">Lessons collect here once Cassius has taught a few.</p>')); return; }
-      const subs = [...new Set(list.map(l => l.subject).filter(Boolean))];
-      let pick = null;
-      const chips = h('<div class="chips" style="margin-bottom:10px"></div>');
-      const card = h('<div class="card"></div>');
-      const draw = () => {
-        chips.innerHTML = ['All'].concat(subs).map(s => '<button class="chip' + ((s === 'All' ? !pick : s === pick) ? ' on' : '') + '" type="button">' + U.esc(s) + '</button>').join('');
-        chips.querySelectorAll('.chip').forEach((c, i) => c.onclick = () => { pick = i ? subs[i - 1] : null; draw(); });
-        card.innerHTML = '';
-        list.filter(l => !pick || l.subject === pick).forEach(l => {
-          const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(l.title || 'Lesson') + '</b>' + (l.takeaway ? '<span class="g-tk">' + U.esc(l.takeaway) + '</span>' : '') + '<small>' + U.esc([U.fmtDateShort(l.date), l.subject].filter(Boolean).join(' · ')) + (learned(l) ? ' · learned' : '') + '</small></span>' + ui.icon('chev', 'chev ico') + '</div>');
-          r.onclick = () => lessonSheet(l); card.appendChild(r);
-        });
-      };
-      if (subs.length > 1) b.appendChild(chips);
-      b.appendChild(card); draw();
-    } });
-  }
-
-  function pastWriting() {
-    const list = arr(Store.data.writing).slice().sort((a, b) => b.date.localeCompare(a.date) || (a.kind ? 1 : -1));
-    ui.sheet({ title: 'Your writing', kicker: list.length + ' pieces · ' + U.sum(list.map(w => w.words)) + ' words', render(api) {
-      const b = api.body;
-      if (!list.length) { b.appendChild(h('<p class="empty">What you write lands here, newest first.</p>')); return; }
-      const card = h('<div class="card"></div>');
-      list.forEach(w => {
-        const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(w.prompt || 'Free writing') + '</b><small>' + U.esc(U.fmtDateShort(w.date) + (w.kind === 'lesson' ? ' · lesson answer' : w.kind === 'recall' ? ' · from memory' : '') + ' · ' + w.words + ' words') + '</small></span>' + ui.icon('chev', 'chev ico') + '</div>');
-        r.onclick = () => ui.sheet({ title: U.fmtDateShort(w.date), kicker: w.kind === 'lesson' ? 'Lesson answer' : w.kind === 'recall' ? 'Recall' : 'Writing', render(a2) {
-          a2.body.appendChild(h('<div class="card pad"><div class="tag">' + (w.kind === 'lesson' || w.kind === 'recall' ? 'Cassius asked' : 'Prompt') + '</div><div class="serif-h" style="font-size:20px;margin-top:6px">' + U.esc(w.prompt || 'Free writing') + '</div></div>'));
-          a2.body.appendChild(h('<div class="g-prose g-mine">' + prose(w.text) + '</div>'));
-          const n = noteOn(w); if (n) a2.body.appendChild(h('<div class="g-take"><div class="tag">Cassius on this</div><div>' + U.esc(n.text) + '</div></div>'));
-        } });
-        card.appendChild(r);
-      });
-      b.appendChild(card);
-    } });
-  }
-  /* a note from Cassius about a piece of writing: on "writing:DATE" (or "lesson:DATE" for an answer) */
-  function noteOn(w) {
-    const g = G(); if (!g) return null;
-    const want = (w.kind === 'lesson' ? 'lesson:' : w.kind === 'recall' ? 'recall:' : 'writing:') + w.date;
-    return arr(g.notes).filter(n => n.on === want || (!w.kind && n.on === 'writing' && n.date >= w.date)).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-  }
-
-  const noteFor = key => arr((G() || {}).notes).filter(n => n && n.text && n.on === key).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-
-  function bookSheet(bk) {
-    const pg = pageOf(bk.id);
-    ui.sheet({ title: bk.title, kicker: bk.author || 'Reading', render(api) {
-      const b = api.body;
-      if (bk.why) b.appendChild(h('<div class="g-take" style="margin-top:0"><div class="tag">Why Cassius chose it</div><div>' + U.esc(bk.why) + '</div></div>'));
-      b.appendChild(h('<div class="field"><label>Page you’re on</label></div>'));
-      const st = ui.stepper({ label: 'Page', value: pg ? pg.page : null, placeholder: '0', unit: bk.pages ? 'of ' + bk.pages : 'pages', step: (v, dir) => Math.max(0, (v || 0) + dir * 10) });
-      b.lastChild.appendChild(st.el);
-      b.appendChild(h('<p class="note">The buttons move ten pages. Type the page for an exact number.</p>'));
-      const btns = h('<div class="btns"><button class="btn quiet" type="button">' + (pg && pg.done ? 'Not finished' : 'Finished it') + '</button><button class="btn" type="button">Save</button></div>');
-      const [fin, sv] = btns.children;
-      const put = (page, done) => {
-        const rec = { id: bk.id, page: page == null ? null : Math.round(page), date: today() };
-        if (done) rec.done = true;
-        Store.data.reading = arr(Store.data.reading).filter(r => r.id !== bk.id).concat([rec]);
-        Store.save(); api.close(); Opus.refresh();
-      };
-      sv.onclick = () => { const v = st.get(); put(bk.pages && v > bk.pages ? bk.pages : v, false); ui.toast('Page saved'); };
-      fin.onclick = () => { if (pg && pg.done) { put(st.get(), false); return; } put(bk.pages || st.get(), true); ui.toast('Finished. Ask Cassius what’s next.'); };
-      b.appendChild(btns);
-    } });
-  }
-
-  function keepWords(e) {
-    const kept = arr(Store.data.kept), at = kept.findIndex(k => k.text === e.text);
-    if (at >= 0) { Store.data.kept = kept.filter((_, i) => i !== at); ui.toast('Taken out of kept words'); }
-    else { Store.data.kept = kept.filter(k => k.date !== today()).concat([{ date: today(), text: e.text, from: e.from || null }]); ui.toast('Kept. Cassius will see what lands with you.'); }
-    Store.save(); ui.buzz(10);
-  }
-  function keptSheet() {
-    const list = arr(Store.data.kept).slice().sort((a, b) => b.date.localeCompare(a.date));
-    ui.sheet({ title: 'Words you kept', kicker: list.length ? list.length + ' kept' : 'Kept words', render(api) {
-      if (!list.length) { api.body.appendChild(h('<p class="empty">Tap the laurel under the words at the top of Growth to keep the ones that land.</p>')); return; }
-      list.forEach(k => api.body.appendChild(h('<div class="g-kept"><div class="q">' + U.esc(k.text) + '</div><div class="small">' + U.esc((k.from ? k.from + ' · ' : '') + U.fmtDateShort(k.date)) + '</div></div>')));
-    } });
-  }
-
-  /* ---------- the page ---------- */
-  function energy(g) {
-    const e = g && g.energy;
-    const has = e && e.text;
-    const isToday = has && e.date === today();
-    const el = h('<div class="g-energy' + (has ? '' : ' empty-e') + '">' +
-      '<svg class="g-wreath" viewBox="0 0 24 24" aria-hidden="true">' + ui.I.laurel + '</svg>' +
-      (has ? '<blockquote class="g-words"></blockquote><div class="g-from"></div>' :
-        '<div class="g-words wait">Today’s words come from Cassius.</div><div class="g-from">Ask him for something to carry into the day.</div>') +
-      '<div class="g-acts"></div></div>');
-    const acts = el.querySelector('.g-acts');
-    if (has) {
-      el.querySelector('.g-words').textContent = e.text;
-      el.querySelector('.g-from').textContent = (e.from ? '— ' + e.from : '— Cassius') + (isToday ? '' : '  ·  from ' + ago(e.date));
-      const kept = arr(Store.data.kept).some(k => k.text === e.text);
-      const kb = h('<button class="g-act' + (kept ? ' on' : '') + '" type="button"><svg viewBox="0 0 24 24" aria-hidden="true">' + ui.I.laurel + '</svg><span>' + (kept ? 'Kept' : 'Keep') + '</span></button>');
-      kb.onclick = () => { keepWords(e); const on = arr(Store.data.kept).some(k => k.text === e.text); kb.classList.toggle('on', on); kb.querySelector('span').textContent = on ? 'Kept' : 'Keep'; };
-      acts.appendChild(kb);
-    }
-    if (!isToday) {
-      const ab = h('<button class="g-act" type="button">' + ui.icon('spark') + '<span>Copy ask</span></button>');
-      ab.onclick = () => ui.copy('Cassius, put today’s words at the top of my Growth page in Opus.');
-      acts.appendChild(ab);
-    }
-    if (arr(Store.data.kept).length) { const kl = h('<button class="g-act" type="button"><span>' + arr(Store.data.kept).length + ' kept</span></button>'); kl.onclick = keptSheet; acts.appendChild(kl); }
-    return el;
-  }
-
-  function sec(num, title, right) {
-    return h('<div class="sec"><div class="sh"><span class="r">' + num + '</span><span class="t">' + U.esc(title) + '</span>' + (right || '') + '</div></div>');
-  }
-
-  function lessonCard(g, num) {
-    const l = g && g.lesson;
-    const s = sec(num, 'Today’s lesson', arr(g && g.lessons).length ? '<button class="c" type="button">Past</button>' : '');
-    const past = s.querySelector('button.c'); if (past) past.onclick = pastLessons;
-    if (!l || !l.title) {
-      s.appendChild(h('<div class="card pad"><p class="empty" style="padding:6px 0"><span class="serif-h">No lesson yet.</span><br>Cassius sets one here each day.</p></div>'));
-      return s;
-    }
-    const old = l.date !== today(), done = learned(l), ans = answerOf(l);
-    const first = (String(l.body || '').trim().split(/\n\s*\n/)[0] || '').replace(/[*>#-]/g, '').trim();
-    const c = h('<div class="card pad g-lesson tap' + (done ? ' done' : '') + '">' +
-      '<div class="g-meta"><span class="tag">' + U.esc(l.subject || 'Lesson') + '</span><span class="small num">' + readMins(l) + ' min' + (old ? ' · ' + ago(l.date) : '') + '</span></div>' +
-      '<div class="serif-h" style="margin-top:6px"></div>' +
-      (first ? '<p class="g-first"></p>' : '') +
-      (l.question ? '<div class="g-q"><span class="tag">Cassius asks</span><div></div></div>' : '') +
-      '<div class="g-state small"></div></div>');
-    c.querySelector('.serif-h').textContent = l.title;
-    if (first) c.querySelector('.g-first').textContent = first;
-    if (l.question) c.querySelector('.g-q div').textContent = l.question;
-    c.querySelector('.g-state').textContent = [done ? 'Learned' : null, ans ? 'Answered · ' + ans.words + ' words' : null].filter(Boolean).join(' · ') || 'Tap to read';
-    const ln = lessonNote(l, ans); if (ln) c.appendChild(noteBox(ln, (ans ? 'Cassius on your answer' : 'Cassius on this lesson') + ' · ' + ago(ln.date)));
-    c.onclick = () => lessonSheet(l, () => Opus.refresh());
-    s.appendChild(c);
-    return s;
-  }
-
-  function writingCard(g, num) {
-    const s = sec(num, 'Writing', arr(Store.data.writing).length ? '<button class="c" type="button">All</button>' : '');
-    const all = s.querySelector('button.c'); if (all) all.onclick = pastWriting;
-    const ps = prompts(), wr = ((Plan.p.mind || {}).writing) || {};
-    const list = ps.length ? ps : arr(wr.prompts);
-    const dayNum = Math.floor(U.parseKey(today()).getTime() / 864e5);
-    const tp = todayPrompt() || (list.length ? list[dayNum % list.length] : null);
-    const mine = arr(Store.data.writing).find(w => w.date === today() && !w.kind);
-    const c = h('<div class="card pad"><div class="tag">' + (todayPrompt() ? 'Cassius’s prompt for today' : 'Today’s prompt') + '</div><div class="serif-h" style="font-size:22px;margin-top:6px"></div>' +
-      '<div class="g-row"><span class="small"></span><button class="btn" type="button"></button></div></div>');
-    c.querySelector('.serif-h').textContent = tp || 'Write about anything from today.';
-    c.querySelector('.g-row .small').textContent = mine ? 'Written today · ' + mine.words + ' words' : (wr.sentences || 5) + ' sentences';
-    c.querySelector('.btn').textContent = mine ? 'Open' : 'Write';
-    c.querySelector('.btn').onclick = () => Opus.today.writeSheet(() => Opus.refresh());
-    s.appendChild(c);
-
-    // the week, as a quiet trend (no streaks)
-    const days = []; for (let i = 6; i >= 0; i--) days.push(U.addDays(new Date(), -i));
-    const per = days.map(d => U.sum(arr(Store.data.writing).filter(w => w.date === U.key(d)).map(w => w.words)));
-    const total = U.sum(per), wrote = per.filter(n => n > 0).length, max = Math.max(1, ...per);
-    if (arr(Store.data.writing).length) {
-      const bars = days.map((d, i) => {
-        const hgt = per[i] ? Math.max(4, Math.round(per[i] / max * 34)) : 2;
-        return '<div class="g-day' + (i === 6 ? ' now' : '') + '"><div class="g-b"><i style="height:' + hgt + 'px' + (per[i] ? '' : ';opacity:.35') + '"></i></div><span>' + U.DAY_NAMES[d.getDay()][0] + '</span></div>';
-      }).join('');
-      const wk = h('<div class="card pad g-week"><div class="g-bars" role="img" aria-label="Words written each day this week"></div><div class="g-wk"><b class="num"></b><span class="small"></span></div></div>');
-      wk.querySelector('.g-bars').innerHTML = bars;
-      wk.querySelector('b').textContent = total.toLocaleString();
-      wk.querySelector('.small').textContent = 'words this week · wrote on ' + wrote + ' of 7 days';
-      s.appendChild(wk);
-    }
-    // Cassius's latest word on your writing
-    // (notes on today's lesson answer and on the recall answer sit in those cards)
-    const elsewhere = w => (w.kind === 'lesson' && g && g.lesson && w.prompt === g.lesson.question) || (w.kind === 'recall' && g && g.recall && w.prompt === g.recall.question);
-    let last = null, n = null;
-    for (const w of arr(Store.data.writing).filter(x => !elsewhere(x)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)) { const x = noteOn(w); if (x && (!n || x.date > n.date)) { n = x; last = w; } }
-    if (n) c.appendChild(noteBox(n, 'Cassius on your ' + (last.kind === 'lesson' ? 'answer' : last.kind === 'recall' ? 'recall' : 'writing') + (last.date === today() ? '' : ' from ' + ago(last.date)) + ' · ' + ago(n.date)));
-    return s;
-  }
-
-  /* the creed, one line a day: Cassius can pick the day's line with creed.today, otherwise the lines take turns in order */
-  function creedIndex(g) {
-    const lines = arr(g && g.creed && g.creed.lines).filter(Boolean), t = g && g.creed && g.creed.today;
-    if (!lines.length) return -1;
-    if (Number.isInteger(t) && t >= 0 && t < lines.length) return t;
-    return Math.floor(U.parseKey(today()).getTime() / 864e5) % lines.length;
-  }
-  function creedCard(g, num) {
-    const lines = arr(g && g.creed && g.creed.lines).filter(Boolean);
-    const s = sec(num, 'Creed');
-    if (!lines.length) { s.appendChild(h('<div class="card pad"><p class="empty" style="padding:6px 0">Your creed lives here.<br>Shape it with Cassius and he’ll set it in stone.</p></div>')); return s; }
-    const i = creedIndex(g);
-    const c = h('<div class="card pad g-creed g-cotd"><div class="g-meta"><span class="tag">Creed of the day</span><span class="small num"></span></div><div class="g-cline"></div>' +
-      (lines.length > 1 ? '<div class="g-all" hidden></div><button class="link g-call" type="button" aria-expanded="false"></button>' : '') + '</div>');
-    c.querySelector('.g-meta .small').textContent = U.roman(i + 1) + ' of ' + U.roman(lines.length);
-    c.querySelector('.g-cline').textContent = lines[i];
-    const btn = c.querySelector('.g-call');
-    if (btn) {
-      const all = c.querySelector('.g-all');
-      lines.forEach((t, k) => { const r = h('<div class="g-cl' + (k === i ? ' now' : '') + '"><span class="n">' + U.roman(k + 1) + '</span><span class="t"></span></div>'); r.querySelector('.t').textContent = t; all.appendChild(r); });
-      const draw = open => { all.hidden = !open; btn.setAttribute('aria-expanded', String(open)); btn.textContent = open ? 'Show today’s line only' : 'Read all ' + lines.length + ' lines'; };
-      draw(false);
-      btn.onclick = () => draw(all.hidden);
-    }
-    s.appendChild(c);
-    return s;
-  }
-
-  /* ---------- the ledger: one virtue a week, after Franklin's book. Each night a box: clean, or a black dot for a fault ---------- */
-  const monday = d => { d = d || new Date(); const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
-  const marks = () => arr(Store.data.ledger);
-  const markOn = k => marks().find(m => m.date === k) || null;
-  function setMark(k, week, virtue, mark) {
-    const dl = Store.data.deleted = Store.data.deleted || {}; dl.ledger = dl.ledger || {};
-    Store.data.ledger = marks().filter(m => m.date !== k);
-    if (mark) { Store.data.ledger.push({ week, virtue, date: k, mark, at: new Date().toISOString() }); delete dl.ledger[k]; }
-    else dl.ledger[k] = new Date().toISOString();
-    Store.save();
-  }
-  function ledgerCard(g, num) {
-    const L = g && g.ledger, wk = monday(), wkKey = U.key(wk);
-    const s = sec(num, 'The Ledger', marks().some(m => m.week !== wkKey) ? '<button class="c" type="button">Past</button>' : '');
-    const past = s.querySelector('button.c'); if (past) past.onclick = ledgerPast;
-    if (!L || !L.virtue) { s.appendChild(h('<div class="card pad"><p class="empty" style="padding:6px 0"><span class="serif-h">No virtue this week yet.</span><br>Cassius sets one each Monday. You mark each night.</p></div>')); return s; }
-    const stale = L.week && L.week < wkKey;
-    const c = h('<div class="card pad g-ledger"><div class="g-meta"><span class="tag">This week’s virtue</span><span class="small num"></span></div><div class="serif-h g-virtue"></div>' +
-      (L.why ? '<p class="g-first g-why"></p>' : '') + '<div class="g-days" role="group" aria-label="This week, one box a night"></div><div class="g-lsum small"></div></div>');
-    c.querySelector('.g-meta .small').textContent = stale ? 'Set ' + U.fmtDateShort(L.week) + ' · new one comes Monday' : 'Week of ' + U.fmtDateShort(wkKey);
-    c.querySelector('.g-virtue').textContent = L.virtue;
-    if (L.why) c.querySelector('.g-why').textContent = L.why;
-    const box = c.querySelector('.g-days'), sum = c.querySelector('.g-lsum');
-    const draw = () => {
-      box.innerHTML = '';
-      for (let i = 0; i < 7; i++) {
-        const d = U.addDays(wk, i), k = U.key(d), m = markOn(k), future = k > today();
-        const b = h('<button class="g-dbox' + (m ? ' ' + m.mark : '') + (k === today() ? ' now' : '') + '" type="button"' + (future ? ' disabled' : '') + '><span class="d">' + U.DAY_NAMES[d.getDay()].slice(0, 3) + '</span><span class="m" aria-hidden="true"></span></button>');
-        b.setAttribute('aria-label', U.DAY_NAMES[d.getDay()] + ': ' + (m ? (m.mark === 'clean' ? 'clean' : 'a fault') : future ? 'not yet' : 'not marked'));
-        b.onclick = () => { const cur = markOn(k), next = !cur ? 'clean' : cur.mark === 'clean' ? 'dot' : null; setMark(k, wkKey, L.virtue, next); ui.buzz(8); draw(); };
-        box.appendChild(b);
-      }
-      const wm = marks().filter(m => m.week === wkKey), cl = wm.filter(m => m.mark === 'clean').length, dt = wm.filter(m => m.mark === 'dot').length;
-      sum.textContent = wm.length ? cl + ' clean · ' + dt + (dt === 1 ? ' dot' : ' dots') + ' this week' : 'Each night: tap once for clean, twice for a fault, again to clear.';
-    };
-    draw();
-    s.appendChild(c);
-    return s;
-  }
-  function ledgerPast() {
-    const by = {};
-    marks().forEach(m => { const w = by[m.week] = by[m.week] || { week: m.week, virtue: m.virtue, clean: 0, dot: 0 }; w[m.mark === 'dot' ? 'dot' : 'clean']++; if (m.virtue) w.virtue = m.virtue; });
-    const weeks = Object.values(by).sort((a, b) => b.week.localeCompare(a.week));
-    const vs = {};
-    weeks.forEach(w => { const name = w.virtue || 'Virtue', v = vs[name] = vs[name] || { virtue: name, weeks: 0, dot: 0, clean: 0 }; v.weeks++; v.dot += w.dot; v.clean += w.clean; });
-    const virtues = Object.values(vs).sort((a, b) => b.dot - a.dot || a.virtue.localeCompare(b.virtue));
-    ui.sheet({ title: 'The Ledger', kicker: weeks.length + (weeks.length === 1 ? ' week kept' : ' weeks kept'), render(api) {
-      const b = api.body;
-      if (!weeks.length) { b.appendChild(h('<p class="empty">Weeks collect here once you’ve marked a few nights.</p>')); return; }
-      b.appendChild(h('<div class="sh"><span class="t">By virtue</span><span class="c">most dots first</span></div>'));
-      const vc = h('<div class="card"></div>');
-      virtues.forEach(v => {
-        const r = h('<div class="row"><span class="tx"><b></b><small></small></span><span class="num g-dots"></span></div>');
-        r.querySelector('b').textContent = v.virtue;
-        r.querySelector('small').textContent = v.weeks + (v.weeks === 1 ? ' week' : ' weeks') + ' · ' + v.clean + ' clean';
-        r.querySelector('.g-dots').textContent = v.dot + (v.dot === 1 ? ' dot' : ' dots');
-        vc.appendChild(r);
-      });
-      b.appendChild(vc);
-      b.appendChild(h('<div class="sh"><span class="t">Week by week</span></div>'));
-      const wc = h('<div class="card"></div>');
-      weeks.forEach(w => {
-        const days = []; for (let i = 0; i < 7; i++) { const m = markOn(U.key(U.addDays(U.parseKey(w.week), i))); days.push('<i class="' + (m ? m.mark : '') + '"></i>'); }
-        const r = h('<div class="row"><span class="tx"><b></b><small></small></span><span class="g-mini" aria-hidden="true">' + days.join('') + '</span></div>');
-        r.querySelector('b').textContent = w.virtue || 'Virtue';
-        r.querySelector('small').textContent = 'Week of ' + U.fmtDateShort(w.week) + ' · ' + w.clean + ' clean · ' + w.dot + (w.dot === 1 ? ' dot' : ' dots');
-        wc.appendChild(r);
-      });
-      b.appendChild(wc);
-    } });
-  }
-
-  /* ---------- recall: one question from a past lesson, answered from memory, then the lesson's takeaway to check against ---------- */
-  function lessonByRef(g, ref) {
-    const m = /^lesson:(\d{4}-\d{2}-\d{2})$/.exec(String(ref || '')); if (!m) return null;
-    return arr(g && g.lessons).concat(g && g.lesson ? [g.lesson] : []).find(l => l && l.date === m[1]) || null;
-  }
-  const recallAnswer = r => r && r.question ? arr(Store.data.writing).filter(w => w.kind === 'recall' && w.prompt === r.question).sort((a, b) => b.date.localeCompare(a.date))[0] || null : null;
-  function recallCard(g, num) {
-    const r = g && g.recall;
-    const s = sec(num, 'Recall');
-    if (!r || !r.question) { s.appendChild(h('<div class="card pad"><p class="empty" style="padding:6px 0"><span class="serif-h">No question yet.</span><br>Cassius asks one here from a past lesson. You answer from memory, then check.</p></div>')); return s; }
-    const src = lessonByRef(g, r.from), ans = recallAnswer(r);
-    const c = h('<div class="card pad g-recall"><div class="g-meta"><span class="tag">From memory</span><span class="small"></span></div><div class="serif-h" style="margin-top:6px"></div><div class="g-rbody"></div></div>');
-    c.querySelector('.g-meta .small').textContent = src ? (src.title || 'Lesson') + ' · ' + U.fmtDateShort(src.date) : '';
-    c.querySelector('.serif-h').textContent = r.question;
-    const body = c.querySelector('.g-rbody');
-    const write = () => Opus.today.writeSheet(() => Opus.refresh(), { prompt: r.question, kind: 'recall', title: 'Recall', kicker: 'From memory', tag: 'Answer from memory', placeholder: 'Don’t look it up. Write what you remember.', free: true, saved: 'Saved. Now check it against the lesson.' });
-    if (!ans) {
-      const row = h('<div class="g-row"><span class="small">No peeking. Then check.</span><button class="btn" type="button">Answer</button></div>');
-      row.querySelector('.btn').onclick = write; body.appendChild(row);
-    } else {
-      const mine = h('<div class="g-mine"><div class="tag">You wrote · ' + U.esc(ago(ans.date)) + ' · ' + ans.words + ' words</div><p></p></div>');
-      mine.querySelector('p').textContent = ans.text.length > 240 ? ans.text.slice(0, 240).replace(/\s+\S*$/, '') + '…' : ans.text;
-      body.appendChild(mine);
-      if (src && src.takeaway) { const t = h('<div class="g-take"><div class="tag">The lesson said</div><div></div></div>'); t.lastChild.textContent = src.takeaway; body.appendChild(t); }
-      const an = noteOn(ans); if (an) body.appendChild(noteBox(an, 'Cassius on your recall'));
-      const btns = h('<div class="btns" style="margin-top:12px">' + (src ? '<button class="btn quiet" type="button">Read the lesson</button>' : '') + '<button class="btn ghost" type="button">Edit your answer</button></div>');
-      const bs = btns.querySelectorAll('.btn');
-      if (src) bs[0].onclick = () => lessonSheet(src, () => Opus.refresh());
-      bs[bs.length - 1].onclick = write;
-      body.appendChild(btns);
-    }
-    s.appendChild(c);
-    return s;
-  }
-
-  /* a note from Cassius, set inside the card it is about. New ones carry a gold dot the first time you see them. */
+  /* ---------- notes from Cassius: each can be "on" something ("lesson:DATE", "glimpse:ID", "book:ID", "seal:DATE" ...) ---------- */
+  const notes = () => arr((G() || {}).notes).filter(n => n && n.text && isDate(n.date));
+  const noteFor = on => notes().filter(n => n.on === on).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const noteOnWriting = w => noteFor((w.kind || 'writing') + ':' + w.date) || (!w.kind ? noteFor('writing') : null);
   const noteKey = n => n.date + '|' + (n.on || '') + '|' + String(n.text || '').slice(0, 40);
   // a note stays marked new for the whole visit, so a sync or a save that redraws the page doesn't take the dot away before you've read it
   let unread = new Set();
   const clearUnread = () => { unread = new Set(); };
   window.addEventListener('hashchange', () => { if (!/growth/.test(location.hash)) clearUnread(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearUnread(); });
+  const dot = n => (unread.has(noteKey(n)) ? '<i class="g-unread" aria-label="New"></i>' : '');
   function noteBox(n, label) {
-    const el = h('<div class="g-take g-noteon"><div class="tag">' + (unread.has(noteKey(n)) ? '<i class="g-unread" aria-label="New"></i>' : '') + U.esc(label) + '</div><div></div></div>');
+    const el = h('<div class="g-take g-noteon"><div class="tag">' + dot(n) + U.esc(label) + '</div><div></div></div>');
     el.lastChild.textContent = n.text; return el;
   }
-  const lessonNote = (l, ans) => noteFor('lesson:' + l.date) || (ans && ans.date !== l.date ? noteOn(ans) : null);
+  function take(label, text, cls) {
+    const el = h('<div class="g-take' + (cls ? ' ' + cls : '') + '"><div class="tag"></div><div></div></div>');
+    set(el, '.tag', label); el.lastChild.textContent = text; return el;
+  }
 
-  /* every book on Cassius's list shows: the one you're reading first, with your page and a bar once the page count is known */
-  function readingCard(g, num) {
+  /* ---------- the season: which week we're in ---------- */
+  function seasonNow(g) {
+    const s = g && g.season; if (!s || !isDate(s.start)) return null;
+    const weeks = arr(s.weeks).filter(w => w && isDate(w.from) && isDate(w.to));
+    const t = today();
+    const wk = weeks.find(w => t >= w.from && t <= w.to) || null;
+    const fallow = !!(s.fallow && isDate(s.fallow.from) && t >= s.fallow.from && t <= s.fallow.to);
+    const end = (s.fallow && s.fallow.to) || (weeks.length ? weeks[weeks.length - 1].to : s.start);
+    return { s, weeks, wk, fallow, before: t < s.start, after: t > end, day: U.daysBetween(U.parseKey(s.start), new Date()) + 1 };
+  }
+  const seasonName = s => 'Season ' + U.roman(s.n || 1);
+
+  /* ---------- sheets ---------- */
+  function writeAnswer(after, o) {
+    Opus.today.writeSheet(after, Object.assign({ free: true, placeholder: 'Plain sentences. Say it the way you’d say it to a friend.' }, o));
+  }
+
+  function lessonSheet(l, after) {
+    const kind = kindFor(l), ans = answerTo(kind, l.question);
+    ui.sheet({
+      title: l.title || 'Before class', kicker: [l.form || 'Before class', ago(l.date) === 'today' ? null : ago(l.date), readMins(l) + ' min'].filter(Boolean).join(' · '), foot: true,
+      render(api) {
+        const b = api.body;
+        b.appendChild(h('<div class="g-prose">' + (prose(l.body) || '<p class="note">Cassius left a title and nothing more today. Some days that is the lesson.</p>') + '</div>'));
+        if (l.takeaway) b.appendChild(take('Take with you', l.takeaway));
+        if (l.question) {
+          const q = h('<div class="card pad g-ask"><div class="tag">Cassius asks</div><div class="serif-h"></div>' + (ans ? '<div class="small" style="margin-top:8px"></div>' : '') + '</div>');
+          set(q, '.serif-h', l.question); if (ans) set(q, '.small', 'You answered ' + ago(ans.date) + ' · ' + ans.words + ' words');
+          b.appendChild(q);
+          if (ans) b.appendChild(h('<div class="g-mine g-prose">' + prose(ans.text) + '</div>'));
+        }
+        const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans)); if (n) b.appendChild(noteBox(n, ans ? 'Cassius on your answer' : 'Cassius on this'));
+        if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
+        const btns = h('<div class="btns"><button class="btn quiet" type="button">Talk it through</button>' + (l.question ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
+        btns.children[0].onclick = () => talk(l);
+        if (l.question) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'Before class', tag: 'Cassius asks' }); };
+        api.foot.appendChild(btns);
+      }
+    });
+  }
+  /* the real conversation happens with Cassius himself; this hands you the opening line */
+  function talk(l) {
+    ui.copy('Cassius, about today’s sitting, “' + (l.title || 'Before class') + '”: ');
+    ui.toast('Copied. Paste it to Cassius and say what’s on your mind.');
+  }
+
+  function writingSheet(w) {
+    ui.sheet({ title: U.fmtDateShort(w.date), kicker: KIND_NAME[w.kind || ''] || 'Writing', render(api) {
+      const c = h('<div class="card pad"><div class="tag"></div><div class="serif-h" style="font-size:20px;margin-top:6px"></div></div>');
+      set(c, '.tag', w.kind ? 'Cassius asked' : 'Prompt'); set(c, '.serif-h', w.prompt || 'Free writing');
+      api.body.appendChild(c);
+      api.body.appendChild(h('<div class="g-prose g-mine">' + prose(w.text) + '</div>'));
+      const n = noteOnWriting(w); if (n) api.body.appendChild(noteBox(n, 'Cassius on this'));
+    } });
+  }
+  function allWriting() {
+    const list = writing().slice().sort((a, b) => b.date.localeCompare(a.date) || (a.kind ? 1 : -1));
+    ui.sheet({ title: 'Your writing', kicker: list.length + ' pieces · ' + U.sum(list.map(w => w.words)).toLocaleString() + ' words', render(api) {
+      if (!list.length) { api.body.appendChild(h('<p class="empty">What you write lands here, newest first.</p>')); return; }
+      const card = h('<div class="card"></div>');
+      list.forEach(w => {
+        const r = h('<div class="row tap"><span class="tx"><b></b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+        set(r, 'b', w.prompt || 'Free writing'); set(r, 'small', U.fmtDateShort(w.date) + (w.kind ? ' · ' + (KIND_NAME[w.kind] || w.kind).toLowerCase() : '') + ' · ' + w.words + ' words');
+        r.onclick = () => writingSheet(w); card.appendChild(r);
+      });
+      api.body.appendChild(card);
+    } });
+  }
+
+  /* ---------- the Lamp: one real line, worded exactly, its speaker named. Tap for why; press and hold to keep it ---------- */
+  const LAMP = '<svg class="g-lampic" viewBox="0 0 48 32" aria-hidden="true"><path class="fl" d="M38 3c2.6 3 3.4 5.6 1.4 8.2-1.4 1.8-4.2 1.6-5-.6-.7-2 .9-3.5 1.8-4.6.8-1 1.4-2 1.8-3z"/>' +
+    '<path d="M6 17c4-4 13-5 21-3 5 1.3 8.4 1 10.6-1.6.6-.7 1.6-.2 1.4.7-1 4.6-5 8-11 9.4C21 24 12 23.4 6 17z"/><path d="M14 23.6 12.5 28h15l-1.6-4.4M10 28h20"/><path d="M6 17c-2.6-.4-4 1-3.6 3 .4 1.8 2.6 2.4 4.6 1.4"/></svg>';
+  function keepLamp(e) {
+    const list = kept(), at = list.findIndex(k => k.text === e.text && k.date === today());
+    if (at >= 0) { Store.data.kept = list.filter((_, i) => i !== at); ui.toast('Taken out of your Commonplace'); }
+    else { Store.data.kept = list.filter(k => !(k.date === today() && (!k.id || /^lamp:/.test(k.id)))).concat([{ id: 'lamp:' + today(), date: today(), text: e.text, from: e.from || null }]); ui.toast('Kept in your Commonplace.'); }
+    Store.save(); ui.buzz(14);
+  }
+  function lamp(g) {
+    const e = g && g.energy, has = e && e.text, isToday = has && e.date === today();
+    const el = h('<div class="g-lamp' + (has ? '' : ' none') + '">' + LAMP + (has ? '<blockquote class="g-words"></blockquote><div class="g-from"></div><div class="g-lwhy" hidden></div><div class="g-acts"></div>' :
+      '<div class="g-words wait">The Lamp is lit before dawn.</div><div class="g-from">One true line a day, from someone who said it.</div>') + '</div>');
+    if (!has) return el;
+    set(el, '.g-words', e.text);
+    set(el, '.g-from', '— ' + (e.from || 'Cassius') + (isToday ? '' : '   ·   from ' + ago(e.date)));
+    // "Lamps you keep come back": if you kept this line before, the tap says so
+    const before = kept().filter(k => k.text === e.text && k.date < e.date).sort((a, b) => a.date.localeCompare(b.date))[0];
+    const why = el.querySelector('.g-lwhy');
+    why.innerHTML = (e.why ? '<div class="tag">Why today</div><p class="w"></p>' : '') + (before ? '<p class="g-back"></p>' : '') + (!e.why && !before ? '<p class="small">Cassius didn’t say why. Ask him.</p>' : '');
+    if (e.why) set(why, '.w', e.why);
+    if (before) set(why, '.g-back', 'You kept this on ' + U.fmtDateShort(before.date) + '. He brought it back.');
+    const acts = el.querySelector('.g-acts');
+    const isKept = () => kept().some(k => k.text === e.text && k.date === today());
+    const kb = h('<button class="g-act" type="button"><svg viewBox="0 0 24 24" aria-hidden="true">' + ui.I.laurel + '</svg><span></span></button>');
+    const draw = () => { kb.classList.toggle('on', isKept()); set(kb, 'span', isKept() ? 'Kept' : 'Keep'); el.classList.toggle('kept', isKept()); };
+    kb.onclick = () => { keepLamp(e); draw(); };
+    acts.appendChild(kb); draw();
+    const wasHeld = hold(el, () => { keepLamp(e); draw(); }, 600);
+    el.addEventListener('click', ev => { if (wasHeld() || ev.target.closest('button')) return; why.hidden = !why.hidden; el.classList.toggle('open', !why.hidden); });
+    return el;
+  }
+  function commonplace() {
+    const list = kept().slice().sort((a, b) => b.date.localeCompare(a.date));
+    ui.sheet({ title: 'Commonplace', kicker: list.length + (list.length === 1 ? ' line kept' : ' lines kept'), render(api) {
+      api.body.appendChild(h('<p class="note" style="margin-bottom:8px">The lines that landed: Lamps you kept, and lines you copied from your books.</p>'));
+      if (!list.length) { api.body.appendChild(h('<p class="empty">Press and hold the Lamp to keep a line.</p>')); return; }
+      list.forEach(k => { const r = h('<div class="g-kept"><div class="q"></div><div class="small"></div></div>'); set(r, '.q', k.text); set(r, '.small', (k.from ? k.from + ' · ' : '') + U.fmtDateShort(k.date)); api.body.appendChild(r); });
+    } });
+  }
+
+  /* ---------- sections ---------- */
+  function sec(num, title, right) {
+    const s = h('<div class="sec"><div class="sh"><span class="r">' + num + '</span><span class="t"></span>' + (right || '') + '</div></div>');
+    set(s, '.sh .t', title); return s;
+  }
+
+  /* Before class: today's sitting, named for the room Dr. N asked him to come to before class */
+  function beforeClass(g, num, sn) {
+    const l = g && g.lesson, past = arr(g && g.lessons).length;
+    const s = sec(num, 'Before class', past ? '<button class="c" type="button">Earlier</button>' : '');
+    const pb = s.querySelector('button.c'); if (pb) pb.onclick = pastLessons;
+    if (!l || !l.title) {
+      const opens = sn && sn.before ? longDay(sn.s.start) : null;
+      s.appendChild(h('<div class="card pad g-class empty-c"><div class="serif-h"></div><p class="g-first"></p></div>'));
+      set(s, '.serif-h', opens ? 'The room opens ' + opens + '.' : 'Nothing waiting yet.');
+      set(s, '.g-first', opens ? 'Every day at lunch there will be something here. The first day is a letter and one task.' : 'Today’s sitting is set before dawn and waiting by 11:45.');
+      return s;
+    }
+    const kind = kindFor(l), ans = answerTo(kind, l.question), old = l.date !== today();
+    const c = h('<div class="card pad g-class tap' + (ans ? ' answered' : '') + '">' +
+      '<div class="g-meta"><span class="tag"></span><span class="small num"></span></div><div class="serif-h" style="margin-top:6px"></div>' +
+      (firstPara(l.body) ? '<p class="g-first"></p>' : '') + (l.question ? '<div class="g-q"><span class="tag">Cassius asks</span><div></div></div>' : '') +
+      '<div class="g-cfoot"><span class="g-state small"></span>' + (l.why ? '<button class="link g-whyb" type="button">Why this, today?</button>' : '') + '</div>' +
+      (l.why ? '<p class="g-whyt" hidden></p>' : '') + '</div>');
+    set(c, '.g-meta .tag', l.form || 'Before class');
+    set(c, '.g-meta .small', readMins(l) + ' min' + (old ? ' · ' + ago(l.date) : ''));
+    set(c, '.serif-h', l.title);
+    if (firstPara(l.body)) set(c, '.g-first', firstPara(l.body));
+    if (l.question) set(c, '.g-q div', l.question);
+    set(c, '.g-state', ans ? 'Answered · ' + ans.words + ' words' : l.question ? 'Tap to sit down' : 'Tap to read');
+    if (l.why) {
+      const wb = c.querySelector('.g-whyb'), wt = c.querySelector('.g-whyt'); wt.textContent = l.why;
+      wb.onclick = ev => { ev.stopPropagation(); wt.hidden = !wt.hidden; wb.textContent = wt.hidden ? 'Why this, today?' : 'Hide the why'; };
+    }
+    const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans));
+    if (n) c.appendChild(noteBox(n, (ans ? 'Cassius on your answer' : 'Cassius on this') + ' · ' + ago(n.date)));
+    c.onclick = () => lessonSheet(l, () => Opus.refresh());
+    s.appendChild(c);
+    // a question from an earlier sitting, back for you to explain again from memory
+    const r = g.recall;
+    if (r && r.question) {
+      const ra = answerTo('recall', r.question), src = lessonByRef(g, r.from);
+      if (!ra || ra.date === today()) {
+        const rc = h('<div class="card pad g-back2"><div class="g-meta"><span class="tag">Back again</span><span class="small"></span></div><div class="g-rq"></div><div class="g-row"><span class="small"></span><button class="btn sm" type="button"></button></div></div>');
+        set(rc, '.g-meta .small', src ? (src.title || 'An earlier sitting') + ' · ' + U.fmtDateShort(src.date) : '');
+        set(rc, '.g-rq', r.question);
+        set(rc, '.g-row .small', ra ? 'Explained · ' + ra.words + ' words' : 'From memory. No looking back.');
+        set(rc, '.btn', ra ? 'Check it' : 'Explain');
+        rc.querySelector('.btn').onclick = () => ra ? recallSheet(r, ra, src) : writeAnswer(() => Opus.refresh(), { prompt: r.question, kind: 'recall', title: 'Explain it again', kicker: 'From memory', tag: 'Explain it from start to finish', placeholder: 'Don’t look it up. Explain it as if to someone who wasn’t there.', saved: 'Saved. Now check it against what you learned.' });
+        s.appendChild(rc);
+      }
+    }
+    return s;
+  }
+  function lessonByRef(g, ref) {
+    const m = /^lesson:(\d{4}-\d{2}-\d{2})$/.exec(String(ref || '')); if (!m) return null;
+    return arr(g && g.lessons).concat(g && g.lesson ? [g.lesson] : []).find(l => l && l.date === m[1]) || null;
+  }
+  function recallSheet(r, ra, src) {
+    ui.sheet({ title: 'Explained again', kicker: src ? src.title || 'From memory' : 'From memory', render(api) {
+      const b = api.body;
+      set(b.appendChild(h('<div class="serif-h" style="font-size:21px"></div>')), null, r.question);
+      b.appendChild(h('<div class="g-mine g-prose">' + prose(ra.text) + '</div>'));
+      if (src && src.takeaway) b.appendChild(take('What the sitting said', src.takeaway));
+      const n = noteOnWriting(ra); if (n) b.appendChild(noteBox(n, 'Cassius on your explanation'));
+      const btns = h('<div class="btns" style="margin-top:14px">' + (src ? '<button class="btn quiet" type="button">Read the sitting</button>' : '') + '<button class="btn ghost" type="button">Edit</button></div>');
+      const bs = btns.querySelectorAll('.btn');
+      if (src) bs[0].onclick = () => lessonSheet(src, () => Opus.refresh());
+      bs[bs.length - 1].onclick = () => { api.close(true); writeAnswer(() => Opus.refresh(), { prompt: r.question, kind: 'recall', title: 'Explain it again', kicker: 'From memory' }); };
+      b.appendChild(btns);
+    } });
+  }
+  function pastLessons() {
+    const g = G(), list = arr(g && g.lessons).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    ui.sheet({ title: 'Earlier sittings', kicker: list.length + ' before today', render(api) {
+      const card = h('<div class="card"></div>');
+      list.forEach(l => {
+        const r = h('<div class="row tap"><span class="tx"><b></b><span class="g-tk"></span><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+        set(r, 'b', l.title || 'A sitting');
+        if (l.takeaway) set(r, '.g-tk', l.takeaway); else r.querySelector('.g-tk').remove();
+        set(r, 'small', [U.fmtDateShort(l.date), l.form || l.subject].filter(Boolean).join(' · ') + (answerTo(kindFor(l), l.question) ? ' · answered' : ''));
+        r.onclick = () => lessonSheet(l); card.appendChild(r);
+      });
+      api.body.appendChild(card);
+    } });
+  }
+
+  /* the Seal: a question with Cassius's own answer locked inside. It opens on its date or once you've answered */
+  const SEAL = '<svg class="g-wax" viewBox="0 0 64 64" aria-hidden="true"><path class="wx" d="M32 4c5 0 7 3 11 4s8 0 10 4-1 7 1 11 5 6 4 11-5 6-6 10 1 8-3 11-8 1-12 3-6 5-11 5-7-3-11-4-8 0-10-4 1-7-1-11-5-6-4-11 5-6 6-10-1-8 3-11 8-1 12-3 6-5 11-5z"/><circle cx="32" cy="32" r="15"/><path d="M38 25.5a9 9 0 1 0 0 13"/><path class="ck" d="M30 4.6 33 22l-6 9 7 9-3 19.4"/></svg>';
+  function sealCard(g, num) {
+    const sl = g && g.seal; if (!sl || !sl.question) return null;
+    const mine = answerTo('seal', sl.question), open = !!mine || (isDate(sl.opens) && sl.opens <= today());
+    const s = sec(num(), 'The Seal');
+    const c = h('<div class="card pad g-seal' + (open ? ' open' : '') + '">' + SEAL + '<div class="tag"></div><div class="serif-h"></div><div class="g-sealb"></div></div>');
+    set(c, '.tag', 'Cassius sealed his answer ' + ago(sl.date));
+    set(c, '.serif-h', sl.question);
+    const body = c.querySelector('.g-sealb');
+    if (!open) {
+      set(body.appendChild(h('<p class="small"></p>')), null, 'It opens ' + (isDate(sl.opens) ? longDay(sl.opens) : 'when you answer') + ', or as soon as you answer, whichever comes first. His answer can’t change once you’ve written yours.');
+      const b = h('<button class="btn" type="button">Answer before it opens</button>');
+      b.onclick = () => writeAnswer(() => Opus.refresh(), { prompt: sl.question, kind: 'seal', title: 'Before the seal breaks', kicker: 'The Seal', tag: 'Cassius sealed his answer', saved: 'Saved. The seal is broken.' });
+      body.appendChild(b);
+    } else {
+      if (mine) { const m = h('<div class="g-mine"><div class="tag"></div><div class="g-prose"></div></div>'); set(m, '.tag', 'You wrote · ' + ago(mine.date)); m.querySelector('.g-prose').innerHTML = prose(mine.text); body.appendChild(m); }
+      const his = h('<div class="g-take"><div class="tag"></div><div class="g-prose"></div></div>'); set(his, '.tag', 'His answer, sealed ' + U.fmtDateShort(sl.date)); his.querySelector('.g-prose').innerHTML = prose(sl.answer || 'He left it blank. Ask him why.'); body.appendChild(his);
+      const n = noteFor('seal:' + sl.date); if (n) body.appendChild(noteBox(n, 'Cassius, after'));
+      if (!mine) { const b = h('<button class="btn ghost" type="button" style="margin-top:12px">Write yours anyway</button>'); b.onclick = () => writeAnswer(() => Opus.refresh(), { prompt: sl.question, kind: 'seal', title: 'Your answer', kicker: 'The Seal' }); body.appendChild(b); }
+    }
+    s.appendChild(c);
+    return s;
+  }
+
+  /* From Cassius: notes that aren't about one thing on the page. A letter shows as folded paper; a piece of his story is marked */
+  const elsewhere = n => /^(writing|lesson|recall|teachback|workshop|walk|seal|glimpse|book|made):/.test(n.on || '') || n.on === 'writing';
+  function fromCassius(g, num) {
+    const all = notes().filter(n => !elsewhere(n)).sort((a, b) => b.date.localeCompare(a.date));
+    const list = all.filter(n => U.daysBetween(U.parseKey(n.date), new Date()) <= 14 || unread.has(noteKey(n)));
+    if (!list.length) return null;
+    const s = sec(num(), 'From Cassius', all.length > 3 ? '<button class="c" type="button">All</button>' : '');
+    const more = s.querySelector('button.c'); if (more) more.onclick = () => allNotes(all);
+    list.slice(0, 3).forEach(n => s.appendChild(noteCard(n)));
+    return s;
+  }
+  function noteCard(n) {
+    if (n.kind === 'letter') {
+      const c = h('<button class="g-letter" type="button"><span class="g-fold" aria-hidden="true"></span><span class="tag"></span><span class="serif-h"></span><span class="small">Tap to unfold</span></button>');
+      c.querySelector('.tag').innerHTML = dot(n) + 'A letter · ' + U.esc(ago(n.date));
+      set(c, '.serif-h', n.title || 'Donald.');
+      c.onclick = () => ui.sheet({ title: n.title || 'A letter', kicker: 'From Cassius · ' + U.fmtDateShort(n.date), render(api) { api.body.appendChild(h('<div class="g-prose g-paper">' + prose(n.text) + '</div>')); } });
+      return c;
+    }
+    const c = h('<div class="card pad g-note2' + (n.kind === 'story' ? ' story' : '') + '"><div class="tag"></div><div class="g-ntext g-prose"></div></div>');
+    c.querySelector('.tag').innerHTML = dot(n) + (n.kind === 'story' ? 'From his life' : 'A note') + ' · ' + U.esc(ago(n.date));
+    c.querySelector('.g-ntext').innerHTML = prose(n.text);
+    return c;
+  }
+  function allNotes(list) {
+    ui.sheet({ title: 'From Cassius', kicker: list.length + ' notes and letters', render(api) { list.forEach(n => { const c = noteCard(n); c.style.marginBottom = '10px'; api.body.appendChild(c); }); } });
+  }
+
+  /* the Season: one big question, seven weeks and a fallow week. A week stays faint until you've explained its ground start to finish */
+  function seasonCard(g, num, sn) {
+    if (!sn) return null;
+    const { s, weeks, wk } = sn;
+    const right = sn.before ? 'opens ' + U.fmtDateShort(s.start) : sn.fallow ? 'fallow week' : sn.after ? 'complete' : 'day ' + sn.day + ' of ' + (weeks.length * 7);
+    const s2 = sec(num(), seasonName(s), '<span class="c"></span>'); set(s2, '.sh .c', right);
+    const c = h('<div class="card pad g-season"><div class="serif-h g-sq"></div><div class="g-road" role="list"></div><div class="g-now"></div></div>');
+    set(c, '.g-sq', s.question || 'The season’s question');
+    const road = c.querySelector('.g-road');
+    weeks.forEach(w => {
+      const state = w.solid ? 'solid' : wk && wk.n === w.n ? 'now' : today() > w.to ? 'past' : 'ahead';
+      const b = h('<button class="g-wp ' + state + '" type="button" role="listitem"><i></i><span>' + U.roman(w.n) + '</span></button>');
+      b.setAttribute('aria-label', 'Week ' + w.n + ': ' + (w.name || '') + (state === 'solid' ? ', explained start to finish' : state === 'now' ? ', this week' : ''));
+      b.onclick = () => weekSheet(s, w);
+      road.appendChild(b);
+    });
+    if (s.fallow && isDate(s.fallow.from)) { const f = h('<button class="g-wp fallow' + (sn.fallow ? ' now' : '') + '" type="button" role="listitem" aria-label="Fallow week: rest"><i></i><span>rest</span></button>'); f.onclick = () => weekSheet(s, Object.assign({ name: 'Fallow', fallow: true }, s.fallow)); road.appendChild(f); }
+    const now = c.querySelector('.g-now');
+    const show = sn.before ? weeks[0] : wk;
+    if (show) {
+      now.innerHTML = '<div class="g-meta"><span class="tag"></span><span class="small"></span></div><p></p>';
+      set(now, '.tag', (sn.before ? 'First · ' : 'This week · ') + (show.name || 'Week ' + U.roman(show.n)));
+      set(now, '.small', U.fmtDateShort(show.from) + ' to ' + U.fmtDateShort(show.to));
+      set(now, 'p', show.ground || '');
+    } else if (sn.fallow) {
+      now.innerHTML = '<div class="tag">Fallow</div><p>No new ground this week. Look back at your Glimpses and choose the next question together.</p>';
+    } else if (sn.after) {
+      now.innerHTML = '<div class="tag">The season is done</div><p>Then sits beside Now. Read them both.</p>';
+    }
+    const book = s.book && arr(g.reading).find(b => b.id === s.book);
+    if (book) { const bk = h('<button class="g-sbook" type="button"><span class="small">Reading with it</span><b></b></button>'); set(bk, 'b', book.title + (s.bookPart ? ', ' + s.bookPart : '')); bk.onclick = () => bookSheet(book); c.appendChild(bk); }
+    s2.appendChild(c);
+    return s2;
+  }
+  function weekSheet(s, w) {
+    ui.sheet({ title: w.fallow ? 'Fallow' : 'Week ' + U.roman(w.n) + (w.name ? ': ' + w.name : ''), kicker: seasonName(s) + ' · ' + U.fmtDateShort(w.from) + ' to ' + U.fmtDateShort(w.to), render(api) {
+      const b = api.body;
+      set(b.appendChild(h('<p class="g-prose"></p>')), null, w.ground || (w.fallow ? 'A week with no new ground, like a field left to rest. You look back at your Glimpses and choose the next question together.' : ''));
+      const proof = /^writing:(\d{4}-\d{2}-\d{2})(?::(\w+))?$/.exec(w.proof || '');
+      const p = proof && writing().find(x => x.date === proof[1] && (!proof[2] || (x.kind || '') === proof[2]));
+      if (w.solid && p) { b.appendChild(h('<div class="tag" style="margin-top:6px">Your explanation, start to finish</div>')); b.appendChild(h('<div class="g-mine g-prose">' + prose(p.text) + '</div>')); }
+      else if (!w.fallow) set(b.appendChild(h('<p class="note"></p>')), null, w.solid ? 'You explained this one start to finish.' : 'This stays faint until you can explain it from start to finish, in your own words.');
+    } });
+  }
+
+  /* the Map: eight regions, lit where you've been, under fog where you haven't. Only what you explain or answer lights it */
+  function mapCard(g, num) {
+    const regions = arr(g && g.map && g.map.regions).filter(r => r && r.name);
+    if (!regions.length) return null;
+    const litN = r => arr(r.solid).filter(x => !x.faded).length + arr(r.thin).length * 0.4 + arr(r.opened).length * 0.3;
+    const lit = regions.filter(r => litN(r) > 0).length;
+    const s = sec(num(), 'The Map', '<span class="c"></span>'); set(s, '.sh .c', lit ? lit + ' of ' + regions.length + ' lit' : 'all under fog');
+    const grid = h('<div class="g-map"></div>');
+    regions.forEach(r => {
+      const l = U.clamp(litN(r) / 6, 0, 1), sol = arr(r.solid).filter(x => !x.faded).length, thin = arr(r.thin).length + arr(r.solid).filter(x => x.faded).length;
+      const t = h('<button class="g-reg" type="button"><span class="nm"></span><span class="st"></span></button>');
+      t.style.setProperty('--lit', l.toFixed(2)); t.style.setProperty('--fx', (hash(r.id || r.name) * 100).toFixed(0) + '%'); t.style.setProperty('--fy', (hash((r.id || r.name) + 'y') * 100).toFixed(0) + '%');
+      set(t, '.nm', r.name); set(t, '.st', sol || thin ? [sol ? sol + ' solid' : null, thin ? thin + ' thin' : null].filter(Boolean).join(' · ') : arr(r.opened).length ? 'newly opened' : 'fog');
+      if (l > 0) t.classList.add('lit');
+      t.onclick = () => regionSheet(r);
+      grid.appendChild(t);
+    });
+    s.appendChild(grid);
+    return s;
+  }
+  function regionSheet(r) {
+    ui.sheet({ title: r.name, kicker: 'The Map', render(api) {
+      const b = api.body;
+      if (r.about) set(b.appendChild(h('<p class="note" style="margin-bottom:10px"></p>')), null, r.about);
+      const group = (label, items, cls) => {
+        if (!items.length) return;
+        const sh = h('<div class="sh" style="margin-top:12px"><span class="t"></span></div>'); set(sh, '.t', label); b.appendChild(sh);
+        const c = h('<div class="card"></div>');
+        items.forEach(x => { const row = h('<div class="row ' + (cls || '') + (x.faded ? ' faded' : '') + '"><span class="tx"><b></b><small></small></span></div>'); set(row, 'b', x.text); set(row, 'small', (x.faded ? 'faded back · ' : '') + (isDate(x.date) ? U.fmtDateShort(x.date) : '')); c.appendChild(row); });
+        b.appendChild(c);
+      };
+      const solid = arr(r.solid).filter(x => !x.faded), faded = arr(r.solid).filter(x => x.faded);
+      group('Solid ground', solid, 'g-solid'); group('Thin ground', faded.concat(arr(r.thin))); group('Newly opened', arr(r.opened), 'g-opened');
+      if (!solid.length && !faded.length && !arr(r.thin).length && !arr(r.opened).length) b.appendChild(h('<p class="empty">Fog. Nothing is marked here yet. Only what you explain or answer lights it.</p>'));
+    } });
+  }
+
+  /* ---------- the Scroll: every word you write, as a scroll that grows ---------- */
+  const ownedWords = g => { // a taught word turns gold the first time you use it in your own writing, unprompted
+    const ws = writing().slice().sort((a, b) => a.date.localeCompare(b.date));
+    return arr(g && g.lexicon).filter(x => x && x.word).map(x => {
+      const re = new RegExp('\\b' + String(x.word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\w{0,3}\\b', 'i');
+      const hit = ws.find(w => (!x.taught || w.date >= x.taught) && re.test(w.text) && !re.test(w.prompt || ''));
+      return Object.assign({}, x, { owned: hit ? hit.date : null });
+    });
+  };
+  function scrollCard(g, num, sn) {
+    const ws = writing();
+    const byDay = {}; ws.forEach(w => { byDay[w.date] = (byDay[w.date] || 0) + (w.words || words(w.text)); });
+    const days = Object.keys(byDay).sort(), total = U.sum(days.map(d => byDay[d]));
+    const lex = ownedWords(g), owned = lex.filter(x => x.owned);
+    const gilded = arr(g && g.gilded).filter(x => x && x.text && isDate(x.date));
+    const s = sec(num(), 'The Scroll', ws.length ? '<button class="c" type="button">All writing</button>' : '');
+    const ab = s.querySelector('button.c'); if (ab) ab.onclick = allWriting;
+    const c = h('<div class="card pad g-scrollc"><div class="g-scroll" data-noswipe><span class="rod l" aria-hidden="true"></span><div class="g-paper2"></div><span class="rod r" aria-hidden="true"></span></div>' +
+      '<div class="g-stotal"><b class="num"></b><span class="small"></span></div><div class="g-smarks"></div><div class="btns g-sbtns"></div></div>');
+    const paper = c.querySelector('.g-paper2');
+    // milestones: the length of a book on your shelf, only once Cassius has checked its real word count
+    const books = arr(g && g.reading).filter(b => b && b.title && Number(b.words) > 0).sort((a, b) => a.words - b.words);
+    let run = 0; const passed = [];
+    if (!days.length) paper.appendChild(h('<span class="g-blank">Your first words will be the first ink here.</span>'));
+    const start1 = sn && sn.s && sn.s.start;
+    days.forEach(d => {
+      const n = byDay[d], age = U.daysBetween(U.parseKey(d), new Date());
+      const col = h('<button class="g-col" type="button"><span class="ink"></span></button>');
+      col.style.setProperty('--w', Math.round(U.clamp(n / 6, 10, 64)) + 'px');
+      col.style.setProperty('--dry', U.clamp(age / 10, 0, 1).toFixed(2));
+      col.style.setProperty('--fill', U.clamp(0.3 + n / 300, 0.3, 1).toFixed(2));
+      col.dataset.band = start1 && d >= start1 ? 's1' : 's0';
+      if (age === 0) col.classList.add('wet');
+      if (gilded.some(x => x.date === d)) col.appendChild(h('<i class="gold" aria-hidden="true"></i>'));
+      if (owned.some(x => x.owned === d)) col.appendChild(h('<i class="own" aria-hidden="true"></i>'));
+      const before = run; run += n;
+      books.forEach(b => { if (before < b.words && run >= b.words) { passed.push({ b, d }); col.appendChild(h('<i class="mile" aria-hidden="true"></i>')); } });
+      col.setAttribute('aria-label', longDay(d) + ': ' + n + ' words');
+      col.onclick = () => daySheet(d, g);
+      paper.appendChild(col);
+    });
+    set(c, '.g-stotal b', total.toLocaleString());
+    const wk = []; for (let i = 0; i < 7; i++) wk.push(byDay[U.key(U.addDays(new Date(), -i))] || 0);
+    set(c, '.g-stotal .small', total ? (total === 1 ? 'word' : 'words') + ' on the scroll · ' + U.sum(wk).toLocaleString() + ' this week' : 'words so far');
+    const marks = c.querySelector('.g-smarks');
+    const mark = (cls, text) => { const m = h('<span class="g-mk"><i class="' + cls + '"></i><span></span></span>'); set(m, 'span span', text); marks.appendChild(m); };
+    if (gilded.length) mark('gold', gilded.length + ' gilded');
+    if (lex.length) mark('own', owned.length + ' of ' + lex.length + ' words yours');
+    if (passed.length) mark('mile', 'Longer than ' + passed[passed.length - 1].b.title);
+    if (!marks.children.length) marks.remove();
+    const bt = c.querySelector('.g-sbtns');
+    const wb = h('<button class="btn quiet" type="button">Write</button>'); wb.onclick = () => Opus.today.writeSheet(() => Opus.refresh()); bt.appendChild(wb);
+    if (lex.length) { const lb = h('<button class="btn ghost" type="button">Lexicon</button>'); lb.onclick = () => lexiconSheet(lex); bt.appendChild(lb); }
+    // press and hold the scroll to see it in seasonal bands
+    const sc = c.querySelector('.g-scroll');
+    hold(sc, () => { sc.classList.toggle('bands'); ui.buzz(10); ui.toast(sc.classList.contains('bands') ? (start1 ? 'Seasons: before Cassius, then ' + seasonName(sn.s) : 'One season so far') : 'Back to ink'); }, 600);
+    requestAnimationFrame(() => { sc.scrollLeft = sc.scrollWidth; });
+    s.appendChild(c);
+    return s;
+  }
+  function daySheet(d, g) {
+    const ws = writing().filter(w => w.date === d), gl = arr(g && g.gilded).filter(x => x.date === d), own = ownedWords(g).filter(x => x.owned === d);
+    ui.sheet({ title: longDay(d), kicker: U.sum(ws.map(w => w.words)) + ' words', render(api) {
+      const b = api.body;
+      gl.forEach(x => b.appendChild(take('Gilded · the sentence Cassius quoted back', x.text, 'g-gild')));
+      own.forEach(x => b.appendChild(take('A word became yours', x.word + (x.meaning ? ': ' + x.meaning : ''))));
+      const card = h('<div class="card" style="margin-top:10px"></div>');
+      ws.forEach(w => { const r = h('<div class="row tap"><span class="tx"><b></b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>'); set(r, 'b', w.prompt || 'Free writing'); set(r, 'small', (KIND_NAME[w.kind || ''] || 'Writing') + ' · ' + w.words + ' words'); r.onclick = () => writingSheet(w); card.appendChild(r); });
+      b.appendChild(card);
+    } });
+  }
+  function lexiconSheet(lex) {
+    ui.sheet({ title: 'Lexicon', kicker: lex.filter(x => x.owned).length + ' of ' + lex.length + ' yours', render(api) {
+      api.body.appendChild(h('<p class="note" style="margin-bottom:8px">Words Cassius has taught you. Each turns gold the first time you use it in your own writing without being asked to.</p>'));
+      const c = h('<div class="card"></div>');
+      lex.slice().sort((a, b) => (b.owned ? 1 : 0) - (a.owned ? 1 : 0) || String(b.taught || '').localeCompare(String(a.taught || ''))).forEach(x => {
+        const r = h('<div class="row g-lex' + (x.owned ? ' owned' : '') + '"><span class="tx"><b></b><small></small></span><span class="tm small"></span></div>');
+        set(r, 'b', x.word); set(r, 'small', x.meaning || ''); set(r, '.tm', x.owned ? 'yours since ' + U.fmtDateShort(x.owned) : x.taught ? 'taught ' + U.fmtDateShort(x.taught) : '');
+        c.appendChild(r);
+      });
+      api.body.appendChild(c);
+    } });
+  }
+
+  /* ---------- Glimpses: a night sky, one star for each moment it all came together. Never asked for ---------- */
+  function addGlimpse() {
+    const who = [], known = [...new Set(glimpses().flatMap(x => arr(x.who)))].slice(-10);
+    let day = today();
+    ui.sheet({ title: 'A Glimpse', kicker: 'One line, when it comes together', foot: true, render(api) {
+      const b = api.body;
+      const ta = h('<textarea class="input g-gin" maxlength="280" placeholder="What happened, in one line."></textarea>'); b.appendChild(ta);
+      const dc = h('<div class="chips" style="margin-top:10px"><button class="chip on" type="button">Today</button><button class="chip" type="button">Yesterday</button></div>');
+      dc.querySelectorAll('.chip').forEach((c, i) => c.onclick = () => { day = U.key(U.addDays(new Date(), -i)); dc.querySelectorAll('.chip').forEach((x, j) => x.classList.toggle('on', i === j)); });
+      b.appendChild(dc);
+      const f = h('<div class="field" style="margin-top:14px"><label>Who was there</label></div>'); b.appendChild(f);
+      const wc = h('<div class="chips"></div>');
+      const drawW = () => { wc.innerHTML = ''; [...new Set(known.concat(who))].forEach(n => { const c = h('<button class="chip' + (who.includes(n) ? ' on' : '') + '" type="button"></button>'); c.textContent = n; c.onclick = () => { const i = who.indexOf(n); if (i >= 0) who.splice(i, 1); else who.push(n); drawW(); }; wc.appendChild(c); }); };
+      const add = h('<input class="input" placeholder="Add a name, or leave it blank" maxlength="40">');
+      add.addEventListener('keydown', e => { if (e.key === 'Enter' && add.value.trim()) { e.preventDefault(); who.push(add.value.trim()); add.value = ''; drawW(); } });
+      f.appendChild(wc); f.appendChild(add); drawW();
+      b.appendChild(h('<p class="note" style="margin-top:10px">Nobody will ever remind you to log one. A Glimpse only counts when something real happened.</p>'));
+      const sv = h('<button class="btn block" type="button">Add the star</button>');
+      sv.onclick = () => {
+        const line = ta.value.trim().replace(/\s+/g, ' '); if (!line) { ta.focus(); return; }
+        if (add.value.trim()) who.push(add.value.trim());
+        const x = { id: day + '-' + Math.random().toString(36).slice(2, 6), date: day, line, who: [...new Set(who)], at: new Date().toISOString() };
+        Store.data.glimpses = arr(Store.data.glimpses).concat([x]); Store.save(); ui.buzz([8, 40, 8]); api.close(); ui.toast('A new star. Cassius will read it.'); Opus.refresh();
+      };
+      api.foot.appendChild(sv);
+      setTimeout(() => ta.focus(), 350);
+    } });
+  }
+  function glimpseSheet(x, fig) {
+    ui.sheet({ title: longDay(x.date), kicker: fig ? 'Glimpse · ' + fig.name : 'Glimpse', render(api) {
+      const b = api.body;
+      set(b.appendChild(h('<div class="g-gline"></div>')), null, x.line);
+      if (arr(x.who).length) set(b.appendChild(h('<p class="small"></p>')), null, 'With ' + arr(x.who).join(', '));
+      if (fig && fig.about) b.appendChild(take(fig.name, fig.about));
+      const n = noteFor('glimpse:' + x.id); if (n) b.appendChild(noteBox(n, 'Cassius on this'));
+      const del = h('<button class="btn ghost" type="button" style="margin-top:18px">Take this star out</button>');
+      del.onclick = async () => {
+        if (!(await ui.ask({ title: 'Take it out?', text: 'This Glimpse leaves the sky and your logs.', yes: 'Take it out', danger: true }))) return;
+        const dl = Store.data.deleted = Store.data.deleted || {}; dl.glimpses = dl.glimpses || {}; dl.glimpses[x.id] = new Date().toISOString();
+        Store.data.glimpses = arr(Store.data.glimpses).filter(y => y.id !== x.id); Store.save(); api.close(); Opus.refresh();
+      };
+      b.appendChild(del);
+    } });
+  }
+  function glimpsesCard(g, num) {
+    const list = glimpses(), figs = arr(g && g.constellations).filter(f => f && f.name && arr(f.glimpses).length);
+    const s = sec(num(), 'Glimpses', list.length ? '<span class="c"></span>' : ''); if (list.length) set(s, '.sh .c', list.length + (list.length === 1 ? ' star' : ' stars'));
+    const sky = h('<div class="g-sky"><svg class="g-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div class="g-dust" aria-hidden="true"></div><button class="g-plus" type="button" aria-label="Log a Glimpse">' + ui.icon('plus') + '</button></div>');
+    let dd = '';
+    for (let i = 0; i < 46; i++) dd += '<i style="left:' + (hash('d' + i) * 100).toFixed(1) + '%;top:' + (hash('e' + i) * 100).toFixed(1) + '%;opacity:' + (0.1 + hash('f' + i) * 0.22).toFixed(2) + '"></i>';
+    sky.querySelector('.g-dust').innerHTML = dd;
+    const pos = {};
+    const figOf = id => figs.find(f => f.glimpses.includes(id)) || null;
+    // a star sits where its id puts it; stars in a figure gather toward the figure's own part of the sky
+    list.forEach(x => {
+      const f = figOf(x.id);
+      let px = 8 + hash(x.id) * 84, py = 12 + hash(x.id + 'y') * 72;
+      if (f) { const cx = 16 + hash(f.name) * 68, cy = 22 + hash(f.name + 'y') * 50; px = cx + (px - 50) * 0.34; py = cy + (py - 50) * 0.42; }
+      pos[x.id] = [U.clamp(px, 5, 90), U.clamp(py, 8, 88)];
+      const st = h('<button class="g-star" type="button"></button>');
+      st.style.left = pos[x.id][0] + '%'; st.style.top = pos[x.id][1] + '%';
+      st.style.setProperty('--s', (0.8 + Math.min(1, x.line.length / 140) * 0.7).toFixed(2));
+      st.style.setProperty('--tw', (2.5 + hash(x.id + 't') * 4).toFixed(1) + 's');
+      if (U.daysBetween(U.parseKey(x.date), new Date()) <= 1) st.classList.add('new');
+      st.setAttribute('aria-label', 'Glimpse, ' + U.fmtDateShort(x.date) + ': ' + x.line);
+      st.onclick = () => glimpseSheet(x, f);
+      sky.appendChild(st);
+    });
+    let lines = '';
+    figs.forEach(f => {
+      const pts = f.glimpses.map(id => pos[id]).filter(Boolean);
+      for (let i = 1; i < pts.length; i++) lines += '<line x1="' + pts[i - 1][0] + '" y1="' + pts[i - 1][1] + '" x2="' + pts[i][0] + '" y2="' + pts[i][1] + '"/>';
+      if (pts.length > 1) { const lb = h('<span class="g-fig"></span>'); lb.textContent = f.name; lb.style.left = (U.sum(pts.map(p => p[0])) / pts.length) + '%'; lb.style.top = Math.min(93, Math.max(...pts.map(p => p[1])) + 7) + '%'; sky.appendChild(lb); }
+    });
+    sky.querySelector('.g-lines').innerHTML = lines;
+    if (!list.length) sky.appendChild(h('<p class="g-skye">When a moment comes together, tap + and write one line about it. Each one becomes a star.</p>'));
+    sky.querySelector('.g-plus').onclick = addGlimpse;
+    s.appendChild(sky);
+    return s;
+  }
+
+  /* ---------- the Portrait, and your creed beside it ---------- */
+  function evidenceSheet(line, p) {
+    ui.sheet({ title: 'Where this line comes from', kicker: (p.sketch ? 'Sketch' : 'Portrait') + ' · ' + U.fmtDateShort(p.date), render(api) {
+      const b = api.body;
+      set(b.appendChild(h('<div class="serif-h" style="font-size:22px;margin-bottom:12px"></div>')), null, line.text);
+      const ev = arr(line.evidence);
+      if (!ev.length) { b.appendChild(h('<p class="note">Cassius left no evidence under this line. Ask him for it. He owes you some.</p>')); return; }
+      ev.forEach(e => {
+        const m = /^(glimpse|writing|lesson|recall|teachback|workshop|walk|seal|talk):(.+)$/.exec(e.on || '');
+        const what = !m ? 'Evidence' : m[1] === 'glimpse' ? 'A Glimpse' : m[1] === 'talk' ? 'Something you said' : KIND_NAME[m[1] === 'writing' ? '' : m[1]] || 'Your writing';
+        const when = m && isDate(m[2].slice(0, 10)) ? ' · ' + U.fmtDateShort(m[2].slice(0, 10)) : '';
+        const t = take(what + when, e.quote || '', 'g-ev');
+        const gl = m && m[1] === 'glimpse' ? glimpses().find(x => x.id === m[2]) : null;
+        const wr = m && !gl && m[1] !== 'talk' ? writing().find(x => x.date === m[2].slice(0, 10) && (m[1] === 'writing' ? !x.kind : x.kind === m[1])) : null;
+        if (gl || wr) { t.classList.add('tap'); t.onclick = () => (gl ? glimpseSheet(gl) : writingSheet(wr)); }
+        b.appendChild(t);
+      });
+    } });
+  }
+  function portraitSheet(versions) {
+    ui.sheet({ title: 'Earlier portraits', kicker: versions.length + (versions.length === 1 ? ' version' : ' versions'), render(api) {
+      versions.forEach(p => { const c = h('<div class="card pad g-pold"><div class="tag"></div></div>'); set(c, '.tag', (p.sketch ? 'Sketch' : 'Portrait') + (p.season ? ' · Season ' + U.roman(p.season) : '') + ' · ' + U.fmtDateShort(p.date)); arr(p.lines).forEach(l => set(c.appendChild(h('<p class="g-pline"></p>')), null, l.text)); api.body.appendChild(c); });
+    } });
+  }
+  function portraitCard(g, num, sn) {
+    const p = g && g.portrait, past = arr(g && g.portraits);
+    const s = sec(num(), 'The Portrait', past.length ? '<button class="c" type="button">Earlier</button>' : '');
+    const pb = s.querySelector('button.c'); if (pb) pb.onclick = () => portraitSheet(past.slice().sort((a, b) => b.date.localeCompare(a.date)));
+    const c = h('<div class="card pad g-portrait"><span class="g-corner tl" aria-hidden="true"></span><span class="g-corner br" aria-hidden="true"></span><div class="tag"></div><div class="g-plines"></div></div>');
+    if (p && arr(p.lines).length) {
+      set(c, '.tag', (p.sketch ? 'A sketch' : 'The man the evidence points to') + ' · ' + (p.season ? 'Season ' + U.roman(p.season) + ' · ' : '') + U.fmtDateShort(p.date));
+      arr(p.lines).forEach(l => { const r = h('<button class="g-pline" type="button"></button>'); r.textContent = l.text; r.onclick = () => evidenceSheet(l, p); c.querySelector('.g-plines').appendChild(r); });
+      c.appendChild(h('<p class="small g-pnote">Tap a line for its evidence. Argue with any of them.</p>'));
+    } else {
+      const first = sn && sn.s && isDate(sn.s.start) ? U.key(U.addDays(U.parseKey(sn.s.start), 6)) : null;
+      set(c, '.tag', 'Not drawn yet');
+      set(c.querySelector('.g-plines').appendChild(h('<p class="g-pempty"></p>')), null, first ? 'The first sketch comes ' + longDay(first) + ', after a week of evidence. Every line will have something you wrote or lived under it.' : 'The first sketch comes after a week of evidence.');
+    }
+    s.appendChild(c);
+    const cr = creedCard(g); if (cr) s.appendChild(cr);
+    return s;
+  }
+  /* the creed: the Oct 28 lines, being rewritten in plain words. One line a day; the new words sit over the old */
+  function creedCard(g) {
+    const cr = g && g.creed, lines = arr(cr && cr.lines).filter(Boolean); if (!lines.length) return null;
+    const plain = {}; arr(cr.plain).forEach(x => { if (x && Number.isInteger(x.i) && x.text) plain[x.i] = x; });
+    const done = Object.keys(plain).length;
+    const t = cr.today, i = Number.isInteger(t) && t >= 0 && t < lines.length ? t : Math.floor(U.parseKey(today()).getTime() / 864e5) % lines.length;
+    const c = h('<div class="card pad g-creed2"><div class="g-meta"><span class="tag">Your creed · line ' + U.roman(i + 1) + '</span><span class="small num"></span></div><div class="g-cnew"></div><div class="g-cold"></div><button class="link" type="button"></button></div>');
+    set(c, '.g-meta .small', done ? done + ' of ' + lines.length + ' in your words' : 'plain words begin Saturday');
+    if (plain[i]) { set(c, '.g-cnew', plain[i].text); set(c, '.g-cold', lines[i]); } else { set(c, '.g-cnew', lines[i]); c.querySelector('.g-cold').remove(); }
+    set(c, '.link', 'Read all ' + lines.length + ' lines');
+    c.querySelector('.link').onclick = () => ui.sheet({ title: 'Your creed', kicker: 'Written ' + (isDate(cr.written) ? U.fmtDateShort(cr.written) : 'with Cassius') + (done ? ' · ' + done + ' rewritten' : ''), render(api) {
+      api.body.appendChild(h('<p class="note" style="margin-bottom:10px">You’re putting it in plain words this season, a line or two each Saturday. The new words sit over the old.</p>'));
+      lines.forEach((l, k) => { const r = h('<div class="g-cl"><span class="n">' + U.roman(k + 1) + '</span><span class="t"><span class="nw"></span><span class="od"></span></span></div>'); if (plain[k]) { set(r, '.nw', plain[k].text); set(r, '.od', l); } else { set(r, '.nw', l); r.querySelector('.od').remove(); } api.body.appendChild(r); });
+    } });
+    return c;
+  }
+
+  /* ---------- the Library: the foundation book and the novel, four shelves, honest verdicts ---------- */
+  const SHELF = { foundation: 'Foundation', workbench: 'Workbench', tribunal: 'The Tribunal shelf', fire: 'The fire' };
+  const SHELF_NOTE = { foundation: 'Read slowly, with Cassius', workbench: 'Tools. Take what works', tribunal: 'Claims to put on trial', fire: 'For the love of it' };
+  function bookSheet(bk) {
+    const pg = pageOf(bk.id);
+    ui.sheet({ title: bk.title, kicker: [bk.author, SHELF[bk.shelf]].filter(Boolean).join(' · ') || 'Reading', render(api) {
+      const b = api.body;
+      if (bk.verdict) { const v = take('Cassius’s verdict', bk.verdict); v.style.marginTop = '0'; b.appendChild(v); }
+      if (bk.why) set(b.appendChild(h('<p class="note" style="margin:10px 0 4px"></p>')), null, bk.why);
+      const n = noteFor('book:' + bk.id); if (n) b.appendChild(noteBox(n, 'Cassius on this book'));
+      const f = h('<div class="field" style="margin-top:14px"><label>Page you’re on</label></div>'); b.appendChild(f);
+      const st = ui.stepper({ label: 'Page', value: pg ? pg.page : null, placeholder: '0', unit: bk.pages ? 'of ' + bk.pages : 'pages', step: (v, dir) => Math.max(0, (v || 0) + dir * 10) });
+      f.appendChild(st.el);
+      const btns = h('<div class="btns" style="margin-top:12px"><button class="btn quiet" type="button">' + (pg && pg.done ? 'Not finished' : 'Finished it') + '</button><button class="btn" type="button">Save page</button></div>');
+      const [fin, sv] = btns.children;
+      const put = (page, done) => {
+        const rec = { id: bk.id, page: page == null ? null : Math.round(page), date: today() }; if (done) rec.done = true;
+        Store.data.reading = arr(Store.data.reading).filter(r => r.id !== bk.id).concat([rec]); Store.save(); api.close(); Opus.refresh();
+      };
+      sv.onclick = () => { const v = st.get(); put(bk.pages && v > bk.pages ? bk.pages : v, false); ui.toast('Page saved'); };
+      fin.onclick = () => { if (pg && pg.done) { put(st.get(), false); return; } put(bk.pages || st.get(), true); ui.toast('Finished. Tell Cassius what stayed with you.'); };
+      b.appendChild(btns);
+      // a line that struck you goes in the Commonplace
+      const f2 = h('<div class="field" style="margin-top:22px"><label>A line that struck you</label></div>'); b.appendChild(f2);
+      const ta = h('<textarea class="input" style="min-height:84px;font-family:var(--serif);font-size:18px" placeholder="Copy it exactly."></textarea>'); f2.appendChild(ta);
+      const kb = h('<button class="btn ghost" type="button" style="margin-top:8px">Keep it in your Commonplace</button>');
+      kb.onclick = () => { const t = ta.value.trim(); if (!t) { ta.focus(); return; } const p = st.get(); Store.data.kept = kept().concat([{ id: 'line:' + Date.now().toString(36), date: today(), text: t, from: bk.title + (bk.author ? ', ' + bk.author : '') + (p ? ', p. ' + p : '') }]); Store.save(); ta.value = ''; ui.buzz(10); ui.toast('Kept.'); };
+      f2.appendChild(kb);
+    } });
+  }
+  function libraryCard(g, num) {
     const books = arr(g && g.reading).filter(b => b && b.title);
-    const s = sec(num, 'Reading', books.length > 1 ? '<span class="c">' + books.length + ' books</span>' : '');
-    if (!books.length) { s.appendChild(h('<div class="card pad"><p class="empty" style="padding:6px 0">Cassius’s reading list goes here.</p></div>')); return s; }
+    if (!books.length) return null;
     const isDone = b => b.status === 'done' || !!(pageOf(b.id) || {}).done;
-    const now = books.filter(b => b.status === 'reading' && !isDone(b)), next = books.filter(b => b.status === 'next' && !isDone(b)), done = books.filter(isDone);
-    const other = books.filter(b => !now.includes(b) && !next.includes(b) && !done.includes(b));
+    const now = books.filter(b => b.status === 'reading' && !isDone(b));
+    // always one book with Cassius beside the novel: if none is open yet, the season's book (or the next one) waits here
+    if (!now.some(b => b.shelf !== 'fire')) { const sb = (g.season && books.find(b => b.id === g.season.book && !isDone(b))) || books.find(b => b.status === 'next' && b.shelf !== 'fire'); if (sb) now.push(sb); }
+    now.sort((a, b) => (a.shelf === 'fire') - (b.shelf === 'fire'));
+    const s = sec(num(), 'The Library', '<button class="c" type="button">Shelves</button>');
+    s.querySelector('button.c').onclick = () => shelvesSheet(books, isDone);
     const c = h('<div class="card"></div>');
-    now.forEach(b => {
+    (now.length ? now : books.filter(b => b.status === 'next').slice(0, 2)).forEach(b => {
+      const sbk = g.season && g.season.book === b.id;
       const pg = pageOf(b.id), page = pg && pg.page != null ? pg.page : null, pct = page != null && b.pages ? U.clamp(page / b.pages, 0, 1) : null;
-      const r = h('<div class="row tap g-book"><span class="tag" style="min-width:44px">Now</span><span class="tx"><b></b><small></small>' +
+      const r = h('<div class="row tap g-book"><span class="g-spine" aria-hidden="true"></span><span class="tx"><span class="tag"></span><b></b><small></small>' +
         (pct != null ? '<span class="g-prog"><span class="bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></span><span class="small num">' + Math.round(pct * 100) + '%</span></span>' : '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
-      r.querySelector('b').textContent = b.title;
-      r.querySelector('small').textContent = [b.author, page != null ? 'page ' + page + (b.pages ? ' of ' + b.pages : '') : 'tap to log your page'].filter(Boolean).join(' · ');
+      r.querySelector('.g-spine').dataset.shelf = b.shelf || '';
+      set(r, '.tag', b.shelf === 'fire' ? 'For the love of it' : b.status === 'reading' ? 'With Cassius' : sbk && g.season.start > today() ? 'With Cassius from ' + U.fmtDateShort(g.season.start) : 'Next');
+      set(r, 'b', b.title);
+      set(r, 'small', [b.author, page != null ? 'page ' + page + (b.pages ? ' of ' + b.pages : '') : sbk && g.season.bookPart ? g.season.bookPart : b.status === 'reading' ? 'tap to log your page' : null].filter(Boolean).join(' · '));
       r.onclick = () => bookSheet(b); c.appendChild(r);
     });
-    const plain = (b, tag) => {
-      const r = h('<div class="row tap' + (tag === 'Done' ? ' g-done' : '') + '"><span class="tag" style="min-width:44px"></span><span class="tx"><b></b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
-      r.querySelector('.tag').textContent = tag; r.querySelector('b').textContent = b.title;
-      const sm = [b.author, b.pages ? b.pages + ' pages' : null].filter(Boolean).join(' · ');
-      if (sm) r.querySelector('small').textContent = sm; else r.querySelector('small').remove();
-      r.onclick = () => bookSheet(b); c.appendChild(r);
-    };
-    next.forEach(b => plain(b, 'Next'));
-    other.forEach(b => plain(b, 'Later'));
-    done.forEach(b => plain(b, 'Done'));
+    const kp = kept().length;
+    const cp = h('<div class="row tap"><span class="g-spine cp" aria-hidden="true"></span><span class="tx"><b>Commonplace</b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+    set(cp, 'small', kp ? kp + (kp === 1 ? ' line that landed' : ' lines that landed') : 'Lines that strike you, kept');
+    cp.onclick = commonplace; c.appendChild(cp);
     s.appendChild(c);
     return s;
   }
+  function shelvesSheet(books, isDone) {
+    ui.sheet({ title: 'Your shelves', kicker: books.length + ' books, judged honestly', render(api) {
+      ['foundation', 'workbench', 'tribunal', 'fire', ''].forEach(k => {
+        const list = books.filter(b => (b.shelf || '') === k); if (!list.length) return;
+        const sh = h('<div class="sh" style="margin-top:14px"><span class="t"></span><span class="c"></span></div>'); set(sh, '.t', SHELF[k] || 'Other'); set(sh, '.c', SHELF_NOTE[k] || ''); api.body.appendChild(sh);
+        const c = h('<div class="card"></div>');
+        list.forEach(b => { const r = h('<div class="row tap' + (isDone(b) ? ' g-done' : '') + '"><span class="tx"><b></b><small></small></span><span class="tm small"></span></div>'); set(r, 'b', b.title); set(r, 'small', b.verdict || b.author || ''); set(r, '.tm', isDone(b) ? 'read' : b.status === 'reading' ? 'now' : b.status === 'next' ? 'next' : ''); r.onclick = () => bookSheet(b); c.appendChild(r); });
+        api.body.appendChild(c);
+      });
+    } });
+  }
 
-  function subjectsCard(g, num) {
-    const subs = arr(g && g.subjects).filter(x => x && x.name);
-    if (!subs.length) return null;
-    const s = sec(num(), 'Subjects');
-    const c = h('<div class="card"></div>');
-    const lastBy = {}; arr(g.lessons).concat(g.lesson ? [g.lesson] : []).forEach(l => { if (l && l.subject && (!lastBy[l.subject] || l.date > lastBy[l.subject])) lastBy[l.subject] = l.date; });
-    subs.forEach(x => {
-      const lk = Object.keys(lastBy).find(k => k.toLowerCase() === x.name.toLowerCase() || k.toLowerCase() === String(x.id || '').toLowerCase());
-      const r = h('<div class="row g-sub"><span class="tx"><b></b><small></small></span><span class="tm small"></span></div>');
-      r.querySelector('b').textContent = x.name;
-      r.querySelector('small').textContent = [x.now ? 'Now: ' + x.now : null, x.next ? 'Next: ' + x.next : null].filter(Boolean).join(' · ') || 'Cassius hasn’t started this one yet';
-      r.querySelector('.tm').textContent = lk ? ago(lastBy[lk]) : '';
-      c.appendChild(r);
+  /* ---------- Made: what exists now that didn't before ---------- */
+  function madeCard(g, num, sn) {
+    const list = arr(g && g.made).filter(m => m && m.title);
+    const s = sec(num(), 'Made', list.length ? '<span class="c"></span>' : ''); if (list.length) set(s, '.sh .c', String(list.length));
+    const shelf = h('<div class="g-made"><span class="g-plank" aria-hidden="true"></span></div>');
+    if (!list.length) {
+      const mk = sn && sn.weeks.find(w => w.makes);
+      set(shelf.insertBefore(h('<p class="g-madee"></p>'), shelf.firstChild), null, mk ? 'Nothing made yet. The first thing on this shelf is ' + mk.makes + ', in week ' + U.roman(mk.n) + ' (from ' + U.fmtDateShort(mk.from) + ').' : 'What you make lands on this shelf.');
+    }
+    list.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(m => {
+      const b = h('<button class="g-vol" type="button"><span class="ti"></span><span class="yr"></span></button>');
+      b.style.setProperty('--h', (112 + hash(m.id || m.title) * 36).toFixed(0) + 'px'); b.style.setProperty('--tone', (hash(m.title) * 0.5).toFixed(2));
+      set(b, '.ti', m.title); set(b, '.yr', m.season ? U.roman(m.season) : '');
+      b.onclick = () => ui.sheet({ title: m.title, kicker: [m.kind, m.season ? 'Season ' + U.roman(m.season) : null, isDate(m.date) ? U.fmtDateShort(m.date) : null].filter(Boolean).join(' · '), render(api) {
+        api.body.appendChild(h('<div class="g-prose g-paper">' + prose(m.text || m.summary || '') + '</div>'));
+        const then = /^writing:(\d{4}-\d{2}-\d{2})(?::(\w+))?$/.exec(m.then || ''), tw = then && writing().find(x => x.date === then[1] && (!then[2] || (x.kind || '') === then[2]));
+        if (tw) { set(api.body.appendChild(h('<div class="tag" style="margin-top:16px"></div>')), null, 'Then: where it started, ' + U.fmtDateShort(tw.date)); api.body.appendChild(h('<div class="g-mine g-prose">' + prose(tw.text) + '</div>')); }
+        const n = noteFor('made:' + (m.id || '')); if (n) api.body.appendChild(noteBox(n, 'Cassius on it'));
+      } });
+      shelf.insertBefore(b, shelf.lastChild);
     });
-    s.appendChild(c);
+    s.appendChild(shelf);
     return s;
   }
 
-  /* notes that aren't about one piece of writing: right under today's lesson */
-  const generalNotes = g => arr(g && g.notes).filter(n => n && n.text && !/^(writing|lesson|recall):/.test(n.on || '') && n.on !== 'writing').sort((a, b) => b.date.localeCompare(a.date));
-  function notesCard(g, num) {
-    const notes = generalNotes(g);
-    if (!notes.length) return null;
-    const s = sec(num(), 'From Cassius', notes.length > 3 ? '<button class="c" type="button">All ' + notes.length + '</button>' : '');
-    const c = h('<div class="card"></div>');
-    const row = n => {
-      const r = h('<div class="row g-note"><span class="tx"><b></b><small></small></span></div>');
-      if (unread.has(noteKey(n))) r.insertBefore(h('<i class="g-unread" aria-label="New"></i>'), r.firstChild);
-      r.querySelector('b').textContent = n.text; r.querySelector('small').textContent = U.fmtDateShort(n.date); return r;
-    };
-    notes.slice(0, 3).forEach(n => c.appendChild(row(n)));
-    const more = s.querySelector('button.c');
-    if (more) more.onclick = () => ui.sheet({ title: 'From Cassius', kicker: notes.length + ' notes', render(api) { const cc = h('<div class="card"></div>'); notes.forEach(n => cc.appendChild(row(n))); api.body.appendChild(cc); } });
-    s.appendChild(c);
-    return s;
-  }
-
-  function setupPrompt() {
-    return [
-      'You are Cassius, my teacher. You can now write to my Growth page in Opus, my phone app, through the "opus" connector.',
-      '',
-      'How it works:',
-      '- read_opus_file with file "guide" explains everything. Read it first, then read "growth" to see what is on the page now.',
-      '- update_growth saves to the Growth page. Send only the sections you are changing. It never touches my logs.',
-      '- read_opus_file with file "logs" shows what I did: my writing (lesson answers marked "kind": "lesson", recall answers "kind": "recall"), my ledger marks ("ledger"), the lessons I marked as learned ("growth-lesson" in checks on that lesson’s date), my page in each book ("reading"), and the words I kept ("kept").',
-      '',
-      'When I ask you to fill my Growth page:',
-      '- energy: one short piece of positive energy for today, motivational or just good. If it is a quote, put who said it in "from" and make sure it is real and worded right. If it is yours, leave "from" empty.',
-      '- lesson: today’s lesson, with a subject, a title, the lesson itself and one question for me to answer in writing. The old lesson is filed away on its own.',
-      '- prompt: today’s writing prompt. Keep prompts away from my job.',
-      '- notes: when I have written something, read it in my logs and leave one honest note on it, with "on" set to "writing:", "lesson:" or "recall:" and the date of the piece. A note without "on" shows under today’s lesson.',
-      '- ledger: each Monday, one virtue for the week ("week" is that Monday, "virtue" its name, "why" one line on why this one now). Read my marks in logs "ledger" first and lean toward what keeps collecting dots.',
-      '- recall: one question from a past lesson for me to answer from memory, with "from" set to "lesson:" and that lesson’s date. Make sure that lesson has a takeaway, because I check my answer against it.',
-      '- creed: "today" can pick the line of the day by its number, counting from 0. Leave it out and the lines take turns.',
-      '- reading, subjects and creed lines: change these only when we have talked about it. Give each book its page count when you know it.',
-      '',
-      'Never make anything up about me. Tell me what you changed after each save.'
-    ].join('\n');
+  /* ---------- Cassius himself: his portrait in the corner, and the pieces of his story he's told you ---------- */
+  function cassiusSheet() {
+    const told = notes().filter(n => n.kind === 'story').sort((a, b) => a.date.localeCompare(b.date));
+    ui.sheet({ title: 'Cassius', kicker: 'Your teacher', render(api) {
+      const b = api.body;
+      b.appendChild(h('<img class="g-medal-big" src="icons/cassius.svg" alt="Cassius, drawn as a profile on an old coin">'));
+      b.appendChild(h('<p class="lede" style="margin:6px 0 16px">An old man with a Roman name and a Greek education. He tells his story slowly.</p>'));
+      if (!told.length) { b.appendChild(h('<p class="empty">He hasn’t told you anything about himself yet. When he does, it collects here.</p>')); return; }
+      b.appendChild(h('<div class="sh"><span class="t">What he’s told you</span></div>'));
+      told.forEach(n => { const c = h('<div class="g-take"><div class="tag"></div><div class="g-prose"></div></div>'); set(c, '.tag', U.fmtDateShort(n.date)); c.querySelector('.g-prose').innerHTML = prose(n.text); b.appendChild(c); });
+    } });
   }
 
   function render(v) {
-    const g = G(), d = new Date();
+    const g = G(), d = new Date(), sn = seasonNow(g);
     if (Store.data.growth && Store.data.growth.updated && Store.data.settings.growthSeen !== Store.data.growth.updated) { Store.data.settings.growthSeen = Store.data.growth.updated; Store.save(); setTimeout(() => Opus.renderBar(), 0); }
     // notes you haven't seen yet carry a gold dot this time; after that they're read
-    const seen = new Set(arr(Store.data.settings.notesSeen)), all = arr(g && g.notes).filter(n => n && n.text);
+    const seen = new Set(arr(Store.data.settings.notesSeen)), all = notes();
     const fresh = Store.data.growth ? all.map(noteKey).filter(k => !seen.has(k)) : [];
     fresh.forEach(k => unread.add(k));
     if (fresh.length) { Store.data.settings.notesSeen = all.map(noteKey).slice(-80); Store.save(); }
     let n = 0; const num = () => U.roman(++n);
-    v.appendChild(h('<div class="top"><div><div class="eyebrow">' + U.DAY_NAMES[d.getDay()] + ' · with Cassius</div><div class="title">Growth</div></div></div>'));
-    v.appendChild(energy(g));
-    v.appendChild(lessonCard(g, num()));
-    const nc = notesCard(g, num); if (nc) v.appendChild(nc);
-    v.appendChild(writingCard(g, num()));
-    v.appendChild(ledgerCard(g, num()));
-    v.appendChild(recallCard(g, num()));
-    v.appendChild(creedCard(g, num()));
-    v.appendChild(readingCard(g, num()));
-    const sc = subjectsCard(g, num); if (sc) v.appendChild(sc);
+    const where = !sn ? 'with Cassius' : sn.before ? 'before the first season' : sn.fallow ? seasonName(sn.s) + ' · fallow' : sn.wk ? seasonName(sn.s) + ' · week ' + U.roman(sn.wk.n) : 'with Cassius';
+    const top = h('<div class="top"><div><div class="eyebrow"></div><div class="title">Growth</div></div><button class="g-medal" type="button" aria-label="Cassius"><img src="icons/cassius.svg" alt=""></button></div>');
+    set(top, '.eyebrow', U.DAY_NAMES[d.getDay()] + ' · ' + where);
+    top.querySelector('.g-medal').onclick = cassiusSheet;
+    v.appendChild(top);
+    v.appendChild(lamp(g));
+    v.appendChild(beforeClass(g, num(), sn));
+    [sealCard(g, num), fromCassius(g, num), seasonCard(g, num, sn), mapCard(g, num), scrollCard(g, num, sn), glimpsesCard(g, num), portraitCard(g, num, sn), libraryCard(g, num), madeCard(g, num, sn)].forEach(x => { if (x) v.appendChild(x); });
 
-    const foot = h('<div class="g-foot"><div class="rule"></div><p class="small"></p><button class="btn quiet" type="button">Copy setup for Cassius</button></div>');
+    const foot = h('<div class="g-foot"><div class="rule"></div><p class="small"></p></div>');
     const up = g && g.updated ? new Date(g.updated) : null;
-    foot.querySelector('p').textContent = !Store.data.growth && g ? 'This is an example page. Cassius fills in yours.' :
+    set(foot, 'p', !Store.data.growth && g ? 'This is an example page. Cassius fills in yours.' :
       up && !isNaN(up) ? 'Cassius last wrote here ' + (U.key(up) === U.key() ? 'today' : ago(U.key(up))) + ', ' + U.fmtTimeAP(U.pad(up.getHours()) + ':' + U.pad(up.getMinutes())) + '.' :
-      'Cassius hasn’t written here yet. Paste the setup into his chat once.';
-    foot.querySelector('button').onclick = () => ui.copy(setupPrompt());
+      'Cassius hasn’t written here yet.');
     v.appendChild(foot);
   }
 
-  Opus.growth = { prompts, todayPrompt, setupPrompt, prose };
+  Opus.growth = { prompts, todayPrompt, prose };
   Opus.tab({ id: 'growth', title: 'Growth', icon: 'laurel', render,
     badge: () => !!(Store.data.growth && Store.data.growth.updated && Store.data.settings.growthSeen !== Store.data.growth.updated) });
 })();

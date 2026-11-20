@@ -61,14 +61,15 @@
     ['reviews', r => r.weekOf],
     ['writing', w => (w.kind ? w.date + ':' + w.kind : w.date)],
     ['reading', r => r.id],
-    ['kept', k => k.date],
+    ['kept', k => k.id || k.date], // Lamps you kept and lines from your books; older entries have no id and are one per day
+    ['glimpses', g => g.id],
     ['eaten', e => e.id],
     ['labs', l => l.date],
     ['pets', e => e.id],
     ['supps', e => e.id],
     ['ledger', e => e.date]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));

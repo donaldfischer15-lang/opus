@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.13.3';
+  Opus.VERSION = '1.14.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -80,7 +80,8 @@
       supps: [],           // supplements taken: [{ id: 'date:supp', date, supp, at }]
       changes: [],         // what Grok, Cassius or an update changed, per tab (this phone only, never synced)
       ledger: [],          // the Growth ledger, one mark a day: [{ week, virtue, date, mark: 'clean' | 'dot', at }]
-      deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {}, ledger: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
+      glimpses: [],        // Growth's night sky, one line when a moment comes together: [{ id, date, line, who: [names], at }]
+      deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {}, ledger: {}, glimpses: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
         tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
@@ -118,7 +119,7 @@
       for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
       for (const k of Object.keys(base.settings)) if (d.settings[k] === undefined) d.settings[k] = base.settings[k];
       if (!d.money.weeks) d.money.weeks = []; if (!d.money.balances) d.money.balances = [];
-      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger']) if (!d.deleted[k]) d.deleted[k] = {};
+      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses']) if (!d.deleted[k]) d.deleted[k] = {};
       const shipped = window.OPUS_PRELOADED_PLAN || window.OPUS_EXAMPLE_PLAN;
       if (!d.plan) d.plan = U.clone(shipped);
       else if (shipped && d.plan.name === shipped.name && (Number(shipped.rev) || 1) > (Number(d.plan.rev) || 1)) d.plan = upgradePlan(d.plan, shipped);

@@ -166,12 +166,32 @@
     const out = [];
     if (!isObj(a) || !isObj(b)) return out;
     const t = (x, n) => trunc(x || '', n || 60);
-    if (!same(a.energy, b.energy) && b.energy && b.energy.text) out.push('New words for today' + (b.energy.from ? ', from ' + t(b.energy.from, 30) : ''));
-    if (!same(a.lesson, b.lesson) && b.lesson && b.lesson.title) out.push((a.lesson && a.lesson.date === b.lesson.date ? 'Lesson updated: ' : 'New lesson: ') + t(b.lesson.title));
+    if (!same(a.energy, b.energy) && b.energy && b.energy.text) out.push('The Lamp is lit' + (b.energy.from ? ': ' + t(b.energy.from, 30) : ''));
+    if (!same(a.lesson, b.lesson) && b.lesson && b.lesson.title) out.push((a.lesson && a.lesson.date === b.lesson.date ? 'Today’s sitting updated: ' : 'Before class: ') + t(b.lesson.title));
+    if (!same(a.seal, b.seal) && b.seal && b.seal.question) out.push(a.seal && a.seal.question === b.seal.question ? 'The Seal changed' : 'A new question under seal');
+    if (!same(a.season, b.season) && b.season) {
+      const wa = new Set(arr(a.season && a.season.weeks).filter(w => w && w.solid).map(w => w.n));
+      const nw = arr(b.season.weeks).filter(w => w && w.solid && !wa.has(w.n));
+      if (!a.season || a.season.n !== b.season.n) out.push('Season ' + U.roman(b.season.n || 1) + ': ' + t(b.season.question || '', 50));
+      else if (nw.length) nw.forEach(w => out.push('Week ' + U.roman(w.n) + ' is solid' + (w.name ? ': ' + t(w.name, 30) : '')));
+      else out.push('The season’s road was updated');
+    }
+    if (!same(a.map, b.map) && b.map) {
+      const cnt = m => arr(m && m.regions).reduce((n, r) => n + arr(r.solid).length + arr(r.thin).length + arr(r.opened).length, 0);
+      const d = cnt(b.map) - cnt(a.map);
+      out.push(d > 0 ? 'The Map: ' + d + (d === 1 ? ' new mark' : ' new marks') : 'The Map was redrawn');
+    }
+    if (!same(a.portrait, b.portrait) && b.portrait && arr(b.portrait.lines).length) out.push(b.portrait.sketch ? 'A new sketch of the Portrait' : 'The Portrait was redrawn');
+    const newOf = (k, keyf) => { const o = new Set(arr(a[k]).map(keyf)); return arr(b[k]).filter(x => x && !o.has(keyf(x))); };
+    newOf('lexicon', x => x.word).forEach(x => out.push('A new word for your Lexicon: ' + t(x.word, 30)));
+    newOf('gilded', x => x.date + x.text).forEach(() => out.push('A sentence of yours was gilded'));
+    newOf('constellations', x => x.id || x.name).forEach(x => out.push('A constellation in your Glimpses: ' + t(x.name, 30)));
+    newOf('made', x => x.id || x.title).forEach(x => out.push('On the Made shelf: ' + t(x.title, 40)));
+    if (!same(a.creed && a.creed.plain, b.creed && b.creed.plain)) out.push('A creed line in your own words');
     if (!same(a.prompt, b.prompt) && b.prompt && b.prompt.text) out.push('New writing prompt: ' + t(b.prompt.text));
     if (!same(a.ledger, b.ledger) && b.ledger && b.ledger.virtue) out.push((a.ledger && a.ledger.week === b.ledger.week ? 'This week’s virtue updated: ' : 'This week’s virtue: ') + t(b.ledger.virtue, 30));
     if (!same(a.recall, b.recall) && b.recall && b.recall.question) out.push('New recall question: ' + t(b.recall.question));
-    if (!same(a.creed, b.creed)) {
+    if (!same(a.creed && a.creed.lines, b.creed && b.creed.lines) || (a.creed && b.creed && a.creed.today !== b.creed.today)) {
       const la = arr(a.creed && a.creed.lines), lb = arr(b.creed && b.creed.lines);
       if (!same(la, lb)) out.push(lb.length > la.length ? 'Creed: added ' + (lb.length - la.length) + (lb.length - la.length === 1 ? ' line' : ' lines') : lb.length < la.length ? 'Creed: removed ' + (la.length - lb.length) + (la.length - lb.length === 1 ? ' line' : ' lines') : 'Creed reworded');
       else out.push(Number.isInteger(b.creed.today) ? 'Cassius picked today’s creed line' : 'Creed lines take turns again');
@@ -180,7 +200,8 @@
     const oldN = new Set(arr(a.notes).map(keyN));
     arr(b.notes).filter(n => n && n.text && !oldN.has(keyN(n))).forEach(n => {
       const m = /^(writing|lesson|recall):(\d{4}-\d{2}-\d{2})$/.exec(n.on || '');
-      out.push(m ? 'Note on your ' + (m[1] === 'writing' ? 'writing' : m[1] === 'lesson' ? 'lesson answer' : 'recall answer') + ' from ' + U.fmtDateShort(m[2]) : 'New note: ' + t(n.text, 70));
+      out.push(n.kind === 'letter' ? 'A letter from Cassius' + (n.title ? ': ' + t(n.title, 40) : '') : n.kind === 'story' ? 'Cassius told you something about his life' :
+        m ? 'Note on your ' + (m[1] === 'writing' ? 'writing' : m[1] === 'lesson' ? 'answer' : 'explanation') + ' from ' + U.fmtDateShort(m[2]) : 'New note: ' + t(n.text, 70));
     });
     const oldL = new Map(arr(a.lessons).map(l => [l.date, l]));
     arr(b.lessons).forEach(l => { const o = oldL.get(l.date); if (o && !o.takeaway && l.takeaway) out.push('Takeaway added to ' + t(l.title || U.fmtDateShort(l.date), 40)); else if (o && !same(o, l) && !(a.lesson && a.lesson.date === l.date)) out.push('Past lesson updated: ' + t(l.title || '', 40)); });
@@ -221,6 +242,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.14.0': [['growth', 'Growth is rebuilt around Cassius: a Lamp each morning, Before class at lunch, a Season with its road, the Map, your Scroll of words, Glimpses, the Portrait beside your creed, the Library and a shelf for what you make. Tap his coin at the top to meet him.']],
     '1.13.1': [['today', 'Settings now has a Desk: Grok and Cassius leave notes there about the app, and Claude answers them each evening.']],
     '1.13.2': [['today', 'Settings now has Shared memory: what Grok, Cassius and Claude know about you, so each knows what the others learned.']],
     '1.13.0': [['today', 'Notifications: Opus can now buzz your lock screen for workouts, meals, bills, pet care and more, even when it is closed. Turn them on in Settings › Notifications.']],

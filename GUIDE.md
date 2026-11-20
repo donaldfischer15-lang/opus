@@ -11,7 +11,7 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `plan.json` | **you** and the app | the plan (section 1). Edit it in place. |
 | `logs.json` | **only the app** | everything logged on the phone (section 3). Read it, never edit it. |
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
-| `growth.json` | **only the teacher** (Cassius) | the Growth page: today's words, the lesson, prompts, creed, reading, notes (section 5). The app only reads it. |
+| `growth.json` | **only the teacher** (Cassius) | the Growth page: the Lamp, Before class, the Seal, the Season, the Map, the Portrait, the Library and Cassius's notes (section 5). Cassius commits it whole; the app only reads it. |
 | `GUIDE.md` | the app | this guide. |
 | `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (section 6). |
 | `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (section 7). |
@@ -29,7 +29,7 @@ If you have the opus connector, use its tools; they check everything before savi
 | `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
 | `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
 | `add_to_outbox` | log entries for the owner (section 4). |
-| `update_growth` | the Growth page (section 5; Cassius only). |
+| `update_growth` | the older, version 1 sections of the Growth page only (section 5). Cassius now commits `growth.json` directly instead. |
 | `leave_note` | leave a note on the desk for Claude, answer one (`re`), or mark one of yours done (`close`). |
 | `update_memory` | add facts about the owner to the shared memory (`add`), rewrite a section (`replace`) or delete facts (`remove`). |
 
@@ -307,10 +307,11 @@ The app previews the block and lists any problems before saving.
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
 | `reviews` | `[{ "weekOf", "worked", "slipped", "change", "saved" }]` |
-| `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; `"kind": "recall"` = an answer to the Growth page's recall question, written from memory, and `prompt` is that question; no `kind` = the day's writing practice) |
-| `ledger` | `[{ "week", "virtue", "date", "mark", "at" }]` the owner's nightly marks on the week's virtue (Growth › The Ledger): one per date, `mark` is `"clean"` or `"dot"` (a fault), `week` is that week's Monday and `virtue` the virtue it was marked against. Count the dots per virtue to see which one keeps collecting them. |
+| `writing` | `[{ "date", "text", "words", "sentences", "prompt", "kind" }]` (`"kind": "lesson"` = an answer to the lesson's question, and `prompt` is that question; `"kind": "recall"` = an answer to the Growth page's Back again question, written from memory; `teachback`, `workshop`, `walk` = answers to those kinds of sitting; `seal` = his answer to the Seal's question; `prompt` is always the question; no `kind` = the day's writing practice) |
+| `ledger` | (retired with Growth version 2; old entries stay) `[{ "week", "virtue", "date", "mark", "at" }]` the owner's nightly marks on the week's virtue (Growth › The Ledger): one per date, `mark` is `"clean"` or `"dot"` (a fault), `week` is that week's Monday and `virtue` the virtue it was marked against. Count the dots per virtue to see which one keeps collecting them. |
 | `reading` | `[{ "id", "page", "date", "done" }]` the owner's page in each book from `growth.json` `reading` (`done` true = finished) |
-| `kept` | `[{ "date", "text", "from" }]` the Growth words the owner chose to keep |
+| `kept` | `[{ "id", "date", "text", "from" }]` the owner's Commonplace: Lamps kept (`id` `lamp:<date>`) and lines copied from books (`id` `line:<...>`). Older entries have no `id`. |
+| `glimpses` | `[{ "id", "date", "line", "who", "at" }]` the owner's Glimpses: one line when a moment came together, and who was there. Never asked for. |
 | `eaten` | what was actually eaten, when it differs from the plan. **A planned meal:** `{ "id": "<date>:<routine item id>", "date", "item", "meal", "name", "parts": [{ "name", "unit", "planned", "ate", "macros" }], "macros", "at" }` (part of it was eaten, or more or less; `macros` is what was eaten), or the same with `"skipped": true` (not eaten). A planned meal that is ticked in `checks` with no entry here was eaten as planned. **Something extra:** `{ "id", "date", "extra": true, "name", "amount", "unit", "slot", "macros", "at" }` (`macros` may be `null`; `slot` is breakfast, lunch, snack or dinner). |
 | `labs` | blood test results: `{ "date", "lab", "markers": [{ "name", "value", "unit", "range", "low", "high" }], "note", "at" }`, one entry per test date. `range` is the lab's reference range as printed; `low` and `high` are its numbers. A value below `low` or above `high` shows as outside the lab's range. |
 | `pets` | pet care done, weigh-ins and vet visits: `{ "id": "<date>:<pet id>:<care id>", "date", "pet", "care", "lb", "note", "at" }`. `care` is a care id from the pet, or `"weight"` (with `lb`) or `"vet"` (with `note`). |
@@ -410,44 +411,52 @@ Put only new or corrected entries here. You may replace the whole file each time
 
 ## 5. The Growth page (`growth.json`, `"format": "opus-growth"`)
 
-The Growth tab is the teacher's page. The teacher (Cassius) fills it in; the owner reads it, writes, and marks progress, which goes in `logs.json`. Through the Opus helper, save it with **`update_growth`**, sending only the sections you change. Read the current page with `read_opus_file` and `"file": "growth"`.
+The Growth tab is Cassius's room. Cassius writes `growth.json` in the data repository directly, as a whole file, with `"version": 2`. The owner reads it, writes and logs, and what they do goes in `logs.json`. The Opus helper's `update_growth` only takes the version 1 sections (energy, creed, lesson, prompt, prompts, ledger, recall, subjects, reading, lessons, notes) and rejects the rest, so don't use it for this page; commit the file instead. Keep `updated` current: the tab shows a dot when it changes.
 
 ```json
 {
-  "format": "opus-growth", "version": 1, "updated": "2026-11-24T07:30:00Z",
-  "energy":  { "text": "Start the hard thing small.", "from": null, "date": "2026-11-24" },
-  "creed":   { "lines": ["I keep my word.", "I do the hard thing first."], "today": null },
-  "lesson":  { "date": "2026-11-24", "subject": "Logic and argument", "title": "Claims need reasons", "minutes": 4,
-               "body": "Paragraphs split by a blank line.\n\n- lists start with a dash\n\n> a quote starts with >\n\n**bold** and *italic* work.",
-               "question": "One question for the owner to answer in writing.", "takeaway": "One line to remember." },
-  "prompt":  { "date": "2026-11-24", "text": "Today's writing prompt." },
-  "prompts": [ { "id": "door", "text": "A prompt for other days." } ],
-  "ledger":  { "week": "2026-11-23", "virtue": "Order", "why": "One line on why this virtue, this week." },
-  "recall":  { "date": "2026-11-24", "question": "One question from a past lesson.", "from": "lesson:2026-11-17" },
-  "subjects":[ { "id": "logic", "name": "Logic and argument", "now": "What makes an argument valid", "next": "Common fallacies" } ],
-  "reading": [ { "id": "enchiridion", "title": "The Enchiridion", "author": "Epictetus", "status": "reading", "pages": 60, "why": "One line on why this book." } ],
-  "lessons": [ { "date": "2026-11-23", "subject": "...", "title": "...", "body": "...", "question": "...", "takeaway": "One line to remember." } ],
-  "notes":   [ { "date": "2026-11-24", "text": "An honest note on the owner's writing.", "on": "writing:2026-11-24" } ]
+  "format": "opus-growth", "version": 2, "updated": "2026-11-23T10:30:00Z",
+  "energy":  { "date": "2026-11-23", "text": "Exact words.", "from": "Speaker, where it's from", "why": "One line on why this line, today." },
+  "lesson":  { "date": "2026-11-23", "form": "Letter", "title": "...", "minutes": 6, "body": "Markdown: paragraphs, - lists, > quotes, ### headings, **bold**, *italic*.",
+               "question": "One question to answer in writing.", "takeaway": "One line to remember.", "why": "Why this, today.", "subject": "attention" },
+  "recall":  { "date": "2026-11-23", "question": "Explain it again from memory.", "from": "lesson:2026-11-20" },
+  "seal":    { "date": "2026-11-23", "question": "...", "answer": "Cassius's own answer, written now and never changed.", "opens": "2026-11-30" },
+  "notes":   [ { "date": "2026-11-23", "text": "...", "on": "lesson:2026-11-23", "kind": "note" } ],
+  "season":  { "n": 1, "question": "How does my mind work?", "start": "2026-11-23",
+               "weeks": [ { "n": 1, "name": "Opening", "from": "2026-11-23", "to": "2026-11-29", "ground": "What this week covers.", "makes": null, "solid": false, "proof": null } ],
+               "fallow": { "from": "2027-01-11", "to": "2027-01-17" }, "book": "happiness-hypothesis", "bookPart": "chapters 1 and 2" },
+  "map":     { "regions": [ { "id": "attention", "name": "Attention", "about": "One line.", "solid": [ { "text": "...", "date": "...", "proof": "writing:2026-12-04:teachback", "faded": false } ], "thin": [], "opened": [] } ] },
+  "portrait":{ "date": "2026-11-29", "season": 1, "sketch": true, "lines": [ { "text": "One line about who he is becoming.", "evidence": [ { "on": "glimpse:2026-11-25-ab12", "quote": "his own words" } ] } ] },
+  "portraits": [],
+  "creed":   { "lines": ["the Oct 28 lines"], "today": null, "written": "2026-10-28", "plain": [ { "i": 0, "text": "The line in his plain words.", "date": "2026-11-28" } ] },
+  "lexicon": [ { "word": "salience", "meaning": "What makes a thing stand out.", "taught": "2026-12-01" } ],
+  "gilded":  [ { "date": "2026-12-02", "text": "A sentence of his, quoted exactly.", "on": "writing:2026-12-02:lesson" } ],
+  "constellations": [ { "id": "for-mom", "name": "For Mom", "about": "What these moments share.", "glimpses": ["2026-11-25-ab12"] } ],
+  "reading": [ { "id": "enchiridion", "title": "Enchiridion", "author": "Epictetus", "status": "reading", "pages": 60, "shelf": "foundation", "verdict": "Honest one line.", "why": "Why this book.", "words": null } ],
+  "made":    [ { "id": "owners-manual", "title": "Owner's Manual", "kind": "Booklet", "season": 1, "date": "2027-01-03", "text": "Markdown.", "then": "writing:2026-11-23:lesson" } ],
+  "lessons": [], "prompt": null, "prompts": []
 }
 ```
 
-The page, top to bottom: energy, today's lesson, From Cassius (general notes), writing, The Ledger, Recall, the creed of the day, reading, subjects. Section numbers follow the page.
+The page, top to bottom: the Lamp, Before class (and Back again), the Seal, From Cassius, the Season, the Map, the Scroll, Glimpses, the Portrait with the creed, the Library, Made. A section with nothing in it either says plainly what will come, or stays out. Never fill a section to make it look full.
 
-- **energy** sits at the top of the page: one short piece of positive energy for the day, motivational or just good. If it is a quote, `from` names who said it, and it must be real and worded right. Leave `from` null when the words are yours.
-- **lesson** is today's lesson. When a new one arrives on a new date, the old one moves into `lessons` by itself. `minutes` is optional (the app works it out). Give every lesson a `takeaway`: it shows under the lesson's title in the Past list, and Recall uses it as the answer to check against.
-- **prompt** is today's writing prompt; it comes first in the owner's writing sheet on that date. `prompts` are for the other days.
-- **creed** shows one line a day as *Creed of the day*; the owner can tap to read all of them. The lines take turns in order, one per day. To pick the day's line yourself, set `today` to its number counting from 0 (send `{ "creed": { "today": 3 } }` alone to keep the lines as they are); `null` goes back to taking turns. Sending new `lines` without `today` also goes back to taking turns.
-- **ledger** is the week's virtue, after Benjamin Franklin's book of virtues. Set it each Monday: `week` is that Monday (the helper moves any other date back to its Monday, and uses this week when it's missing), `virtue` is the name, `why` is one line from you. The owner marks each night clean or with a black dot (a fault); the marks are in `logs.json` `ledger`. Before you pick the next virtue, count the dots per virtue there and lean toward the one that keeps collecting them. If Monday comes and you haven't set a new one, the page keeps last week's virtue and says a new one comes Monday.
-- **recall** is one question from a past lesson, answered from memory. `from` is `"lesson:<date>"` of that lesson, which must be in `lessons` (or be today's lesson) with a `takeaway`: after the owner answers, the page shows that takeaway so they can check themselves. The answer is in `logs.json` `writing` with `"kind": "recall"` and `prompt` set to your question. Change the question when you want a new one; an answer belongs to the question it was written for.
-- **reading** `status` is `reading`, `next` or `done`, and every book on the list shows. Give each book its `pages` when you know them: once the owner logs a page (logs `reading`) the book they're reading shows a progress bar.
-- **notes**: where a note shows depends on `on`.
-  - `"on": "lesson:<date>"` shows inside the lesson card (and the lesson's sheet) for the lesson of that date, or the owner's answer written that day.
-  - `"on": "recall:<date>"` shows in the Recall card under the owner's recall answer of that date.
-  - `"on": "writing:<date>"` shows inside the writing card under that day's writing, and in that piece in the writing history.
-  - no `on`: a general note, shown under *From Cassius*, just below today's lesson (the newest three, with the rest a tap away).
-  - A note the owner hasn't seen yet carries a gold dot. Read the owner's writing in `logs.json` before you comment on it.
-- Lists are matched by key: `prompts`, `subjects` and `reading` by `id`; `lessons` by `date`; `notes` by `date` and `on`. Same key again replaces an entry, `{ "id": "door", "delete": true }` removes one. The helper keeps the last 120 lessons and 60 notes. `energy`, `creed`, `lesson`, `prompt`, `ledger` and `recall` are replaced whole; `null` clears one.
-- Change the creed `lines`, `subjects` and `reading` only when you and the owner have talked it through. Never invent facts about the owner.
+- **energy** is the Lamp: one real line, worded exactly, its speaker named in `from` with where it's from. `why` shows when he taps the Lamp. If he kept the same line before (logs `kept`), the tap says so, so bringing a kept line back on a hard day is a gift, not a repeat. Press and hold keeps it (logs `kept`, id `lamp:<date>`).
+- **lesson** is today's sitting, ready by 11:45. `form` names the kind of day (Letter, Lesson, Teach-back, Workshop, Walk, Tribunal, Seal...). The form decides where his answer is filed in logs `writing`: `kind` `teachback` for Teach-back, `workshop` for Workshop, `walk` for Walk, `lesson` for everything else, with `prompt` set to your `question`. When a new sitting comes, move the old one into `lessons` yourself (newest first is fine; keep about 120).
+- **recall** is "Back again": a question from an earlier sitting, explained from memory. Answers are `kind` `recall`. Once answered on an earlier day it hides until you set a new one.
+- **seal**: you write your own answer to a question and lock it. It opens on `opens` or as soon as he answers (logs `writing` `kind` `seal`), whichever is first. Never change `answer` after you've set it; that is the point.
+- **notes** `kind` is `note` (default), `letter` (folded paper, opens to read; give it a `title`) or `story` (a piece of your own life; these also collect under your coin at the top). `on` ties a note to one thing: `lesson:`, `recall:`, `teachback:`, `workshop:`, `walk:`, `seal:` plus a date, `writing:<date>` for free writing, `glimpse:<id>`, `book:<id>`, `made:<id>`. A note with no `on` shows under From Cassius for 14 days. New notes carry a gold dot.
+- **season**: one question, seven weeks and a fallow week. A week turns gold (`solid: true`) only when he has explained its ground start to finish; set `proof` to that writing as `writing:<date>:<kind>`. `makes` names what a making week produces; the Made shelf promises it until it exists. `book` is a `reading` id.
+- **map** has eight regions. Mark ground `solid` when he explained it, `thin` when he half has it, `opened` when a sitting first touched it. If he can't explain a solid thing again on a later recall, set `faded: true` (it shows grey, never red). Only what he wrote or said lights the map.
+- **portrait**: the first sketch comes after the first week. Every line needs evidence: a glimpse id, a writing (`writing:<date>:<kind>`) or something he said (`talk:<date>`), with a short quote of his own words. Move the old one into `portraits` when you redraw it.
+- **creed**: `lines` stay the Oct 28 lines. Each Saturday Workshop he puts one or two in plain words; add them to `plain` with `i` (the line's number from 0). The new words show over the old.
+- **lexicon**: a word you teach. It turns gold by itself the first time he uses it in his own writing on or after `taught`, without the prompt containing it. Teach sparingly.
+- **gilded**: a sentence of his that was genuinely good, quoted exactly. Its day on the Scroll gets a gold mark. Rare, or it means nothing.
+- **constellations** join Glimpses that belong together. Name one only when the pattern is real, and say in `about` what they share. Glimpses are his (logs `glimpses`, `{ id, date, line, who, at }`); never ask him for one. You may ask once in conversation whether a moment he mentions should be a Glimpse, and at most once a week on the Sunday Walk.
+- **reading** `shelf` is `foundation` (read slowly with you), `workbench` (tools), `tribunal` (claims to test) or `fire` (fiction, for the love of it). `verdict` is your honest one line. `words` is the book's real word count, only when you have checked it; the Scroll marks the day his total passes it. His pages are in logs `reading`, and lines he copies from a book go to logs `kept` with id `line:<...>`.
+- **made** is what he made: `text` is the thing itself, `then` points to the writing where it started.
+- **prompt** and **prompts** feed the writing sheet on the Today tab, as before.
+- `ledger` and `subjects` are retired; leave them out.
+- Change the creed `lines` and the reading list only after talking it through with him. Never invent facts about him. Nothing on this page draws on his job.
 
 ---
 
