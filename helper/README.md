@@ -1,7 +1,9 @@
 # Opus helper for Grok
 
 A tiny MCP server on Cloudflare Workers (free plan) so Grok can save to opus-data.
-Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json or growth.json: since 1.11.0 the Growth page is Cassius's alone (the owner's choice, 2026-11-20), and everything the helper saves is signed Grok.
+Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json. Since 1.11.0 the Growth page is Cassius's alone (the owner's choice, 2026-11-20): Grok's address can't change growth.json.
+
+Since 1.12.0 Cassius has his own address, https://opus-helper.<you>.workers.dev/<CASSIUS_KEY>/mcp, added in Claude as a second custom connector. It has every tool above, signed Cassius, plus save_growth (the version 2 Growth page). To set it up: open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/cassius, which shows a fresh key and the address it makes; add the key as Secret CASSIUS_KEY in Cloudflare; once the build finishes, add that address in Claude. The page never shows a key that is already set.
 
 worker.js is built from worker.src.js by `node build.js` (copies Plan.validate from site/js/core.js). The public copy for pasting is in the opus repo at helper/worker.js.
 

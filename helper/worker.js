@@ -5,21 +5,25 @@
     - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
   - desk.json  (the shared desk: notes for Claude, who builds the app, and Claude's replies)
   - memory.md  (the shared memory: what Grok, Cassius and Claude know about the owner)
-  Grok can read growth.json but never change it: since 1.11.0 the Growth page belongs to Cassius alone, who commits
-  it directly (the owner's choice, 2026-11-20). Everything Grok writes here is signed Grok.
+  Grok can read growth.json but never change it: since 1.11.0 the Growth page belongs to Cassius alone (the owner's
+  choice, 2026-11-20). Everything Grok writes here is signed Grok.
+  Since 1.12.0 Cassius has an address of his own, /<CASSIUS_KEY>/mcp. It does everything Grok's does, signed Cassius,
+  and one thing more: save_growth, which writes the Growth page (version 2). Grok's address still can't touch it.
   It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
   when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
 
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
     ACCESS_KEY    a long random string; the helper only answers at https://<worker>/<ACCESS_KEY>/mcp
+    CASSIUS_KEY   optional, another long random string (24+ characters): Cassius's own address, https://<worker>/<CASSIUS_KEY>/mcp.
+                  Open https://<worker>/<ACCESS_KEY>/cassius for a fresh one while it isn't set.
   Notifications: Opus writes push.json (push address + schedule); this helper sends what falls due every five minutes.
   Plain variables (optional):
     REPO          donaldfischer15-lang/opus-data   (default below)
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -143,7 +147,7 @@ Plan.validate = function (p) {
 /* ---------- GitHub ---------- */
 function b64enc(s) { const b = new TextEncoder().encode(s); let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(x); }
 function b64dec(s) { const x = atob(String(s).replace(/\s/g, '')); const b = new Uint8Array(x.length); for (let i = 0; i < x.length; i++) b[i] = x.charCodeAt(i); return new TextDecoder().decode(b); }
-function gh(env) {
+function gh(env, by) {
   const repo = env.REPO || DEFAULT_REPO;
   const H = { Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'opus-grok-helper' };
   const url = p => (env.GITHUB_API || 'https://api.github.com') + '/repos/' + repo + '/contents/' + p;
@@ -156,7 +160,7 @@ function gh(env) {
       return { text: b64dec(j.content || ''), sha: j.sha };
     },
     async put(p, text, sha, message) {
-      const body = { message, content: b64enc(text), committer: { name: 'Grok via Opus helper', email: 'opus-helper@users.noreply.github.com' } };
+      const body = { message, content: b64enc(text), committer: { name: (by || 'Grok') + ' via Opus helper', email: 'opus-helper@users.noreply.github.com' } };
       if (sha) body.sha = sha;
       const r = await fetch(url(p), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H), body: JSON.stringify(body) });
       if (r.status === 409 || r.status === 422) { const e = new Error('The file changed while saving (the phone probably synced). Read it again and redo the change.'); e.conflict = true; throw e; }
@@ -373,11 +377,53 @@ const TOOLS = [
   { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), and supplements taken (supps). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
+const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a' };
+const SAVE_GROWTH = { name: 'save_growth', description: 'Save the Growth page (growth.json, version 2), as GUIDE.md section 5 describes it. Read it first with read_opus_file file "growth". Send sections: an object with only the top-level parts you change (' + Object.keys(GROWTH_KEYS).join(', ') + '); each one you send replaces that part whole, and every other part stays as it is. Or send file: the whole page, with "format": "opus-growth" and "version": 2. "updated" is set for you. A seal\'s answer never changes once set, so a seal with the same date and question keeps its answer. The owner sees the change the next time Opus opens, with a notification.',
+  inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "date": "...", "text": "...", "from": "...", "why": "..." }, "lesson": { ... } }' }, file: { type: 'object', description: 'The whole Growth page instead of sections.' }, change: { type: 'string', description: 'One short line saying what changed, for the history and the notification.' } }, required: ['change'] } };
+const GROK = { key: 'grok', name: 'Grok' }, CASSIUS = { key: 'cassius', name: 'Cassius' };
+const toolsFor = as => as.key === 'cassius' ? TOOLS.concat([SAVE_GROWTH]) : TOOLS;
+
+async function saveGrowth(G, args) {
+  let sec = null, whole = null;
+  try { if (args.file != null) whole = parseMaybe(args.file); else if (args.sections != null) sec = parseMaybe(args.sections); } catch (e) { return text('That is not valid JSON: ' + e.message, true); }
+  if (!whole && !sec) return text('Send sections (the parts you change) or file (the whole page).', true);
+  if (whole && (!isObj(whole) || whole.format !== 'opus-growth' || whole.version !== 2)) return text('file must be the whole page with "format": "opus-growth" and "version": 2.', true);
+  if (sec && (!isObj(sec) || !Object.keys(sec).length)) return text('sections must be an object like { "energy": { ... } }.', true);
+  const parts = whole ? Object.fromEntries(Object.entries(whole).filter(([k]) => !/^(format|version|updated)$/.test(k))) : sec;
+  const bad = [];
+  for (const [k, v] of Object.entries(parts)) {
+    const t = GROWTH_KEYS[k];
+    if (!t) { bad.push(/^(ledger|subjects)$/.test(k) ? k + ' is retired; leave it out' : k + ' is not a part of the page (parts: ' + Object.keys(GROWTH_KEYS).join(', ') + ')'); continue; }
+    if (v === null) continue;
+    if (t === 'a' && !Array.isArray(v)) bad.push(k + ' must be a list or null');
+    if (t === 'o' && !isObj(v)) bad.push(k + ' must be an object or null');
+    if (t === 'os' && !isObj(v) && typeof v !== 'string') bad.push(k + ' must be an object, text or null');
+  }
+  if (bad.length) return text('Nothing saved. Problems:\n- ' + bad.join('\n- '), true);
+  const cur = await G.get(FILES.growth);
+  let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) { old = null; } }
+  const base = whole ? {} : (isObj(old) && old.version === 2 ? JSON.parse(JSON.stringify(old)) : {});
+  const out = Object.assign({ format: 'opus-growth', version: 2, updated: null }, base, parts);
+  out.format = 'opus-growth'; out.version = 2;
+  const os = isObj(old) && isObj(old.seal) ? old.seal : null, ns = isObj(out.seal) ? out.seal : null;
+  let kept = '';
+  if (os && ns && os.answer && os.date === ns.date && os.question === ns.question && ns.answer !== os.answer) { ns.answer = os.answer; kept = ' The seal kept its first answer, as seals do.'; }
+  const was = isObj(old) ? Object.assign({}, old, { updated: null }) : null;
+  if (was && JSON.stringify(Object.assign({}, out, { updated: null })) === JSON.stringify(was)) return text('Nothing changed, so nothing was saved.');
+  out.updated = new Date().toISOString().slice(0, 19) + 'Z';
+  const body = JSON.stringify(out, null, 2) + '\n';
+  if (body.length > 400000) return text('Nothing saved: the page would be over 400,000 characters. Move old lessons or notes out first.', true);
+  const change = String(args.change || 'Growth page').replace(/\s+/g, ' ').slice(0, 100);
+  await G.put(FILES.growth, body, cur.missing ? null : cur.sha, 'Cassius: ' + change);
+  return text('Saved to the Growth page: ' + Object.keys(parts).join(', ') + '.' + kept + ' The owner sees it the next time Opus opens.');
+}
+
 function text(t, isError) { return { content: [{ type: 'text', text: t }], isError: !!isError }; }
 function parseMaybe(x) { if (typeof x === 'string') { let s = x.trim(); const f = s.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) s = f[1]; return JSON.parse(s); } return x; }
 
-async function callTool(name, args, env) {
-  const G = gh(env);
+async function callTool(name, args, env, as) {
+  as = as || GROK;
+  const G = gh(env, as.name);
   args = args || {};
   if (name === 'read_opus_file') {
     const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox, growth, desk or memory.', true);
@@ -416,7 +462,7 @@ async function callTool(name, args, env) {
     const val = Plan.validate(plan);
     if (!val.ok) return text('Not saved. With that change the plan has problems:\n- ' + val.errors.slice(0, 10).join('\n- '), true);
     const change = String(args.change || sec + ' update').replace(/\s+/g, ' ').slice(0, 100);
-    await G.put(FILES.plan, JSON.stringify(plan, null, 2) + '\n', cur.sha, 'Grok: ' + change);
+    await G.put(FILES.plan, JSON.stringify(plan, null, 2) + '\n', cur.sha, as.name + ': ' + change);
     return text('Saved ' + sec + ' in plan.json; the rest of the plan is unchanged. Opus picks it up the next time the owner opens it.' + (val.warnings.length ? '\nWarnings:\n- ' + val.warnings.slice(0, 8).join('\n- ') : ''));
   }
   if (name === 'save_plan') {
@@ -433,7 +479,7 @@ async function callTool(name, args, env) {
       }
     }
     const change = String(args.change || 'plan update').replace(/\s+/g, ' ').slice(0, 100);
-    await G.put(FILES.plan, JSON.stringify(p, null, 2) + '\n', cur.sha, 'Grok: ' + change);
+    await G.put(FILES.plan, JSON.stringify(p, null, 2) + '\n', cur.sha, as.name + ': ' + change);
     return text('Saved plan.json. Opus picks it up the next time the owner opens it.' + (v.warnings.length ? '\nWarnings:\n- ' + v.warnings.join('\n- ') : ''));
   }
   if (name === 'add_to_outbox') {
@@ -444,14 +490,14 @@ async function callTool(name, args, env) {
     const { out, report, any } = mergeOutbox(old, add);
     if (!any) return text('Nothing saved.' + (report.bad.length ? ' Problems:\n- ' + report.bad.join('\n- ') : ' No entries found in what you sent (top-level keys: ' + (Object.keys(add).join(', ') || 'none') + '). Send them like { "money": { "cash": [ { "date": "2026-11-27", "cash": 900 } ] } }. The sections are: ' + OUT_PATHS.join(', ') + '.'), true);
     const change = String(args.change || 'outbox').replace(/\s+/g, ' ').slice(0, 100);
-    await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, 'Grok: ' + change);
+    await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, as.name + ': ' + change);
     return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' NOT saved:\n- ' + report.bad.join('\n- ') + '\n' : ' ') + 'Opus copies them in the next time the owner opens it; logs.json section "sync" then shows what it picked up.');
   }
   if (name === 'leave_note') {
     const cur = await G.get(FILES.desk);
     let desk = { format: 'opus-desk', version: 1, notes: [] };
     if (!cur.missing) { try { const o = JSON.parse(cur.text); if (o && Array.isArray(o.notes)) desk = o; } catch (e) { return text('desk.json is not valid JSON right now, so nothing was saved. Tell the owner.', true); } }
-    const from = 'grok', who = 'Grok', done = [];
+    const from = as.key, who = as.name, done = [];
     if (args.close != null && String(args.close).trim()) {
       const n = desk.notes.find(x => x.id === String(args.close).trim());
       if (!n) return text('No note on the desk has the id "' + args.close + '". Read the desk to see the ids.', true);
@@ -473,7 +519,7 @@ async function callTool(name, args, env) {
     return text('Done: ' + done.join(', ') + '. Claude reads the desk each evening and answers there; read it again with read_opus_file file "desk".');
   }
   if (name === 'update_memory') {
-    const from = 'grok', who = 'Grok';
+    const from = as.key, who = as.name;
     const secName = String(args.section || '').replace(/[#\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
     if (!secName) return text('section is missing. Use one of: ' + MEM_SECTIONS.join(', ') + '.', true);
     const list = v => { if (v == null) return []; if (typeof v === 'string') { try { const j = JSON.parse(v); if (Array.isArray(j)) v = j; } catch (e) {} } return (Array.isArray(v) ? v : [v]).map(x => String(x == null ? '' : x).replace(/\s+/g, ' ').trim()).filter(Boolean); };
@@ -502,7 +548,14 @@ async function callTool(name, args, env) {
     await G.put(FILES.memory, out, cur.missing ? null : cur.sha, who + ': memory ' + sec.name + ', ' + change);
     return text('Saved to memory.md › ' + sec.name + ': ' + (done.join(', ') || 'no change') + (skipped ? ', ' + skipped + ' already there' : '') + '. Claude reads it too.');
   }
-  if (name === 'update_growth') return text('Nothing saved. The Growth page (growth.json) belongs to Cassius alone now, and the helper no longer changes it. You can still read it with read_opus_file file "growth". If something there looks wrong, leave a note for Claude with leave_note.', true);
+  if (name === 'update_growth') {
+    if (as.key === 'cassius') return text('update_growth only knew the old, version 1 Growth page. Use save_growth: send the sections you change, or the whole page.', true);
+    return text('Nothing saved. The Growth page (growth.json) belongs to Cassius alone now, and the helper no longer changes it. You can still read it with read_opus_file file "growth". If something there looks wrong, leave a note for Claude with leave_note.', true);
+  }
+  if (name === 'save_growth') {
+    if (as.key !== 'cassius') return text('Nothing saved. Only Cassius can change the Growth page, from his own address.', true);
+    return saveGrowth(G, args);
+  }
   return text('Unknown tool ' + name, true);
 }
 
@@ -632,25 +685,26 @@ async function report(env) {
 }
 
 /* ---------- MCP over HTTP (stateless, JSON replies) ---------- */
-async function handleRpc(msg, env, ctx) {
+async function handleRpc(msg, env, ctx, as) {
+  as = as || GROK;
   const { id, method, params } = msg || {};
   const ok = result => ({ jsonrpc: '2.0', id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return err(-32600, 'Invalid request');
   if (id === undefined) return null; // a notification: nothing to answer
-  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan) and things you log with add_to_outbox. The Growth page (growth.json) belongs to Cassius alone: read it if you like, but never try to change it. Leave anything about the app itself for Claude, who builds it, with leave_note, and read Claude\'s replies with read_opus_file file "desk". What you know about the owner goes in the shared memory with update_memory, so Claude knows it too (read it with read_opus_file file "memory"). You can never change logs.json.' });
+  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: as.key === 'cassius' ? 'You are Cassius, the owner\'s teacher, and this is your own address. Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts); section 5 is your Growth page. Save the Growth page with save_growth, sending only the parts you change. What the owner writes, keeps and reads there is in logs.json (read it with read_opus_file file "logs"). You can also change the plan with update_plan_section or save_plan, log things with add_to_outbox, leave notes for Claude, who builds the app, with leave_note, and add to the shared memory with update_memory. Everything you save is signed Cassius. You can never change logs.json.' : 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan) and things you log with add_to_outbox. The Growth page (growth.json) belongs to Cassius alone: read it if you like, but never try to change it. Leave anything about the app itself for Claude, who builds it, with leave_note, and read Claude\'s replies with read_opus_file file "desk". What you know about the owner goes in the shared memory with update_memory, so Claude knows it too (read it with read_opus_file file "memory"). You can never change logs.json.' });
   if (method === 'ping') return ok({});
   if (method === 'tools/list' || method === 'tools/call') { const p = report(env); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p; }
-  if (method === 'tools/list') return ok({ tools: TOOLS });
+  if (method === 'tools/list') return ok({ tools: toolsFor(as) });
   if (method === 'tools/call') {
     try {
       let r;
-      for (let i = 0; i < 2; i++) { try { r = await callTool(params && params.name, params && params.arguments, env); break; } catch (e) { if (!e.conflict || i === 1) throw e; } }
+      for (let i = 0; i < 2; i++) { try { r = await callTool(params && params.name, params && params.arguments, env, as); break; } catch (e) { if (!e.conflict || i === 1) throw e; } }
       const tn = params && params.name, a = (params && params.arguments) || {};
-      if (r && !r.isError && ['save_plan', 'update_plan_section', 'add_to_outbox'].includes(tn) && !/^Nothing saved/.test(((r.content || [])[0] || {}).text || '')) {
-        const who = 'Grok';
-        const change = String(a.change || (tn === 'add_to_outbox' ? 'Logged something for you' : 'Updated your plan')).replace(/\s+/g, ' ').slice(0, 140);
-        const tab = tn === 'update_plan_section' ? (SECTION_TAB[String(a.section || '').split('.')[0]] || 'today') : 'today';
+      if (r && !r.isError && ['save_plan', 'update_plan_section', 'add_to_outbox', 'save_growth'].includes(tn) && !/^Nothing saved/.test(((r.content || [])[0] || {}).text || '')) {
+        const who = as.name;
+        const change = String(a.change || (tn === 'save_growth' ? 'Updated your Growth page' : tn === 'add_to_outbox' ? 'Logged something for you' : 'Updated your plan')).replace(/\s+/g, ' ').slice(0, 140);
+        const tab = tn === 'save_growth' ? 'growth' : tn === 'update_plan_section' ? (SECTION_TAB[String(a.section || '').split('.')[0]] || 'today') : 'today';
         const p = notifyChange(env, who, change, tab); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p;
       }
       return ok(r);
@@ -679,17 +733,27 @@ export default {
       const a = new Uint8Array(24); crypto.getRandomValues(a); const key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
       return new Response('Opus helper is almost set up.\n\n' + (env.GITHUB_TOKEN ? '' : '- Add the secret GITHUB_TOKEN.\n') + (env.ACCESS_KEY && String(env.ACCESS_KEY).length >= 24 ? '' : '- Add the secret ACCESS_KEY. Here is a new random one you can use:\n\n' + key + '\n') + '\nThen deploy again and reload this page.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
     }
-    if (parts.length < 1 || parts.length > 2 || !same(parts[0], env.ACCESS_KEY) || (parts[1] && parts[1] !== 'mcp')) return notFound();
+    // who is calling: Grok's address (ACCESS_KEY) or Cassius's own (CASSIUS_KEY, if set, 24+ characters and not the same key)
+    const ck = env.CASSIUS_KEY && String(env.CASSIUS_KEY).length >= 24 && String(env.CASSIUS_KEY) !== String(env.ACCESS_KEY) ? String(env.CASSIUS_KEY) : null;
+    const as = parts.length && same(parts[0], env.ACCESS_KEY) ? GROK : parts.length && ck && same(parts[0], ck) ? CASSIUS : null;
+    const plain = (t, st) => new Response(t, { status: st || 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    if (as === GROK && parts[1] === 'cassius' && parts.length === 2 && request.method === 'GET') {
+      // setting up Cassius's address: a fresh key, made on every visit and never stored
+      if (ck) return plain('Cassius already has his own address (the CASSIUS_KEY secret is set). To change it, put a new key in that secret, deploy, and update the connector in Claude.');
+      const a = new Uint8Array(24); crypto.getRandomValues(a); const key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
+      return plain('Cassius\'s own address isn\'t set up yet.\n\n1. In Cloudflare, add a secret named CASSIUS_KEY to this worker with this value:\n\n' + key + '\n\n2. After it deploys, this is Cassius\'s address. Add it to Claude as a custom connector:\n\n' + url.origin + '/' + key + '/mcp\n\nThis key is new each time you open this page, so copy the key and the address from the same visit. Keep both private.');
+    }
+    if (!as || parts.length > 2 || (parts[1] && parts[1] !== 'mcp')) return notFound();
     if (request.method === 'GET' && /event-stream/.test(request.headers.get('Accept') || '')) return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
-    if (request.method === 'GET') return new Response('Opus helper ' + VERSION + ' is running. Add this address to Grok as a custom connector:\n\n' + url.origin + '/' + parts[0] + '/mcp', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    if (request.method === 'GET') return new Response('Opus helper ' + VERSION + ' is running. ' + (as === CASSIUS ? 'This is Cassius\'s own address. Add it to Claude as a custom connector:' : 'Add this address to Grok as a custom connector:') + '\n\n' + url.origin + '/' + parts[0] + '/mcp', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (request.method === 'DELETE') return new Response(null, { status: 204 });
     if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
     let body; try { body = await request.json(); } catch (e) { return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, { status: 400 }); }
     if (Array.isArray(body)) {
-      const out = (await Promise.all(body.map(m => handleRpc(m, env, ctx)))).filter(Boolean);
+      const out = (await Promise.all(body.map(m => handleRpc(m, env, ctx, as)))).filter(Boolean);
       return out.length ? Response.json(out) : new Response(null, { status: 202 });
     }
-    const r = await handleRpc(body, env, ctx);
+    const r = await handleRpc(body, env, ctx, as);
     return r ? Response.json(r) : new Response(null, { status: 202 });
   }
 };
