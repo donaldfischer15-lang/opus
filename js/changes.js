@@ -242,6 +242,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.14.3': [['money', 'The car loan and student loan now count as bills only, so your total debt and debt-free date cover the card and Mom.']],
     '1.14.0': [['growth', 'Growth is rebuilt around Cassius: a Lamp each morning, Before class at lunch, a Season with its road, the Map, your Scroll of words, Glimpses, the Portrait beside your creed, the Library and a shelf for what you make. Tap his coin at the top to meet him.']],
     '1.13.1': [['today', 'Settings now has a Desk: Grok and Cassius leave notes there about the app, and Claude answers them each evening.']],
     '1.13.2': [['today', 'Settings now has Shared memory: what Grok, Cassius and Claude know about you, so each knows what the others learned.']],

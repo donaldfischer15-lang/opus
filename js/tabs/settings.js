@@ -35,7 +35,7 @@
     (Store.data.money.weeks || []).filter(w => w.weekEnding >= since).forEach(w => L.push(w.weekEnding + ': pay ' + (w.paycheck ?? '?') + ', spent ' + U.sum((w.spent || []).map(s => s.amount)).toFixed(2) + ' (' + (w.spent || []).map(s => s.cat + ' ' + s.amount).join(', ') + ')'));
     const c = Opus.money.calc();
     L.push('Free cash estimate per week: ' + (c.free ? U.money(c.free.lo) + (Math.round(c.free.lo) !== Math.round(c.free.hi) ? ' to ' + U.money(c.free.hi) : '') : 'not enough data'));
-    L.push('Debts: ' + (Plan.p.money.debts || []).map(d => d.name + ' ' + (d.balance == null ? 'balance unknown' : U.money(d.balance))).join('; '));
+    L.push('Debts: ' + (Plan.p.money.debts || []).map(d => d.name + ' ' + (d.balance == null ? 'balance unknown' : U.money(d.balance)) + (d.counted === false ? ' (paid as a bill, not counted)' : '')).join('; '));
     L.push('', 'REVIEWS');
     (Store.data.reviews || []).filter(r => r.weekOf >= since).forEach(r => L.push(r.weekOf + ' worked: ' + r.worked + ' | slipped: ' + r.slipped + ' | change: ' + r.change));
     L.push('', 'WRITING: ' + (Store.data.writing || []).filter(w => w.date >= since).length + ' entries');

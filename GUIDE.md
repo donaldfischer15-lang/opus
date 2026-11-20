@@ -208,6 +208,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 }
 ```
 - `debts` are in **payoff order**. The first with a balance above zero is the focus.
+- `counted: false` on a debt keeps it listed but leaves it out of every debt figure: total debt, the focus, payoff order, the debt-free date and debt charts. Its payment is a regular bill. **It is the owner's rule:** never set it back to counted, keep its balance current, and never count it in any debt total, payoff plan or debt-free date you work out in chat either. Why each one is set that way is in `money.notes`.
 - `every` is `week`, `month` or `year`.
 - `cushion`: cash to keep before any extra debt payment (the owner's rule). Money shows when extra can go to debt.
 - **Yours this week** (Money, section III) = today's Free cash − food until payday (the top of `food.budgetPerWeek`, per day) − this week's `plannedDebtPerWeek` (less any `debtPayments` already in the current money week). It is what the owner can spend on anything, or put toward debt as extra.

@@ -4,6 +4,9 @@
   'use strict';
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, h = ui.h;
   const M = () => Plan.p.money || {};
+  // a debt with counted:false (the car loan and student loan, the owner's rule) stays listed but is paid as a bill: it is left out of every debt figure
+  const counted = d => d && d.counted !== false;
+  const CD = () => (M().debts || []).filter(counted);
 
   /* ---------- calculations ---------- */
   const perWeek = b => b.amount == null ? null : b.every === 'week' ? b.amount : b.every === 'year' ? b.amount / 52 : b.amount * 12 / 52;
@@ -24,7 +27,7 @@
     const billsW = U.sum(bills.filter(x => x != null)), billsMissing = bills.some(x => x == null);
     let debtW = m.plannedDebtPerWeek;
     let debtSrc = 'plan';
-    if (debtW == null) { const mins = (m.debts || []).map(d => d.minMonthly).filter(x => x != null); if (mins.length) { debtW = U.sum(mins) * 12 / 52; debtSrc = 'minimums'; } }
+    if (debtW == null) { const mins = CD().map(d => d.minMonthly).filter(x => x != null); if (mins.length) { debtW = U.sum(mins) * 12 / 52; debtSrc = 'minimums'; } }
     const ws = weeks().slice(-4);
     let spendLo, spendHi, spendSrc;
     if (ws.length) { spendLo = spendHi = U.avg(ws.map(weekSpent)); spendSrc = 'Average of your last ' + ws.length + ' week' + (ws.length > 1 ? 's' : ''); }
@@ -37,8 +40,8 @@
     return { take, lastPay, billsW, billsMissing, debtW, debtSrc, spendLo, spendHi, spendSrc, free, cur, left, we };
   }
   function debtFree() {
-    const m = M(), ds = (m.debts || []);
-    if (!ds.length) return { msg: 'No debts listed.' };
+    const ds = CD();
+    if (!ds.length) return { msg: 'No debts counted.' };
     const missing = ds.filter(d => d.balance == null).map(d => d.name);
     if (missing.length) return { msg: 'Add the balance for ' + missing.join(', ') + ' to see your debt-free date.' };
     const total = U.sum(ds.map(d => d.balance)); if (total <= 0) return { msg: 'Debt-free. Every balance is zero.', done: true };
@@ -61,7 +64,8 @@
     return { date: dt, months, msg: 'Debt-free around ' + U.MONTHS[dt.getMonth()] + ' ' + dt.getFullYear() + ' at ' + U.money(budget) + ' a week' + (noApr ? ', not counting interest on debts with no rate set' : '') + '.' };
   }
   function debtHistory() {
-    return (Store.data.money.balances || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(s => ({ date: s.date, v: U.sum(Object.values(s.debts || {})) }));
+    const names = CD().map(d => d.name);
+    return (Store.data.money.balances || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(s => ({ date: s.date, v: U.sum(names.map(n => (s.debts || {})[n]).filter(x => typeof x === 'number')) }));
   }
   /* ---------- cash on hand (money.cash in the logs): Grok writes it from the accounts, or you enter it ---------- */
   const cashList = () => (Store.data.money.cash || []).slice().sort((a, b) => (a.date + (a.at || '')).localeCompare(b.date + (b.at || '')));
@@ -281,7 +285,7 @@
     card.appendChild(rows);
     // your rule: extra debt payments wait for the cushion
     if (m.cushion != null && t.cash != null && !short) {
-      const first = (m.debts || []).find(d => d.balance == null || d.balance > 0);
+      const first = CD().find(d => d.balance == null || d.balance > 0);
       const gap = m.cushion - t.cash;
       card.appendChild(h('<div class="g-take" style="margin-top:8px"><div class="tag">Extra on debt</div><div>' + (gap > 0
         ? 'Your rule keeps a ' + U.money(m.cushion) + ' cushion first. Cash is ' + U.money(gap) + ' short of it, so extra debt payments wait for now.'
@@ -301,11 +305,14 @@
     const card = h('<div class="card"></div>');
     const firsts = {}; (Store.data.money.balances || []).slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(s => { for (const [k, v] of Object.entries(s.debts || {})) if (firsts[k] == null) firsts[k] = v; });
     if (!ds.length) card.appendChild(h('<p class="empty">No debts in your plan.</p>'));
-    ds.forEach((d, i) => {
+    const cds = ds.filter(counted), billed = ds.filter(d => !counted(d));
+    if (ds.length && !cds.length) card.appendChild(h('<p class="empty">No debts counted. Debts paid as bills are listed below.</p>'));
+    cds.forEach((d, n) => {
+      const i = ds.indexOf(d);
       const first = firsts[d.name];
       const paid = first && d.balance != null && first > 0 ? U.clamp(1 - d.balance / first, 0, 1) : null;
-      const isFocus = ds.findIndex(x => x.balance == null || x.balance > 0) === i;
-      const r = h('<div class="row tap" style="flex-wrap:wrap;row-gap:8px"><span class="tag" style="min-width:26px">' + U.roman(i + 1) + '</span><span class="tx"><b>' + U.esc(d.name) + (isFocus ? ' <span class="tag" style="margin-left:6px">Focus</span>' : '') + '</b><small>' +
+      const isFocus = cds.findIndex(x => x.balance == null || x.balance > 0) === n;
+      const r = h('<div class="row tap" style="flex-wrap:wrap;row-gap:8px"><span class="tag" style="min-width:26px">' + U.roman(n + 1) + '</span><span class="tx"><b>' + U.esc(d.name) + (isFocus ? ' <span class="tag" style="margin-left:6px">Focus</span>' : '') + '</b><small>' +
         [d.apr != null ? d.apr + '% APR' : null, d.minMonthly != null ? U.money(d.minMonthly) + '/mo min' : null].filter(Boolean).join(' · ') + '</small></span>' +
         '<span class="num" style="font-weight:600;' + (d.balance == null ? 'color:var(--gold);font-weight:500;font-size:13px' : '') + '">' + (d.balance == null ? 'Add balance' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span>' +
         (paid != null ? '<div class="bar" style="flex-basis:100%;margin-left:40px"><i style="width:' + (paid * 100).toFixed(1) + '%"></i></div>' : '') + '</div>');
@@ -314,12 +321,22 @@
     });
     const df = debtFree();
     card.appendChild(h('<div class="row"><span class="tx"><small style="font-size:13.5px;color:' + (df.date ? 'var(--gold-2)' : 'var(--dim)') + '">' + U.esc(df.msg) + '</small></span></div>'));
+    if (billed.length) {
+      card.appendChild(h('<div class="row" style="min-height:0;padding:12px 0 4px"><span class="tx"><small>Paid as bills, not counted in your debt</small></span></div>'));
+      billed.forEach(d => {
+        const r = h('<div class="row tap" style="opacity:.72"><span class="tag" style="min-width:26px">·</span><span class="tx"><b>' + U.esc(d.name) + '</b><small>' +
+          [d.minMonthly != null ? U.money(d.minMonthly) + '/mo as a bill' : 'paid as a bill', d.apr != null ? d.apr + '% APR' : null].filter(Boolean).join(' · ') + '</small></span><span class="num" style="color:var(--dim)">' + (d.balance == null ? '—' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span></div>');
+        r.onclick = () => editDebt(ds.indexOf(d), onChange);
+        card.appendChild(r);
+      });
+    }
     return card;
   }
   function numField(id, label, val) { return '<div class="field"><label for="' + id + '">' + label + '</label><input class="input" id="' + id + '" inputmode="decimal" value="' + (val == null ? '' : val) + '" placeholder="blank"></div>'; }
   function editDebt(i, onChange) {
     const d = M().debts[i];
-    ui.sheet({ title: d.name, kicker: 'Payoff order ' + U.roman(i + 1), render(api) {
+    const ci = CD().indexOf(d);
+    ui.sheet({ title: d.name, kicker: counted(d) ? 'Payoff order ' + U.roman(ci + 1) : 'Paid as a bill, not counted in your debt', render(api) {
       api.body.appendChild(h('<div style="display:flex;flex-direction:column;gap:12px">' + numField('db-bal', 'Balance now', d.balance) + '<div class="grid2">' + numField('db-apr', 'APR %', d.apr) + numField('db-min', 'Minimum a month', d.minMonthly) + '</div></div>'));
       api.body.appendChild(h('<p class="small">Leave a field blank if you don’t know it yet.</p>'));
       const sv = h('<button class="btn block" type="button">Save</button>');
@@ -496,7 +513,7 @@
     v.appendChild(beforePayday());
 
     const ds = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">Debts</span><span class="c">payoff order</span></div></div>');
-    const total = U.sum((m.debts || []).map(d => d.balance).filter(x => x != null)), dh = debtHistory();
+    const total = U.sum(CD().map(d => d.balance).filter(x => x != null)), dh = debtHistory();
     if (total > 0) {
       const top = h('<div class="card pad debt-top"><div><div class="k">Total debt known</div><div class="v num">' + U.money(total) + '</div>' +
         (dh.length > 1 && dh[0].v > total ? '<div class="small" style="color:var(--good)">' + U.money(dh[0].v - total) + ' paid down since ' + U.fmtDateShort(dh[0].date) + '</div>' : '<div class="small">Each balance update is saved</div>') + '</div>' +
