@@ -3,7 +3,7 @@
 A tiny MCP server on Cloudflare Workers (free plan) so Grok can save to opus-data.
 Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_plan_section, leave_note, update_memory, save_plan (checked with Opus's own rules, refuses missing sections), add_to_outbox (merges into grok.json by key). It cannot write logs.json. Since 1.11.0 the Growth page is Cassius's alone (the owner's choice, 2026-11-20): Grok's address can't change growth.json.
 
-Since 1.12.0 Cassius has his own address, https://opus-helper.<you>.workers.dev/<CASSIUS_KEY>/mcp, added in Claude as a second custom connector. It has every tool above, signed Cassius, plus save_growth (the version 2 Growth page). To set it up: open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/cassius, which shows a fresh key and the address it makes; add the key as Secret CASSIUS_KEY in Cloudflare; once the build finishes, add that address in Claude. The page never shows a key that is already set.
+Since 1.12.0 Cassius has his own address, https://opus-helper.<you>.workers.dev/<CASSIUS_KEY>/mcp, added in Claude as a second custom connector. It has every tool above, signed Cassius, plus save_growth (the version 2 Growth page). Since 1.14.0 there is nothing to put in Cloudflare: open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/cassius once and it makes Cassius's key, keeps it (sealed in opus-data/keys.json) and shows the finished address, the same one on every visit; add that address in Claude. Make a new address on that page if the old one ever leaks. A CASSIUS_KEY secret in Cloudflare, if set, still wins.
 
 worker.js is built from worker.src.js by `node build.js` (copies Plan.validate from site/js/core.js). The public copy for pasting is in the opus repo at helper/worker.js.
 
@@ -35,8 +35,8 @@ every 3 hours after, and on WHOOP's webhook if set). Setup:
    Name: Opus. Scopes: read:recovery, read:sleep, read:cycles, read:workout, read:body_measurement (and offline if listed).
    Redirect URL: https://opus-helper.<you>.workers.dev/whoop/callback . Privacy policy: https://<owner>.github.io/opus/privacy.html .
    Webhook URL (optional, model v2): https://opus-helper.<you>.workers.dev/whoop/webhook .
-2. Cloudflare > Workers & Pages > opus-helper > Settings > Variables and Secrets: add Secret WHOOP_CLIENT_ID and Secret WHOOP_CLIENT_SECRET
-   (copy each from the WHOOP app page). Deploy.
-3. Open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/whoop and tap Connect WHOOP.
+2. Open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/whoop, paste the app's Client ID and Client Secret there and Save
+   (since 1.14.0; they're kept sealed in opus-data/keys.json, nothing goes into Cloudflare). Then tap Connect WHOOP.
+   WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET secrets in Cloudflare, if set, still win.
 The sign-in is kept in opus-data/whoop-auth.json, sealed (AES-GCM) with a key made from WHOOP_CLIENT_SECRET.
 Disconnect: delete whoop-auth.json, or remove the app in WHOOP. Sandbox apps allow up to 10 WHOOP members, plenty for one.

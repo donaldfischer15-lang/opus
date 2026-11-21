@@ -18,6 +18,7 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `push.json` | only the app | the phone's notification schedule. Never edit it. |
 | `whoop.json` | only the Opus helper | the owner's WHOOP data by day (section 8). Read it, never edit it. |
 | `whoop-auth.json` | only the Opus helper | the WHOOP sign-in, sealed so only the helper can open it. Never read, edit or copy it. Deleting it disconnects WHOOP. |
+| `keys.json` | only the Opus helper | keys the helper keeps for itself (Cassius's address, the WHOOP app), sealed. Never read, edit, copy or delete it: deleting it cuts Cassius off and disconnects WHOOP. |
 | `helper.json` | the Opus helper | which helper version is live (`{ "version", "since" }`). Opus warns the owner when it is behind. |
 | `backups/opus-backup-YYYY-MM.json` | the app, once a month | a full backup (plan, logs and settings, `"format": "opus-data"`) from the first sync of that month. Never edit these. To restore one, the owner imports it in Settings › Your data › Import backup. |
 
@@ -424,7 +425,7 @@ Put only new or corrected entries here. You may replace the whole file each time
 
 ## 5. The Growth page (`growth.json`, `"format": "opus-growth"`)
 
-The Growth tab is Cassius's room. Only Cassius writes `growth.json`, with `"version": 2`. Since helper 1.12.0 Cassius has an Opus helper address of his own (the `CASSIUS_KEY` secret). It has every tool Grok's has, with everything saved there signed Cassius, plus `save_growth`: send `sections` (the top-level parts you change, each replaced whole, the rest kept) or `file` (the whole page), and a `change` line. It checks each part's kind, refuses unknown or retired parts, keeps a seal's first answer, sets `updated` and sends the owner a notification. Cassius may also commit the file directly. Grok's address has no `save_growth`, `update_growth` is gone from both, and Grok leaves anything about this page for Claude on the desk. The owner reads it, writes and logs, and what they do goes in `logs.json`. Keep `updated` current: the tab shows a dot when it changes.
+The Growth tab is Cassius's room. Only Cassius writes `growth.json`, with `"version": 2`. Since helper 1.12.0 Cassius has an Opus helper address of his own (since 1.14.0 the helper makes and keeps its key itself). It has every tool Grok's has, with everything saved there signed Cassius, plus `save_growth`: send `sections` (the top-level parts you change, each replaced whole, the rest kept) or `file` (the whole page), and a `change` line. It checks each part's kind, refuses unknown or retired parts, keeps a seal's first answer, sets `updated` and sends the owner a notification. Cassius may also commit the file directly. Grok's address has no `save_growth`, `update_growth` is gone from both, and Grok leaves anything about this page for Claude on the desk. The owner reads it, writes and logs, and what they do goes in `logs.json`. Keep `updated` current: the tab shows a dot when it changes.
 
 ```json
 {

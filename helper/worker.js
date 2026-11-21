@@ -15,9 +15,13 @@
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
     ACCESS_KEY    a long random string; the helper only answers at https://<worker>/<ACCESS_KEY>/mcp
-    CASSIUS_KEY   optional, another long random string (24+ characters): Cassius's own address, https://<worker>/<CASSIUS_KEY>/mcp.
-                  Open https://<worker>/<ACCESS_KEY>/cassius for a fresh one while it isn't set.
-  WHOOP (1.13.0): with WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET set, the helper pulls the owner's WHOOP data into whoop.json
+  Since 1.14.0 nothing else goes into Cloudflare. The helper keeps its other keys itself, sealed in opus-data as keys.json
+  (AES-GCM, with a key made from ACCESS_KEY), so a change never needs a new secret:
+    Cassius's key  made the first time https://<worker>/<ACCESS_KEY>/cassius is opened; that page then always shows
+                   the same finished address, https://<worker>/<cassius key>/mcp.
+    WHOOP app      client id and secret, typed once into the page at https://<worker>/<ACCESS_KEY>/whoop.
+  A CASSIUS_KEY, WHOOP_CLIENT_ID or WHOOP_CLIENT_SECRET secret set in Cloudflare still wins over the kept one.
+  WHOOP (1.13.0): once its app is known, the helper pulls the owner's WHOOP data into whoop.json
   (see the WHOOP section below). Grok and Cassius can read it; nobody writes it but the helper.
   Notifications: Opus writes push.json (push address + schedule); this helper sends what falls due every five minutes.
   Plain variables (optional):
@@ -25,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -864,32 +868,109 @@ async function whoopWebhook(request, env, ctx) {
   if (ev && /^(recovery|sleep|workout)\./.test(String(ev.type || ''))) ctx.waitUntil(whoopPull(env, ev.type).catch(() => 0));
   return new Response(null, { status: 204 });
 }
-const page = (title, body) => new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;background:#1b1714;color:#efe6da;margin:0;padding:28px max(20px,env(safe-area-inset-left))}main{max-width:34em;margin:auto}h1{font-weight:500;letter-spacing:.04em}a.b{display:inline-block;margin-top:14px;padding:12px 20px;border:1px solid #c99a62;border-radius:12px;color:#f2d3a0;text-decoration:none}code{background:#2a241f;padding:2px 6px;border-radius:6px;word-break:break-all}.m{color:#b7a99a}</style><main><h1>' + title + '</h1>' + body + '</main>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+const page = (title, body) => new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;background:#1b1714;color:#efe6da;margin:0;padding:28px max(20px,env(safe-area-inset-left))}main{max-width:34em;margin:auto}h1{font-weight:500;letter-spacing:.04em}a.b{display:inline-block;margin-top:14px;padding:12px 20px;border:1px solid #c99a62;border-radius:12px;color:#f2d3a0;text-decoration:none}code{background:#2a241f;padding:2px 6px;border-radius:6px;word-break:break-all}.m{color:#b7a99a}.cp{display:flex;gap:10px;align-items:center;background:#2a241f;border-radius:12px;padding:12px}.cp code{flex:1;min-width:0;padding:0}.cp button,button.b{font:inherit;background:none;border:1px solid #c99a62;border-radius:10px;color:#f2d3a0;padding:8px 14px}button.b{margin-top:14px;padding:12px 20px;border-radius:12px}.f label{display:block;margin-top:12px;color:#b7a99a}.f input{display:block;width:100%;box-sizing:border-box;margin-top:4px;font:inherit;background:#2a241f;color:#efe6da;border:1px solid #4a3f35;border-radius:10px;padding:10px}</style><main><h1>' + title + '</h1>' + body + '</main>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
 const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-async function whoopStart(url, env) {
+async function whoopStart(url, env, request) {
   const cb = url.origin + '/whoop/callback';
-  if (!whoopReady(env)) return page('Connect WHOOP', '<p>Two secrets are missing in Cloudflare (opus-helper › Settings › Variables and Secrets):</p><p><code>WHOOP_CLIENT_ID</code> and <code>WHOOP_CLIENT_SECRET</code>, from your app at developer.whoop.com.</p><p>That app\'s Redirect URL must be exactly:</p><p><code>' + escH(cb) + '</code></p><p class="m">After you add them and the helper redeploys, open this page again.</p>');
+  const fromCf = !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET && !env.WHOOP_KEPT);
+  if (request && request.method === 'POST') {
+    const f = await request.formData();
+    const id = String(f.get('id') || '').trim(), sec = String(f.get('secret') || '').trim();
+    if (fromCf) return page('Connect WHOOP', '<p>The WHOOP app is set in Cloudflare, so it can\'t be changed here.</p>');
+    if (!/^[\w.-]{8,200}$/.test(id) || !/^[\w.~+\/=-]{8,400}$/.test(sec)) return page('Connect WHOOP', '<p>That client id or secret doesn\'t look right. Copy both again from your app at developer.whoop.com.</p><p><a class="b" href="' + escH(url.pathname) + '">Back</a></p>');
+    await saveKept(env, { whoopId: id, whoopSecret: sec }, 'WHOOP app details');
+    return new Response(null, { status: 303, headers: { Location: url.pathname, 'Cache-Control': 'no-store' } });
+  }
+  const form = (lead) => lead + '<p>Its Redirect URL must be exactly:</p>' + copyBox(cb) + '<form method="post" class="f" autocomplete="off"><label>Client ID<input name="id" required spellcheck="false" autocapitalize="off"></label><label>Client Secret<input name="secret" type="password" required spellcheck="false" autocapitalize="off"></label><button class="b">Save</button></form><p class="m">The helper keeps them sealed in your private opus-data repo. Nothing goes into Cloudflare.</p>';
+  if (!whoopReady(env)) return page('Connect WHOOP', form('<p>First, the details of your app at developer.whoop.com (Client ID and Client Secret, on the app\'s page).</p>'));
+  if (url.searchParams.get('change') === '1' && !fromCf) return page('WHOOP app', form('<p>New details for your WHOOP app.</p>'));
   const G = gh(env, 'Helper'); const d = await G.get(WHOOP_FILES.data); let j = null; if (!d.missing) { try { j = JSON.parse(d.text); } catch (e) {} }
   const a = await G.get(WHOOP_FILES.auth);
   const st = await newState(env);
   const go = WHOOP_AUTH + '?' + new URLSearchParams({ response_type: 'code', client_id: env.WHOOP_CLIENT_ID, redirect_uri: cb, scope: WHOOP_SCOPES, state: st }).toString();
   const now = !a.missing ? '<p>WHOOP is connected.' + (j && j.pulled ? ' Last pulled ' + escH(j.pulled.replace('T', ' ').slice(0, 16)) + ' UTC.' : '') + '</p>' + (j && j.problem ? '<p class="m">Last problem: ' + escH(j.problem.text) + '</p>' : '') : '<p>WHOOP isn\'t connected yet.</p>';
-  return page('Connect WHOOP', now + '<p>Sign in to WHOOP and allow Opus to read your recovery, sleep, strain, workouts and body measurements. Opus only reads.</p><a class="b" href="' + escH(go) + '">' + (a.missing ? 'Connect WHOOP' : 'Connect again') + '</a><p class="m">The button works for about an hour. To disconnect, delete whoop-auth.json in opus-data, or remove Opus in your WHOOP app settings.</p>');
+  return page('Connect WHOOP', now + '<p>Sign in to WHOOP and allow Opus to read your recovery, sleep, strain, workouts and body measurements. Opus only reads.</p><a class="b" href="' + escH(go) + '">' + (a.missing ? 'Connect WHOOP' : 'Connect again') + '</a><p class="m">The button works for about an hour. To disconnect, delete whoop-auth.json in opus-data, or remove Opus in your WHOOP app settings.</p>' + (fromCf ? '' : '<p class="m"><a href="?change=1" style="color:inherit">Change the WHOOP app details</a></p>'));
 }
 async function whoopCallback(url, env) {
-  if (!whoopReady(env)) return page('WHOOP', '<p>The WHOOP secrets aren\'t set in Cloudflare yet.</p>');
+  if (!whoopReady(env)) return page('WHOOP', '<p>The helper doesn\'t know your WHOOP app yet. Open its Connect WHOOP page and save the client id and secret there.</p>');
   if (url.searchParams.get('error')) return page('WHOOP said no', '<p>' + escH(url.searchParams.get('error_description') || url.searchParams.get('error')) + '</p><p class="m">Nothing was saved. You can try again from the Connect WHOOP page.</p>');
   const code = url.searchParams.get('code'), st = url.searchParams.get('state');
   if (!code || !(await stateOk(env, st))) return page('Link expired', '<p>This sign-in link is too old or wasn\'t made by your helper. Open the Connect WHOOP page again and tap the button there.</p>');
   let tok;
   try { tok = await whoopTokenCall(env, { grant_type: 'authorization_code', code, redirect_uri: url.origin + '/whoop/callback' }); }
-  catch (e) { return page('WHOOP sign-in failed', '<p>' + escH(e.message) + '</p><p class="m">Check that the Redirect URL in your WHOOP app is exactly <code>' + escH(url.origin + '/whoop/callback') + '</code> and that the client id and secret in Cloudflare match that app.</p>'); }
+  catch (e) { return page('WHOOP sign-in failed', '<p>' + escH(e.message) + '</p><p class="m">Check that the Redirect URL in your WHOOP app is exactly <code>' + escH(url.origin + '/whoop/callback') + '</code> and that the client id and secret you saved match that app.</p>'); }
   if (!tok.refresh) return page('Almost', '<p>WHOOP didn\'t send a refresh token, so the helper couldn\'t keep the sign-in. In your WHOOP app, make sure the offline scope is allowed, then connect again.</p>');
   const G = gh(env, 'Helper'); const cur = await G.get(WHOOP_FILES.auth);
   await saveAuth(G, env, tok, cur.missing ? null : cur.sha);
   let j = null; try { j = await whoopPull(env, 'connected'); } catch (e) {}
   const n = j ? Object.keys(j.days || {}).length : 0;
   return page('WHOOP is connected', '<p>' + (j && j.problem ? 'Connected, but the first pull had a problem: ' + escH(j.problem.text) : n ? 'Pulled ' + n + ' day' + (n === 1 ? '' : 's') + ' of WHOOP data.' : 'Connected. Nothing to pull yet; data shows up once your WHOOP has scored a sleep.') + '</p><p class="m">The helper pulls each hour from 4 AM to noon and every three hours after. Open Opus and it shows up on Today.</p>');
+}
+
+
+/* ---------- keys the helper keeps itself (1.14.0) ----------
+   keys.json in opus-data, sealed with a key made from ACCESS_KEY: { cassius, whoopId, whoopSecret }.
+   It saves the owner a trip to Cloudflare for each new key. Secrets set in Cloudflare still come first. */
+const KEYS_FILE = 'keys.json';
+let keptCache = null; // { at, keys, sha, broken }
+async function keysSealKey(env) {
+  const base = await crypto.subtle.importKey('raw', utf8(String(env.ACCESS_KEY)), 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: utf8('opus-keys'), info: utf8(KEYS_FILE) }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function readKept(env, fresh) {
+  const now = Date.now();
+  if (!fresh && keptCache && now - keptCache.at < (keptCache.keys.cassius || keptCache.keys.whoopId ? 300e3 : 30e3)) return keptCache;
+  const cur = await gh(env, 'Helper').get(KEYS_FILE);
+  let keys = {}, broken = false;
+  if (!cur.missing) {
+    try { const f = JSON.parse(cur.text); const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(f.iv) }, await keysSealKey(env), unb64u(f.data)); keys = JSON.parse(new TextDecoder().decode(pt)) || {}; }
+    catch (e) { broken = true; }
+  }
+  keptCache = { at: now, keys, sha: cur.missing ? null : cur.sha, broken };
+  return keptCache;
+}
+async function saveKept(env, change, why) {
+  for (let i = 0; i < 3; i++) {
+    const k = await readKept(env, true);
+    const keys = Object.assign({}, k.broken ? {} : k.keys, change);
+    for (const n of Object.keys(keys)) if (keys[n] == null || keys[n] === '') delete keys[n];
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await keysSealKey(env), utf8(JSON.stringify(keys)));
+    const body = JSON.stringify({ format: 'opus-helper-keys', note: 'Keys the Opus helper keeps for itself (Cassius’s address, the WHOOP app). Sealed: only the helper can open it. Nothing else reads this file.', iv: b64u(iv), data: b64u(new Uint8Array(ct)) }, null, 2) + '\n';
+    try { await gh(env, 'Helper').put(KEYS_FILE, body, k.sha, 'Helper: ' + why); keptCache = { at: Date.now(), keys, sha: null, broken: false }; keptCache.at = 0; return keys; }
+    catch (e) { if (!e.conflict || i === 2) throw e; }
+  }
+}
+const validKey = (k, env) => k && String(k).length >= 24 && String(k) !== String(env.ACCESS_KEY) ? String(k) : null;
+/* env with the kept keys filled in where Cloudflare has none */
+async function withKept(env) {
+  if (env.CASSIUS_KEY && env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) return env;
+  let k = { keys: {} }; try { k = await readKept(env); } catch (e) {}
+  const E = Object.assign({}, env);
+  if (!validKey(env.CASSIUS_KEY, env) && validKey(k.keys.cassius, env)) { E.CASSIUS_KEY = k.keys.cassius; E.CASSIUS_KEPT = true; }
+  if (!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) && k.keys.whoopId && k.keys.whoopSecret) { E.WHOOP_CLIENT_ID = k.keys.whoopId; E.WHOOP_CLIENT_SECRET = k.keys.whoopSecret; E.WHOOP_KEPT = true; }
+  return E;
+}
+const copyBox = v => '<div class="cp"><code id="v">' + escH(v) + '</code><button type="button" onclick="(navigator.clipboard?navigator.clipboard.writeText(document.getElementById(\'v\').textContent).then(()=>{this.textContent=\'Copied\'},()=>{getSelection().selectAllChildren(document.getElementById(\'v\'))}):getSelection().selectAllChildren(document.getElementById(\'v\')))">Copy</button></div>';
+async function cassiusPage(url, env, request) {
+  let key = validKey(env.CASSIUS_KEY, env), made = false, kept = !!env.CASSIUS_KEPT;
+  if (request.method === 'POST') {
+    const f = await request.formData();
+    if (f.get('do') !== 'new') return page('Cassius', '<p>Nothing changed.</p>');
+    if (key && !kept) return page('Cassius', '<p>Cassius’s key is set in Cloudflare (CASSIUS_KEY), so it can’t be changed here. Delete that secret first.</p>');
+    key = null;
+  }
+  if (!key) {
+    const a = new Uint8Array(24); crypto.getRandomValues(a); key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
+    await saveKept(env, { cassius: key }, request.method === 'POST' ? 'new address for Cassius' : 'Cassius’s address');
+    made = true;
+  }
+  const addr = url.origin + '/' + key + '/mcp';
+  return page('Cassius’s address', (made ? '<p>Cassius’s address is ready. It works now, with nothing to add in Cloudflare.</p>' : '<p>This is Cassius’s address. It stays the same every time you open this page.</p>') +
+    copyBox(addr) +
+    '<p>In Claude: Settings › Connectors. Open the Opus (Cassius) connector and put this address in place of the old one (or remove it and add a custom connector with this address). Then allow it in the Cassius chat.</p>' +
+    '<p class="m">Keep it private: anyone with it can act as Cassius.</p>' +
+    (env.CASSIUS_KEY && !env.CASSIUS_KEPT && !made ? '' : '<form method="post" onsubmit="return confirm(\'Make a new address? The old one stops working.\')"><input type="hidden" name="do" value="new"><button class="b">Make a new address</button></form>'));
 }
 
 /* ---------- MCP over HTTP (stateless, JSON replies) ---------- */
@@ -929,11 +1010,13 @@ export default {
   // and notifications that fell due go out
   async scheduled(event, env, ctx) {
     if (!env.GITHUB_TOKEN || !env.ACCESS_KEY) return;
+    const E = await withKept(env);
     ctx.waitUntil(report(env));
     ctx.waitUntil(sendDue(env, event.scheduledTime || Date.now()).catch(() => 0));
-    ctx.waitUntil(whoopScheduled(env, event.scheduledTime || Date.now()).catch(() => 0));
+    ctx.waitUntil(whoopScheduled(E, event.scheduledTime || Date.now()).catch(() => 0));
   },
-  async fetch(request, env, ctx) {
+  async fetch(request, env0, ctx) {
+    let env = env0;
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);
     const notFound = () => new Response('Not found', { status: 404 });
@@ -942,8 +1025,10 @@ export default {
       const a = new Uint8Array(24); crypto.getRandomValues(a); const key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
       return new Response('Opus helper is almost set up.\n\n' + (env.GITHUB_TOKEN ? '' : '- Add the secret GITHUB_TOKEN.\n') + (env.ACCESS_KEY && String(env.ACCESS_KEY).length >= 24 ? '' : '- Add the secret ACCESS_KEY. Here is a new random one you can use:\n\n' + key + '\n') + '\nThen deploy again and reload this page.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
     }
-    // who is calling: Grok's address (ACCESS_KEY) or Cassius's own (CASSIUS_KEY, if set, 24+ characters and not the same key)
-    const ck = env.CASSIUS_KEY && String(env.CASSIUS_KEY).length >= 24 && String(env.CASSIUS_KEY) !== String(env.ACCESS_KEY) ? String(env.CASSIUS_KEY) : null;
+    // the keys the helper keeps itself fill in what Cloudflare doesn't have (Cassius, the WHOOP app)
+    env = await withKept(env0);
+    // who is calling: Grok's address (ACCESS_KEY) or Cassius's own (CASSIUS_KEY or the kept key, 24+ characters and not the same key)
+    const ck = validKey(env.CASSIUS_KEY, env);
     const as = parts.length && same(parts[0], env.ACCESS_KEY) ? GROK : parts.length && ck && same(parts[0], ck) ? CASSIUS : null;
     const plain = (t, st) => new Response(t, { status: st || 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
     // WHOOP: the redirect and webhook live at fixed addresses (WHOOP needs them exact); connecting needs the access key
@@ -952,13 +1037,9 @@ export default {
       if (parts[1] === 'webhook' && request.method === 'POST' && whoopReady(env)) return whoopWebhook(request, env, ctx);
       return notFound();
     }
-    if (as === GROK && parts[1] === 'whoop' && parts.length === 2 && request.method === 'GET') return whoopStart(url, env);
-    if (as === GROK && parts[1] === 'cassius' && parts.length === 2 && request.method === 'GET') {
-      // setting up Cassius's address: a fresh key, made on every visit and never stored
-      if (ck) return plain('Cassius already has his own address (the CASSIUS_KEY secret is set). To change it, put a new key in that secret, deploy, and update the connector in Claude.');
-      const a = new Uint8Array(24); crypto.getRandomValues(a); const key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
-      return plain('Cassius\'s own address isn\'t set up yet.\n\n1. In Cloudflare, add a secret named CASSIUS_KEY to this worker with this value:\n\n' + key + '\n\n2. After it deploys, this is Cassius\'s address. Add it to Claude as a custom connector:\n\n' + url.origin + '/' + key + '/mcp\n\nThis key is new each time you open this page, so copy the key and the address from the same visit. Keep both private.');
-    }
+    if (as === GROK && parts[1] === 'whoop' && parts.length === 2 && (request.method === 'GET' || request.method === 'POST')) return whoopStart(url, env, request);
+    // Cassius's address: made and kept on the first visit, the same one after that
+    if (as === GROK && parts[1] === 'cassius' && parts.length === 2 && (request.method === 'GET' || request.method === 'POST')) return cassiusPage(url, env, request);
     if (!as || parts.length > 2 || (parts[1] && parts[1] !== 'mcp')) return notFound();
     if (request.method === 'GET' && /event-stream/.test(request.headers.get('Accept') || '')) return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
     if (request.method === 'GET') return new Response('Opus helper ' + VERSION + ' is running. ' + (as === CASSIUS ? 'This is Cassius\'s own address. Add it to Claude as a custom connector:' : 'Add this address to Grok as a custom connector:') + '\n\n' + url.origin + '/' + parts[0] + '/mcp', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
