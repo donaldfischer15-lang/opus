@@ -185,8 +185,10 @@
     (Store.data.eaten || []).filter(e => e.extra && e.name).sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).forEach(e => { const k = e.name.toLowerCase(); if (!seen.has(k) && recent.length < 6) { seen.add(k); recent.push(e); } });
     const picks = lib.map(x => Object.assign({ from: 'lib' }, x)).concat(recent.map(x => ({ name: x.name, amount: x.amount, unit: x.unit, macros: x.macros, micros: x.micros || null, from: 'recent' })));
     let slot = ed ? ed.slot || slotNow() : o.slot || slotNow(), base = null, touched = false, mbase = null;
-    ui.sheet({ title: ed ? ed.name : 'Add food', kicker: ed ? 'Something extra' : 'Not in the plan', foot: true, onClose: () => { o.after && o.after(); Opus.refresh(); }, render(api) {
+    ui.sheet({ title: ed ? ed.name : 'Add food', kicker: ed ? (Plan.foodOff(U.parseKey(ed.date)) ? 'Off day' : 'Something extra') : Plan.foodOff(d) ? 'Off day' : 'Not in the plan', foot: true, onClose: () => { o.after && o.after(); Opus.refresh(); }, render(api) {
       const b = api.body;
+      let search = null;
+      if (!ed && Opus.foodSearch) { search = Opus.foodSearch.block(x => fill(x)); b.appendChild(search.el); }
       if (picks.length && !ed) {
         const c = h('<div class="sec"><div class="sh"><span class="t">Your foods</span><span class="c">tap to fill in</span></div><div class="chips"></div></div>');
         picks.slice(0, 14).forEach(x => { const ch = h('<button class="chip" type="button">' + U.esc(x.name) + '</button>'); ch.onclick = () => { fill(x); c.querySelectorAll('.chip').forEach(y => y.classList.remove('on')); ch.classList.add('on'); ui.buzz(6); }; c.querySelector('.chips').appendChild(ch); });
@@ -243,7 +245,7 @@
         }
         Store.save(); ui.buzz(12); api.close(); ui.toast(ed ? 'Saved' : 'Added ' + name + (keepOn ? ', and kept in your foods' : ''));
       };
-      if (!ed) setTimeout(() => { if (!picks.length) inp('name').focus(); }, 350);
+      if (!ed) setTimeout(() => { if (search) search.input.focus(); else if (!picks.length) inp('name').focus(); }, 350);
     } });
   }
 
@@ -348,6 +350,12 @@
     } });
   }
 
+  // "Monday to Friday" from food.days; "same meals all week" when the plan covers every day
+  function planDaysLabel() {
+    const ds = Plan.foodDays(); if (!ds || ds.length === 7) return 'same meals all week';
+    const ix = ds.map(x => U.DAYS.indexOf(x)).sort((a, b) => a - b), run = ix.every((x, i) => !i || x === ix[i - 1] + 1);
+    return run && ix.length > 2 ? 'same meals ' + U.DAY_NAMES[ix[0]] + ' to ' + U.DAY_NAMES[ix[ix.length - 1]] : 'same meals ' + ix.map(i => U.DAY_NAMES[i].slice(0, 3)).join(', ');
+  }
   function render(v) {
     const d = new Date(), f = Plan.p.food || {};
     const rw = Plan.rotationWeek(d);
@@ -368,7 +376,7 @@
       note.textContent = bits.join(' '); note.hidden = !bits.length;
     };
     const card = t.querySelector('.card');
-    if (!today.length) card.appendChild(h('<p class="empty">No meals planned today.</p>'));
+    if (!today.length) card.appendChild(h('<p class="empty">' + (Plan.foodOff(d) ? 'Off day. No meal plan today, so log what you eat as you go.' : 'No meals planned today.') + '</p>'));
     today.forEach(it => {
       const on = Plan.isChecked(d, it.id), ml = macroLine(it.meal), el = on ? eatenLine(d, it) : null, sk = !on && Plan.eatenEntry(d, it.id) && Plan.eatenEntry(d, it.id).skipped;
       const r = h('<div class="row tap' + (on ? ' done' : '') + (el ? ' part' : '') + (sk ? ' skip' : '') + '"><span class="ck" role="checkbox" aria-checked="' + on + '" aria-label="Eaten">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.meal.name) + '</b><small class="num">' + U.esc(el || (sk ? 'Skipped' : ml || it.meal.how || '')) + '</small></span><span class="tm num">' + U.fmtTime(it.time) + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
@@ -409,7 +417,7 @@
     v.appendChild(t);
 
     // this week and next
-    const wkSec = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">The rotation</span><span class="c">same meals all week</span></div><div class="card"></div></div>');
+    const wkSec = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">The rotation</span><span class="c">' + U.esc(planDaysLabel()) + '</span></div><div class="card"></div></div>');
     const nextW = Plan.rotationWeek(U.addDays(U.weekStart(d), 7));
     const meals = Plan.weekMeals(d), nmeals = Plan.weekMeals(U.addDays(U.weekStart(d), 7));
     meals.forEach(m => {

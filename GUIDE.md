@@ -131,6 +131,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
   "goal": { "start": 191, "target": 170, "unit": "lb" },
   "budgetPerWeek": { "low": 100, "high": 150 },
   "prepDay": "sun", "prepTime": "12:00",
+  "days": ["mon", "tue", "wed", "thu", "fri"],
   "rules": ["Workday lunch is eaten cold."],
   "sections": ["Produce", "Meat", "Dairy & eggs", "Bakery", "Pantry", "Frozen", "Other"],
   "rotation": { "start": "2026-11-22", "weeks": [
@@ -157,6 +158,8 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
   ]
 }
 ```
+- `days` (optional) lists the days the meal plan covers. The other days are **off days**: no planned meals, and Today shows *Log what you eat* instead. Give the meal items in `routine` the same `days`, and size `prep` and `ingredients` for that many servings (five for Monday to Friday). Food the owner logs on off days is in logs `eaten` like any extra. Leave `days` out to plan every day.
+- When the owner adds food, Opus searches their own foods, then the free USDA FoodData Central database, then Open Food Facts for brands, and fills in macros, vitamins and minerals for the amount picked. What they log arrives in logs `eaten` with those numbers; nothing for you to do.
 - The same meals are eaten all week. Week 1 of the rotation begins the Sunday of `rotation.start`, then the weeks repeat in order.
 - **Ingredient amounts are for the whole week** (one batch). The grocery list merges the same `item` across meals and groups by `section` in `sections` order.
 - Every meal id used in `rotation.weeks` must exist in `meals`.

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.16.0';
+  Opus.VERSION = '1.17.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -196,6 +196,9 @@
       const i = ((n % r.weeks.length) + r.weeks.length) % r.weeks.length;
       return { index: i, count: r.weeks.length, week: r.weeks[i] };
     },
+    /* food.days lists the days the meal plan covers (like mon to fri); the other days are off days: nothing planned, you log what you eat */
+    foodDays() { const ds = (this.p.food || {}).days; return Array.isArray(ds) && ds.length && ds.every(x => U.DAYS.includes(x)) ? ds : null; },
+    foodOff(d) { const ds = this.foodDays(); return !!ds && !ds.includes(U.dayKey(d || new Date())); },
     meal(id) { const m = ((this.p.food || {}).meals || {})[id]; return m ? Object.assign({ id }, m) : null; },
     mealFor(d, slot) { const rw = this.rotationWeek(d); if (!rw) return null; return this.meal(rw.week[slot]); },
     weekMeals(d) {
@@ -331,6 +334,7 @@
       for (const m of this.mods) { try { for (const x of (m.items(d) || [])) items.push(x); } catch (e) { console.warn('opus: ' + m.prefix + ' items', e); } }
       for (const h of this.homeDue(d)) items.push({ id: 'home:' + h.id, title: h.title, part: h.part || 'evening', time: h.time || null, kind: 'home', detail: h.note || '', home: h });
       const f = p.food || {};
+      if (this.foodOff(d)) items.push({ id: 'food-log', title: 'Log what you eat', part: 'evening', time: null, kind: 'foodlog', detail: 'Off day: no meal plan. Add each thing as you have it.' });
       if (f.prepDay === dk) items.push({ id: 'food-prep', title: 'Groceries and food prep', part: 'workday', time: f.prepTime || null, kind: 'prep', detail: 'Shop the list, then prep the week' });
       const mo = p.money || {};
       if (mo.checkInDay === dk) items.push({ id: 'money-checkin', title: 'Money check-in', part: 'evening', time: mo.checkInTime || null, kind: 'money', detail: 'Five minutes: pay in, spending, debts' });

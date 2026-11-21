@@ -13,10 +13,11 @@
       case 'money': return Opus.money && Opus.money.checkIn();
       case 'prep': return Opus.food && Opus.food.prepSheet();
       case 'weigh': return Opus.food && Opus.food.weighIn();
+      case 'foodlog': { const d = new Date(); return Opus.food && Opus.food.addFood(d, { after: () => { if (Plan.eatenOn(d).some(e => e.extra)) Plan.setChecked(d, it.id, true); Store.save(); done(); } }); }
       default: return null;
     }
   }
-  const FLOW = { workout: 'Start', writing: 'Write', review: 'Begin', money: 'Open', prep: 'Open', weigh: 'Log' };
+  const FLOW = { workout: 'Start', writing: 'Write', review: 'Begin', money: 'Open', prep: 'Open', weigh: 'Log', foodlog: 'Log' };
 
   function updateArch(root, items, d) {
     const n = items.length, filled = items.filter(it => Plan.isChecked(d, it.id)).length;

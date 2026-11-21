@@ -242,6 +242,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.17.0': [['food', 'Search when you add food: your own foods first, then the free USDA database of common, restaurant and packaged foods, then more brands from Open Food Facts. Pick how much and the macros, vitamins and minerals fill in.'], ['food', 'The meal plan covers Monday to Friday. Saturday and Sunday are off days: nothing planned, and Today asks you to log what you eat. Prep and groceries are sized for five days.']],
     '1.16.0': [['money', 'The check-in goes deeper: your week against your plan, where it went with one tap to sort, the bills that came out checked against your plan, the week ahead with an extra amount for the card, and one line for the week.']],
     '1.15.1': [['money', 'The check-in no longer asks you to paste anything from Grok. It opens on your week.']],
     '1.15.0': [['money', 'Money has a bill calendar with your paydays, a payoff date beside each debt that moves with what you pay, Try more or less a week, your subscriptions in one line, and a tap on any recent week shows where it went. Mark a purchase one-off to keep it out of your average week.']],
