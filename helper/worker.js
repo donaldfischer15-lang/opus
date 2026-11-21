@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -192,8 +192,8 @@ const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 
 const microsErr = m => { if (m == null) return null; if (!isObj(m)) return 'micros must be an object like { "fiber": 3.1, "potassium": 422 }'; for (const k of Object.keys(m)) { if (k === 'estimate' || k === 'note') continue; if (!MICROS.includes(k)) return 'micros.' + k + ' is not one Opus tracks (' + MICROS.join(', ') + ')'; if (m[k] != null && !(num(m[k]) && m[k] >= 0)) return 'micros.' + k + ' must be a number or null'; } return null; };
 const dateErr = (o, k) => isDate(o[k]) ? null : k + ' must be a date like "2026-11-27" (got ' + JSON.stringify(o[k]) + ')';
 const OUT = [
-  ['money.cash', 'date', c => dateErr(c, 'date') || (num(c.cash) || num(c.free) ? null : 'needs cash (or free) as a number') || listErr(c, 'held') || listErr(c, 'accounts') || (c.free != null && !num(c.free) ? 'free must be a number' : null)],
-  ['money.weeks', 'weekEnding', w => dateErr(w, 'weekEnding') || (w.paycheck == null || num(w.paycheck) ? null : 'paycheck must be a number or null') || ['spent', 'bills', 'debtPayments', 'balances'].map(k => listErr(w, k)).find(Boolean) || null],
+  ['money.cash', 'date', c => dateErr(c, 'date') || (num(c.cash) || num(c.free) || (Array.isArray(c.accounts) && c.accounts.length) ? null : 'needs cash (or free) as a number, or at least one account balance in accounts') || listErr(c, 'held') || listErr(c, 'accounts') || listErr(c, 'transfers') || (c.free != null && !num(c.free) ? 'free must be a number' : null) || (c.cash != null && !num(c.cash) ? 'cash must be a number' : null)],
+  ['money.weeks', 'weekEnding', w => dateErr(w, 'weekEnding') || (w.paycheck == null || num(w.paycheck) ? null : 'paycheck must be a number or null') || ['spent', 'bills', 'debtPayments', 'balances', 'transfers'].map(k => listErr(w, k)).find(Boolean) || null],
   ['money.balances', 'date', w => dateErr(w, 'date') || (isObj(w.debts) ? (Object.keys(w.debts).map(k => w.debts[k] == null || num(w.debts[k]) ? null : 'debts["' + k + '"] must be a number').find(Boolean) || null) : 'debts must be an object like { "Credit card": 1840 }')],
   ['weights', 'date', w => dateErr(w, 'date') || (num(w.lb) ? null : 'lb must be a number')],
   ['workouts', 'id', w => (typeof w.id === 'string' && w.id ? null : 'id must be a text id like "grok-2026-11-27"') || dateErr(w, 'date') || (Array.isArray(w.sets) ? null : 'sets must be a list')],
@@ -235,6 +235,16 @@ function mergeOutbox(cur, add) {
       if (x.delete !== true) { const e = check(x); if (e) { report.bad.push(p + ' ' + k + ': ' + e); return; } }
       if (p === 'money.cash' && !x.delete && !x.at) x.at = new Date().toISOString();
       const i = list.findIndex(y => isObj(y) && y[keyName] === k);
+      // a balances-only update (accounts, no cash, free or held) folds into that day's reading instead of replacing it
+      if (p === 'money.cash' && !x.delete && i >= 0 && isObj(list[i]) && x.cash == null && x.free == null && x.held == null && Array.isArray(x.accounts)) {
+        const old = list[i], acc = (Array.isArray(old.accounts) ? old.accounts : []).map(a => Object.assign({ at: old.at }, a));
+        for (const a of x.accounts) { const j = acc.findIndex(b => String(b.name || '').toLowerCase() === String(a.name || '').toLowerCase()); const v = Object.assign({ at: x.at }, a); if (j >= 0) acc[j] = v; else acc.push(v); }
+        const merged = Object.assign({}, old, { at: x.at, accounts: acc });
+        delete merged.cash; delete merged.free; // Opus works both out from the accounts, money on its way and what is held back
+        if (x.transfers) merged.transfers = x.transfers;
+        if (x.note) merged.note = x.note;
+        list[i] = merged; report.replaced++; any = true; return;
+      }
       if (i >= 0) { list[i] = x; report.replaced++; } else { list.push(x); report.added++; }
       any = true;
     });
@@ -380,7 +390,7 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { section: { type: 'string', description: 'The heading, like "Training" or "People".' }, add: { type: 'array', items: { type: 'string' }, description: 'New facts, one per item (up to 400 characters each).' }, replace: { type: 'array', items: { type: 'string' }, description: 'The whole section, one fact per item. Use instead of add to rewrite it.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Facts to delete, by their text.' }, change: { type: 'string', description: 'One short line for the history.' } }, required: ['section'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), and supplements taken (supps). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), and supplements taken (supps). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a' };

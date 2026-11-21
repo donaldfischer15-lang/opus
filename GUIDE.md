@@ -315,7 +315,7 @@ The app previews the block and lists any problems before saving.
 | `weights` | `[{ "date", "lb" }]` |
 | `money.weeks` | saved weekly money blocks: `{ "weekEnding", "paycheck", "spent": [{ "cat", "amount" }], "bills": [{ "name", "amount" }], "debtPayments": [{ "name", "amount" }], "balances": [{ "name", "amount" }], "notes": [] }` |
 | `money.balances` | `[{ "date", "debts": { "Credit card": 1840 } }]` balance history |
-| `money.cash` | `[{ "date", "at", "cash", "accounts": [{ "name", "amount" }], "held": [{ "name", "amount", "due" }], "free", "note" }]` Free cash readings, one per day: cash on hand, what is held back before payday, and what is left (`free`). The newest `at` wins, whoever made it. Entries with no `by` were entered by the owner. |
+| `money.cash` | `[{ "date", "at", "cash", "accounts": [{ "name", "amount", "at" }], "transfers": [{ "from", "to", "amount", "pending" }], "held": [{ "name", "amount", "due" }], "free", "note" }]` Free cash readings, one per day: cash on hand, money on its way between the owner's own accounts, what is held back before payday, and what is left (`free`). The newest `at` wins, whoever made it. Entries with no `by` were entered by the owner. |
 | `sync` | `{ "at", "app", "outbox": { "updated", "added", "changed", "removed", "kept": [...], "skipped": [...] } }` when Opus last synced (it writes this at least once on each day it's opened) and what it took from `grok.json` the last time that file changed. If `outbox.updated` matches the `updated` time in `grok.json`, Opus has picked up your latest entries. `kept` = entries where the owner's own entry won; `skipped` = entries Opus refused, with the reason. |
 | `prefs` | `{ "restSeconds": { "<exercise id>": 150 }, "tabs": [...], "hiddenTabs": [...], "sound": true }` the owner's settings, for reference only |
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
@@ -381,13 +381,15 @@ Put only new or corrected entries here. You may replace the whole file each time
         "spent": [ { "cat": "groceries", "amount": 124.50 }, { "cat": "gas", "amount": 48.00 } ],
         "bills": [ { "name": "Car insurance", "amount": 151.00 } ],
         "debtPayments": [ { "name": "Credit card", "amount": 50.00 } ],
+        "transfers": [ { "from": "Checking", "to": "Savings", "amount": 100.00 } ],
         "balances": [ { "name": "Credit card", "amount": 1840.00 } ],
         "notes": ["optional, one line"] }
     ],
     "balances": [ { "date": "2026-11-27", "debts": { "Credit card": 1840.00 } } ],
     "cash": [
       { "date": "2026-11-25", "at": "2026-11-25T12:40:00Z", "cash": 912.40,
-        "accounts": [ { "name": "Checking", "amount": 862.40 }, { "name": "Cash", "amount": 50.00 } ],
+        "accounts": [ { "name": "Checking", "amount": 862.40, "at": "2026-11-25T12:40:00Z" }, { "name": "Cash", "amount": 50.00 } ],
+        "transfers": [],
         "held": [ { "name": "Phone", "amount": 85.00, "due": "2026-11-26" }, { "name": "Gas until payday", "amount": 40.00 } ],
         "free": 787.40,
         "note": "optional, one line" }
@@ -411,6 +413,8 @@ Put only new or corrected entries here. You may replace the whole file each time
   - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
   - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
   - Update it whenever you look at their accounts, and at least once a day if you can.
+  - **Moving money between the owner's own accounts is never spending.** A transfer from one of their accounts to another (to cover a bill paid from the second, say) leaves `cash` the same. While it is on its way (gone from one account, not yet in the other), list it in `transfers`: `[{ "from": "Checking", "to": "Bills account", "amount": 400, "pending": true }]`, and keep the bill it is for in `held`. Once it lands, send the new balances and `"transfers": []`. Opus then works out `cash` and `free` itself from the accounts, the money on its way and `held`, so don't take a transfer out of `free`. In a money week, a transfer goes in `transfers` (`{ "from", "to", "amount" }`), never in `spent`; Opus shows it as moved and leaves it out of the totals.
+  - **Update one account at a time** when that's all you read: send that day's `date` with just `accounts` (each `{ "name", "amount", "at" }`, `at` being when you read that account) and no `cash`, `free` or `held`. The helper folds it into that day's reading and keeps the other accounts with their own times; Opus works out the totals. On a new day, an entry with only `accounts` keeps the last `held` list (minus anything past due). Use the same account names every time, as in earlier readings. Give `at` on each account only when you actually read that account then: Money shows each balance with its time, and marks one older than a day and a half.
 - **Food the owner tells you they ate (`eaten`)** shows on Food › Today as something extra and counts in the day's totals. Give each a made-up `id` (e.g. `"grok-2026-11-27-shake"`), `date` and `name`; add `amount`, `unit`, `slot` and `macros` when you know them (`null` when you don't). If it is a planned meal eaten as planned, don't log it here; the owner ticks it on the phone.
 - **Blood tests (`labs`)**: when the owner sends a lab report or a photo of one, copy every result exactly as printed: `name`, `value` (a number), `unit`, and the lab's reference `range` as printed, with its numbers in `low` and `high` (leave one out for a range like "<100" or ">40"). `date` is the date the blood was drawn. One entry per test date; send the same `date` again to correct it. Read every number twice; if one is hard to read, leave that marker out and ask. Don't interpret, diagnose or suggest treatment. If a result is outside the lab's range, say only that, and that it is worth raising with their doctor. Opus shows the results under Food › Vitamins & minerals › Blood tests, with trends, beside the food estimates.
 - **Pet care (`pets`)**: `id` is exactly `date:pet:care`, using ids from `home.pets`. Weigh-ins use care `"weight"` with `lb`; vet visits use `"vet"` with a one-line `note`. If the owner mentions a care job the pet doesn't have yet, add it to that pet's `care` in the plan first.

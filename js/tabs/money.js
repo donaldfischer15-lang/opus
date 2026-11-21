@@ -30,8 +30,11 @@
     return x;
   }
   function weeks() { return (Store.data.money.weeks || []).slice().sort((a, b) => a.weekEnding.localeCompare(b.weekEnding)); }
-  function weekSpent(w) { return U.sum((w.spent || []).map(s => s.amount)); }
-  function weekEveryday(w) { return U.sum((w.spent || []).filter(s => !isOneOff(w.weekEnding, s)).map(s => s.amount)); }
+  // money moved between the owner's own accounts is never spending (an entry marked transfer: true, or in w.transfers)
+  const spentOf = w => (w.spent || []).filter(s => s && !s.transfer);
+  const movedOf = w => (Array.isArray(w.transfers) ? w.transfers : []).concat((w.spent || []).filter(s => s && s.transfer)).filter(x => x && typeof x.amount === 'number');
+  function weekSpent(w) { return U.sum(spentOf(w).map(s => s.amount)); }
+  function weekEveryday(w) { return U.sum(spentOf(w).filter(s => !isOneOff(w.weekEnding, s)).map(s => s.amount)); }
   function calc() {
     const m = M();
     const pays = weeks().filter(w => w.paycheck != null).slice(-4), lastPay = pays[pays.length - 1] || null; // take-home is the average of the last 4 paychecks
@@ -132,12 +135,53 @@
   /* ---------- cash on hand (money.cash in the logs): Grok writes it from the accounts, or you enter it ---------- */
   const cashList = () => (Store.data.money.cash || []).slice().sort((a, b) => (a.date + (a.at || '')).localeCompare(b.date + (b.at || '')));
   const latestCash = () => { const l = cashList(); return l[l.length - 1] || null; };
-  const heldOf = c => (Array.isArray(c && c.held) ? c.held : []).filter(x => x && typeof x.amount === 'number');
+  // an entry that only updates balances (no cash, no held list) keeps what the reading before it held back, minus anything past due
+  function heldOf(c) {
+    let l = c && c.held;
+    if (c && l == null && typeof c.cash !== 'number' && typeof c.free !== 'number') {
+      const all = cashList(), i = all.indexOf(c);
+      for (let j = (i < 0 ? all.length : i) - 1; j >= 0; j--) if (Array.isArray(all[j].held)) { l = all[j].held.filter(x => !x || !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= c.date); break; }
+    }
+    return (Array.isArray(l) ? l : []).filter(x => x && typeof x.amount === 'number');
+  }
+  // money on its way between the owner's own accounts: it has left one and not landed in the other, so it still counts as cash
+  const transitOf = c => (Array.isArray(c && c.transfers) ? c.transfers : []).filter(x => x && typeof x.amount === 'number' && x.amount > 0 && x.pending !== false);
+  // each account's balance: this reading's, or the last one known when this reading left an account out (carried: true)
+  function accountsOf(c) {
+    if (!c || !Array.isArray(c.accounts) || !c.accounts.length) return [];
+    const own = c.accounts.filter(a => a && typeof a.amount === 'number').map(a => Object.assign({ at: c.at || null }, a));
+    const have = new Set(own.map(a => String(a.name || '').toLowerCase()));
+    const l = cashList(), i = l.indexOf(c);
+    for (let j = (i < 0 ? l.length : i) - 1; j >= 0; j--) {
+      for (const a of (Array.isArray(l[j].accounts) ? l[j].accounts : [])) {
+        const n = String(a && a.name || '').toLowerCase();
+        if (!n || have.has(n) || typeof a.amount !== 'number') continue;
+        have.add(n); own.push(Object.assign({ at: l[j].at || null, date: l[j].date }, a, { carried: true }));
+      }
+    }
+    return own;
+  }
+  // worked out from the accounts when money is on its way or an account was carried over; Grok's own numbers otherwise
+  const computed = c => !!c && (transitOf(c).length > 0 || accountsOf(c).some(a => a.carried) || (typeof c.cash !== 'number' && accountsOf(c).length > 0));
+  function cashOf(c) {
+    if (!c) return null;
+    if (computed(c)) return U.sum(accountsOf(c).map(a => a.amount)) + U.sum(transitOf(c).map(x => x.amount));
+    return typeof c.cash === 'number' ? c.cash : null;
+  }
   function freeOf(c) {
     if (!c) return null;
+    if (computed(c)) return Math.round((cashOf(c) - U.sum(heldOf(c).map(x => x.amount))) * 100) / 100;
     if (typeof c.free === 'number') return c.free;
     if (typeof c.cash === 'number') return c.cash - U.sum(heldOf(c).map(x => x.amount));
     return null;
+  }
+  // when one account was last read, in a few words
+  function whenAcct(a) { return whenAt({ at: a.at, date: a.date || U.key(a.at ? new Date(a.at) : new Date()) }); }
+  function movedCard(w, card) {
+    const mv = movedOf(w); if (!mv.length) return;
+    card.appendChild(h('<div class="sh" style="margin-top:10px"><span class="t">Moved between your accounts</span></div>'));
+    mv.forEach(x => card.appendChild(h('<div class="kv"><span>' + U.esc((x.from || x.cat || 'One account') + (x.to ? ' \u2192 ' + x.to : '')) + '</span><span class="num muted">' + U.money(x.amount, { cents: true }) + '</span></div>')));
+    card.appendChild(h('<p class="small" style="margin:6px 0 0">Not spending, so it isn\u2019t in the totals.</p>'));
   }
   function nextPayday(d) {
     d = d || new Date();
@@ -273,8 +317,8 @@
   // plan vs actual: money.split is the plan for one check (bills, food, spending, debt)
   function splitCard(w) {
     const sp = M().split || {}, card = h('<div class="card"></div>');
-    const food = U.sum((w.spent || []).filter(x => FOOD.includes(groupOf(x.cat))).map(x => x.amount));
-    const other = weekSpent(w) - food, unsorted = (w.spent || []).filter(x => !groupOf(x.cat)).length;
+    const food = U.sum(spentOf(w).filter(x => FOOD.includes(groupOf(x.cat))).map(x => x.amount));
+    const other = weekSpent(w) - food, unsorted = spentOf(w).filter(x => !groupOf(x.cat)).length;
     const rows = [['Bills', sp.bills, U.sum((w.bills || []).map(x => x.amount)), 'Bills come in lumps. Your monthly bills average ' + U.money(U.sum((M().bills || []).map(perMonth)) * 12 / 52) + ' a week.'],
       ['Food', sp.food, food, unsorted ? unsorted + ' store' + (unsorted > 1 ? 's' : '') + ' not sorted yet count as spending.' : null],
       ['Spending', sp.spending, other, null], ['Debt', sp.debt, debtPaid(w), null]];
@@ -289,13 +333,14 @@
   // spending sorted by group, each store one tap from a group or a one-off mark
   function sortCard(w, rerender) {
     const card = h('<div class="card"></div>'), spent = weekSpent(w), groups = new Map();
-    (w.spent || []).forEach(x => { const g = groupOf(x.cat) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
+    spentOf(w).forEach(x => { const g = groupOf(x.cat) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
     [...groups.keys()].sort((a, b) => (a === 'Not sorted yet') - (b === 'Not sorted yet') || U.sum(groups.get(b).map(x => x.amount)) - U.sum(groups.get(a).map(x => x.amount))).forEach(g => {
       const items = groups.get(g), tot = U.sum(items.map(x => x.amount));
       card.appendChild(h('<div class="wg"><div class="kv" style="border:0;padding:0"><span' + (g === 'Not sorted yet' ? ' style="color:var(--warn)"' : '') + '>' + U.esc(g) + '</span><span class="num">' + U.money(tot, { cents: true }) + '</span></div><div class="bar"><i style="width:' + (spent ? tot / spent * 100 : 0).toFixed(1) + '%"></i></div></div>'));
       items.forEach(x => { const r = h('<div class="row tap wg-i"><span class="tx"><b>' + U.esc(x.cat) + '</b>' + (isOneOff(w.weekEnding, x) ? '<small style="color:var(--gold-2)">one-off</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'); r.onclick = () => itemSheet(w.weekEnding, x, rerender); card.appendChild(r); });
     });
-    if (!(w.spent || []).length) card.appendChild(h('<p class="empty">No spending logged this week.</p>'));
+    if (!spentOf(w).length) card.appendChild(h('<p class="empty">No spending logged this week.</p>'));
+    movedCard(w, card);
     return card;
   }
   // this week against the week before and your average
@@ -424,7 +469,7 @@
     const ck = (m.checkins || {})[we] || {}, paidExtra = Math.max(0, paid - (m.plannedDebtPerWeek || 0));
     const extra = ck.extra > 0 ? Math.max(0, ck.extra - paidExtra) : 0;
     const yours = free == null ? null : free - (food || 0) - (debt || 0) - extra;
-    const cash = c && typeof c.cash === 'number' ? c.cash : null;
+    const cash = c ? cashOf(c) : null;
     return { c, free, cash, pay, days, payToday: d0 === 0, foodW, food, debt, paid, extra, extraTo: ck.to || null, yours };
   }
   function weekCard() {
@@ -558,6 +603,7 @@
       '<div class="fc-v num">' + U.money(free) + '</div>' +
       '<div class="fc-s">' + (free < 0 ? 'Short by ' + U.money(-free) + ' before payday' : 'Yours to use until payday') + '</div>' +
       '<div class="fc-chips"><span>' + U.esc(payLine) + '</span>' + (perDay != null ? '<span>about ' + U.money(perDay) + ' a day</span>' : '') + (held.length ? '<span>' + U.money(U.sum(held.map(x => x.amount))) + ' held back</span>' : '') + '</div>' +
+      acctLine(c) +
       (hist.length > 2 ? '<div class="fc-spark" aria-hidden="true">' + ui.spark(hist, { w: 240, h: 34 }) + '</div>' : '') +
       '<div class="fc-from' + (stale ? ' stale' : '') + '"><i></i>' + (c.by === 'grok' ? 'From Grok' : 'You entered it') + ' · ' + U.esc(whenAt(c)) + (stale ? ' · may be out of date' : '') + '</div>' +
       (stale ? '<div class="fc-acts"><button class="g-act" type="button" data-ask>' + ui.icon('spark') + '<span>Copy ask for Grok</span></button></div>' : '');
@@ -567,18 +613,28 @@
     return el;
   }
 
+  // the accounts under the big number: each balance and when it was read, so an old one is easy to spot
+  function acctLine(c) {
+    const ac = accountsOf(c), tr = transitOf(c);
+    if (!ac.length && !tr.length) return '';
+    return '<div class="fc-accts">' + ac.map(a => { const old = a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : true; return '<span class="' + (old ? 'old' : '') + '"><b>' + U.esc(a.name || 'Account') + '</b> ' + U.money(a.amount) + ' <small>' + U.esc(whenAcct(a)) + '</small></span>'; }).join('') +
+      tr.map(x => '<span class="mv"><b>On its way</b> ' + U.money(x.amount) + ' <small>' + U.esc((x.from || '') + (x.to ? ' \u2192 ' + x.to : '')) + '</small></span>').join('') + '</div>';
+  }
   function cashSheet() {
     const c = latestCash(); if (!c) { updateCash(); return; }
     ui.sheet({ title: 'Free cash', kicker: (c.by === 'grok' ? 'From Grok · ' : 'You entered it · ') + whenAt(c), render(api) {
       const b = api.body, free = freeOf(c), held = heldOf(c).slice().sort((x, y) => String(x.due || '9').localeCompare(String(y.due || '9')));
       const card = h('<div class="card"></div>');
       const kv = (k, v, cls) => card.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + v + '</span></div>'));
-      (Array.isArray(c.accounts) ? c.accounts : []).forEach(a => kv(U.esc(a.name || 'Account'), U.money(a.amount, { cents: true })));
-      if (typeof c.cash === 'number') kv('<b>' + (Array.isArray(c.accounts) && c.accounts.length ? 'Total cash' : 'Cash') + '</b>', '<b>' + U.money(c.cash, { cents: true }) + '</b>');
+      const ac = accountsOf(c), tr = transitOf(c), cash = cashOf(c);
+      ac.forEach(a => kv(U.esc(a.name || 'Account') + ' <span class="muted">· ' + U.esc((a.carried ? 'last read ' : '') + whenAcct(a)) + '</span>', U.money(a.amount, { cents: true })));
+      tr.forEach(x => kv('On its way' + ' <span class="muted">· ' + U.esc((x.from || 'your account') + (x.to ? ' \u2192 ' + x.to : '')) + '</span>', '+ ' + U.money(x.amount, { cents: true })));
+      if (cash != null) kv('<b>' + (ac.length ? 'Total cash' : 'Cash') + '</b>', '<b>' + U.money(cash, { cents: true }) + '</b>');
       held.forEach(x => kv(U.esc(x.name || 'Held back') + (x.due ? ' <span class="muted">· ' + U.esc(dueLabel(x.due)) + '</span>' : ''), '− ' + U.money(x.amount, { cents: true })));
       kv('Free cash', U.money(free, { cents: true }), 'total');
       b.appendChild(card);
-      if (typeof c.free === 'number' && typeof c.cash === 'number' && Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free) > 1) b.appendChild(h('<p class="small">Grok’s free cash differs from cash minus what’s listed by ' + U.money(Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free)) + '. Ask Grok what else it held back.</p>'));
+      if (tr.length) b.appendChild(h('<p class="small">Money moving between your own accounts still counts as yours until it lands, so it isn\u2019t taken out of free cash.</p>'));
+      if (!computed(c) && typeof c.free === 'number' && typeof c.cash === 'number' && Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free) > 1) b.appendChild(h('<p class="small">Grok’s free cash differs from cash minus what’s listed by ' + U.money(Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free)) + '. Ask Grok what else it held back.</p>'));
       if (c.note) b.appendChild(h('<div class="g-take"><div class="tag">' + (c.by === 'grok' ? 'Grok’s note' : 'Your note') + '</div><div>' + U.esc(c.note) + '</div></div>'));
       const past = cashList().reverse().slice(1, 8);
       if (past.length) {
@@ -753,7 +809,7 @@
       const spent = weekSpent(w), every = weekEveryday(w);
       b.appendChild(h('<div class="figure"><div class="v num">' + U.money(spent) + '</div><div class="k">Spent</div><div class="sub">' + (spent - every > .005 ? U.money(every) + ' everyday · ' + U.money(spent - every) + ' one-off' : 'Tap a store to sort it or mark it one-off') + '</div></div>'));
       const groups = new Map();
-      (w.spent || []).forEach(x => { const g = groupOf(x.cat) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
+      spentOf(w).forEach(x => { const g = groupOf(x.cat) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
       const order = [...groups.keys()].sort((a, b) => (a === 'Not sorted yet') - (b === 'Not sorted yet') || U.sum(groups.get(b).map(x => x.amount)) - U.sum(groups.get(a).map(x => x.amount)));
       const card = h('<div class="card"></div>');
       order.forEach(g => {
@@ -766,7 +822,8 @@
           card.appendChild(r);
         });
       });
-      if (!(w.spent || []).length) card.appendChild(h('<p class="empty">No spending logged this week.</p>'));
+      if (!spentOf(w).length) card.appendChild(h('<p class="empty">No spending logged this week.</p>'));
+    movedCard(w, card);
       b.appendChild(card);
       const more = h('<div class="card" style="margin-top:12px"></div>');
       const kv = (k, v) => more.appendChild(h('<div class="kv"><span>' + k + '</span><span class="num">' + v + '</span></div>'));
@@ -831,7 +888,7 @@
       const pts = weeks().map(w => ({ date: w.weekEnding, v: weekSpent(w) }));
       if (pts.length > 1) { const box = h('<div style="padding:12px 0 4px"></div>'); box.appendChild(ui.chart(pts, { h: 90, fmt: x => U.money(x) })); hs.querySelector('.card').appendChild(box); }
       ws.forEach(w => {
-        const one = weekSpent(w) - weekEveryday(w), unsorted = (w.spent || []).filter(x => !groupOf(x.cat)).length;
+        const one = weekSpent(w) - weekEveryday(w), unsorted = spentOf(w).filter(x => !groupOf(x.cat)).length;
         const r = h('<div class="row tap"><span class="tx"><b>Week ending ' + U.fmtDateShort(w.weekEnding) + '</b><small>' + [w.paycheck != null ? 'Pay ' + U.money(w.paycheck, { cents: true }) : null, one > .005 ? 'incl. ' + U.money(one) + ' one-off' : null, unsorted ? '<span style="color:var(--warn)">' + unsorted + ' to sort</span>' : null, w.by === 'grok' || w.source === 'grok' ? 'from Grok' : 'by hand'].filter(Boolean).join(' · ') + '</small></span><span class="num">' + U.money(weekSpent(w), { cents: true }) + '</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>');
         r.onclick = () => weekSheet(w.weekEnding);
         hs.querySelector('.card').appendChild(r);
