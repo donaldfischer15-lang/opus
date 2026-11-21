@@ -100,7 +100,24 @@
     try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', e => { const m = e.data || {}; if (m.opus === 'go' && registry[m.tab]) go(m.tab); }); } catch (e) {}
     window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (registry[id] && id !== current) go(id); });
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/claudeusercontent|claude\.ai/.test(location.host)) {
-      try { navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
+      try {
+        // Opus opens from the phone (sw.js), so a new version arrives in the background. Switch to it right away
+        // if Opus was only just opened, or else the next time it comes back to the screen (logs are saved on the way out).
+        const born = Date.now(); let ready = false, looked = Date.now();
+        const hadOne = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (ready && !(Opus.store && Opus.store.data && Opus.store.data.rest) && !document.querySelector('.sheet')) { location.reload(); return; }
+            if (Date.now() - looked > 3600e3) { looked = Date.now(); reg.update().catch(() => {}); }
+          });
+        }).catch(() => {});
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!hadOne) return; // the very first install: this page is already the newest
+          const busy = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+          if (Date.now() - born < 8000 && !busy && !document.querySelector('.sheet')) location.reload(); else ready = true;
+        });
+      } catch (e) {}
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

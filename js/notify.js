@@ -73,6 +73,12 @@
         add(at(d, '08:00'), 'review', 'The week ahead', bits.length ? lower1(bits.join(', ')).replace(/^./, c => c.toUpperCase()) + '.' : 'A quiet week.');
       }
     }
+    // this phone's GitHub token: a week and a day before it runs out (the helper warns about its own token itself)
+    const ex = Opus.sync && Opus.sync.cfg && Opus.sync.cfg();
+    if (ex && ex.tokenExpires) {
+      const end = new Date(ex.tokenExpires + 'T12:00:00');
+      [7, 1].forEach(n => add(at(U.addDays(end, -n), '08:00'), 'sync', 'This phone’s GitHub sign-in runs out ' + (n === 1 ? 'tomorrow' : U.DAY_NAMES[end.getDay()]), 'Make a new token, then Settings › Sync › Paste a new token.', { tab: 'today' }));
+    }
     const t = st().test;
     // pinned to 20 seconds after the tap, so every sync writes the same time and the helper sends it exactly once
     if (t && new Date(t).getTime() > now.getTime() - 15 * 60000) out.push({ at: new Date(new Date(t).getTime() + 20000).toISOString(), kind: 'test', title: 'Opus', body: 'Notifications work. You can switch each kind on or off in Settings.', tab: 'today' });

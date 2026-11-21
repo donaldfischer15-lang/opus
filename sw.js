@@ -1,5 +1,6 @@
-/* Opus service worker: keeps the app working offline. Bump VERSION when files change. */
-const VERSION = 'opus-1.20.0';
+/* Opus service worker: opens Opus from this phone first, so it opens at once even with no signal.
+   Bump VERSION when files change: the new version downloads in the background and Opus switches to it. */
+const VERSION = 'opus-1.21.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js', 'js/changes.js', 'js/weekahead.js', 'js/notify.js', 'js/desk.js',
@@ -7,7 +8,7 @@ const SHELL = [
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/cassius.svg'
 ];
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && !k.startsWith('opus-fonts')).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -25,10 +26,17 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== location.origin) return;
-  // app files: network first so updates arrive, cache when offline
-  e.respondWith(fetch(e.request).then(r => {
-    const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); return r;
-  }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+  // a file asked for fresh (the guide Opus copies to GitHub) always comes from the network
+  if (e.request.cache === 'no-store') { e.respondWith(fetch(e.request).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || Response.error()))); return; }
+  // app files: straight from this phone, so Opus opens at once with a weak signal or none.
+  // The newest copy is fetched behind it for next time; a new version installs itself (see app.js).
+  e.respondWith(caches.open(VERSION).then(async c => {
+    const nav = e.request.mode === 'navigate';
+    const hit = await c.match(nav ? 'index.html' : e.request, { ignoreSearch: true });
+    const fresh = fetch(e.request).then(r => { if (r && r.ok && r.type === 'basic') c.put(nav ? 'index.html' : e.request, r.clone()); return r; });
+    if (hit) { e.waitUntil(fresh.catch(() => null)); return hit; }
+    return fresh.catch(() => c.match('index.html'));
+  }));
 });
 
 // notifications sent by the helper (see js/notify.js): show them, and open Opus on the right tab when tapped

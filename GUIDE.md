@@ -2,13 +2,35 @@
 
 Opus is a personal phone app (a home-screen web app). It reads **one plan file** and keeps **logs** on the phone. You help by editing the plan, reading the logs, and adding entries such as a weekly money block. Everything is plain JSON or plain text.
 
+## Reading this guide
+
+This first part (the core) is the rules every helper needs. Each tab has its own part below. Read the one for what you're doing, with `read_opus_file` file `guide` and `section` (the word in quotes):
+
+| part | section | read it to |
+|---|---|---|
+| 1. The plan file | `"1"` | the plan's shape, the schedule, Today's checklist, writing and the weekly review |
+| 2. Money | `"money"` | bills, debts, free cash, transfers, money weeks |
+| 3. Logs | `"logs"` | read what the owner entered on the phone |
+| 4. Your outbox | `"outbox"` | the rules for logging anything in `grok.json` |
+| 5. The Growth page | `"growth"` | Cassius only: `growth.json` |
+| 6. The desk | `"desk"` | leave Claude a note about the app |
+| 7. The shared memory | `"memory"` | `memory.md` |
+| 8. WHOOP | `"whoop"` | sleep, recovery and strain |
+| 9. Food | `"food"` | meals, portions, macros, saved foods, food eaten |
+| 10. Training | `"training"` | workouts, exercises, progression, plate math |
+| 11. Home and pets | `"home"` | home jobs, pets and pet care |
+| 12. Health | `"health"` | supplements, blood tests, daily amounts |
+| 13. Good requests | `"requests"` | examples of what the owner asks and what to do |
+
+`section` `"all"` gives the whole guide, in parts.
+
 ## Where the data lives
 
 The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Opus pulls it every time it opens and pushes the phone's logs back. These files sit in the repo:
 
 | file | who writes it | what it is |
 |---|---|---|
-| `plan.json` | **you** and the app | the plan (section 1). Edit it in place. |
+| `plan.json` | **you** and the app | the plan (section 1, and each tab's own part). Edit it in place. |
 | `logs.json` | **only the app** | everything logged on the phone (section 3). Read it, never edit it. |
 | `grok.json` | **only you** | your outbox: entries you log for the owner (section 4). |
 | `growth.json` | **only the teacher** (Cassius) | the Growth page: the Lamp, Before class, the Seal, the Season, the Map, the Portrait, the Library and Cassius's notes (section 5). Cassius writes it, through his own helper address (`save_growth`) or by committing it whole; the app only reads it. **Grok never writes it** (the owner's choice, 2026-11-20): Grok's helper address can read it but has no way to change it. |
@@ -28,7 +50,7 @@ If you have the opus connector, use its tools; they check everything before savi
 
 | tool | use it to |
 |---|---|
-| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox`, `growth`, `desk`, `memory` or `whoop`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`, memory `"Training"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
+| `read_opus_file` | read `guide` (this core; add `section` for a tab's part), `plan`, `logs`, `outbox`, `growth`, `desk`, `memory` or `whoop`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`, memory `"Training"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
 | `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
 | `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
 | `add_to_outbox` | log entries for the owner (section 4). |
@@ -59,7 +81,7 @@ The owner should never have to tell you something twice, or tell you to save it.
 - a new home job or a change to one (plan `home`), and anything about a pet: breed, birthday, food, vet, how often a care job is due (plan `home.pets`)
 - a supplement started, stopped or changed (plan `health.supplements`)
 - a weigh-in, a meal or food eaten, a workout done, or today's cash (the outbox, section 4)
-- blood test results, from a report or a photo of one (the outbox `labs`, section 4)
+- blood test results, from a report or a photo of one (the outbox `labs`, section 12)
 - pet care done, a pet weigh-in or a vet visit (the outbox `pets`), and a supplement taken (the outbox `supps`)
 
 Don't save guesses. If one detail is missing (an amount, a date), save what you know with `null` for the rest and ask for just that detail. If the owner is only thinking out loud ("maybe I'll drop Spotify"), ask before you change anything.
@@ -89,7 +111,7 @@ Don't save guesses. If one detail is missing (an amount, a date), save what you 
 
 ---
 
-## 1. Plan file (`"format": "opus-plan"`, `"version": 1`)
+## 1. The plan file (`"format": "opus-plan"`, `"version": 1`)
 
 ```json
 {
@@ -110,6 +132,8 @@ Don't save guesses. If one detail is missing (an amount, a date), save what you 
 }
 ```
 
+Each tab's part of the plan is described in that tab's part of this guide: `food` (9), `training` (10), `money` (2), `home` (11), `health` (12).
+
 ### schedule
 | key | meaning |
 |---|---|
@@ -128,79 +152,17 @@ Each item: `{ "id", "title", "part", "time", "days", "kind", "meal", "detail", "
 
 Opus also adds these to Today by itself: home items due that day, food prep on `food.prepDay`, the money check-in on `money.checkInDay`, the weekly review on `review.day`.
 
-### food
+### mind and review
 ```json
-{
-  "goal": { "start": 191, "target": 170, "unit": "lb" },
-  "budgetPerWeek": { "low": 100, "high": 150 },
-  "prepDay": "sun", "prepTime": "12:00",
-  "days": ["mon", "tue", "wed", "thu", "fri"],
-  "rules": ["Workday lunch is eaten cold."],
-  "sections": ["Produce", "Meat", "Dairy & eggs", "Bakery", "Pantry", "Frozen", "Other"],
-  "rotation": { "start": "2026-11-22", "weeks": [
-    { "name": "Week A", "breakfast": "eggs-yogurt", "lunch": "chicken-rice", "snack": "meat-stick", "dinner": "beef-chili" }
-  ]},
-  "meals": {
-    "chicken-rice": {
-      "name": "Chicken rice bowl", "slot": "lunch",
-      "how": "one line on what it is",
-      "serving": "6 oz cooked chicken thigh, 1 cup rice, 1 cup broccoli",
-      "macros": { "kcal": 580, "protein": 49, "carbs": 53, "fat": 17, "estimate": true },
-      "parts": [
-        { "name": "Chicken thigh, cooked", "amount": 170, "unit": "g", "macros": { "kcal": 354, "protein": 42, "carbs": 0, "fat": 19, "estimate": true },
-          "micros": { "fiber": 0, "sodium": 150, "potassium": 430, "calcium": 15, "iron": 1.6, "magnesium": 40, "zinc": 3.4, "vitA": 30, "vitC": 0, "vitD": 0.3, "b12": 0.8, "folate": 10, "estimate": true } },
-        { "name": "Rice, cooked", "amount": 1, "unit": "cup", "macros": { "kcal": 205, "protein": 4, "carbs": 45, "fat": 0.4, "estimate": true } },
-        { "name": "Broccoli", "amount": 1, "unit": "cup", "macros": { "kcal": 31, "protein": 2.6, "carbs": 6, "fat": 0.3, "estimate": true } }
-      ],
-      "prep": ["prep step", "prep step"],
-      "ingredients": [ { "item": "Chicken thighs", "qty": "3 lb", "section": "Meat" } ]
-    }
-  },
-  "library": [
-    { "name": "Greek yogurt cup", "amount": 1, "unit": "cup", "macros": { "kcal": 140, "protein": 15, "carbs": 10, "fat": 4, "estimate": false } }
-  ]
-}
+"mind":   { "writing": { "goal": "I write clearly", "sentences": 5, "prompts": ["..."] } },
+"review": { "day": "sun", "time": "19:30", "questions": ["What worked?", "What slipped?", "One change for next week"] }
 ```
-- `days` (optional) lists the days the meal plan covers. The other days are **off days**: no planned meals, and Today shows *Log what you eat* instead. Give the meal items in `routine` the same `days`, and size `prep` and `ingredients` for that many servings (five for Monday to Friday). Food the owner logs on off days is in logs `eaten` like any extra. Leave `days` out to plan every day.
-- When the owner adds food, Opus searches their own foods, then the free USDA FoodData Central database, then Open Food Facts for brands, and fills in macros, vitamins and minerals for the amount picked. What they log arrives in logs `eaten` with those numbers; nothing for you to do.
-- The same meals are eaten all week. Week 1 of the rotation begins the Sunday of `rotation.start`, then the weeks repeat in order.
-- **Ingredient amounts are for the whole week** (one batch). The grocery list merges the same `item` across meals and groups by `section` in `sections` order.
-- Every meal id used in `rotation.weeks` must exist in `meals`.
-- **`macros` are per serving** (one serving as eaten, described in `serving`): `kcal`, then `protein`, `carbs`, `fat` in grams. Set `"estimate": true` when the numbers come from standard nutrition values, `false` when they come from the owner's labels. Use `null` for anything unknown. The app adds up the meals on Today and shows how much has been eaten so far. When you change a meal's ingredients or portion, update its `serving` and `macros` too.
-- **`parts`** are the pieces of one serving, so the owner can tick off only what was eaten (just the banana) or change an amount (150 g of chicken, not 200). Each part has `name`, `amount` (a number), `unit` (`"g"`, `"cup"`, `"tbsp"`, or `""` for a count like 4 eggs) and `macros` **for that amount**. When every part has macros, the meal's macros are their sum, so keep `macros` equal to that sum. Keep part names stable: what was eaten is logged by part name. When you change a meal, change its `parts`, `serving`, `macros`, `ingredients` and `prep` together, and save the whole `food` section (or `food.meals`) with `update_plan_section`.
-- **`micros`** (optional, on a part or a saved food) are the vitamins and minerals **for that amount**, from standard nutrition values (USDA FoodData Central), with `"estimate": true`. The keys and units are fixed: `fiber` g, `sodium` mg, `potassium` mg, `calcium` mg, `iron` mg, `magnesium` mg, `zinc` mg, `vitA` µg RAE, `vitC` mg, `vitD` µg, `b12` µg, `folate` µg DFE. Any other key is refused. Use `null` for a nutrient you don't know. Sodium leaves out salt and seasoning added while cooking. Opus adds them up on Food › Vitamins & minerals and names every food that has no `micros`, so when you add or change a meal or a saved food, give each part its `micros` too.
-- **`library`** is the owner's saved foods: things the owner eats outside the plan (a yogurt cup, a protein bar). Each has `name`, `amount`, `unit` and `macros` for that amount. They show as one-tap choices in Food › Add food, and Opus scales the macros when the amount changes. Add to it when the owner mentions a food they eat often; they can add to it on the phone too.
 
-### training
-```json
-{
-  "schedule": { "tue": "lower-a", "thu": "upper-a", "sat": "lower-b", "sun": "upper-b" },
-  "rest": { "compound": 180, "accessory": 120, "isolation": 75, "conditioning": 60 },
-  "bar": 45,
-  "plates": [45, 35, 25, 10, 5, 2.5],
-  "dumbbells": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 52.5, 55, 60],
-  "increments": { "barbell-lower": 10, "barbell-upper": 5, "machine": 10, "cable": 5 },
-  "exercises": { "back-squat": { "name": "Back squat", "type": "compound", "load": "barbell-lower" } },
-  "workouts": {
-    "lower-a": {
-      "name": "Lower A", "focus": "Squat strength",
-      "warmup": ["..."], "cooldown": ["..."],
-      "blocks": [ { "ex": "back-squat", "sets": 4, "reps": [6, 8], "start": 230 } ],
-      "conditioning": { "name": "Bike intervals", "detail": "8 rounds: 20 s hard, 40 s easy", "minutes": 8, "rounds": 8, "work": 20, "rest": 40 }
-    }
-  }
-}
-```
-- `type` sets the rest timer: `compound` (longest), `accessory`, `isolation` (shortest), `conditioning`.
-- `load` sets how weight goes up: `barbell-lower` (+10 lb), `barbell-upper` (+5), `dumbbell` (next size in `dumbbells`), `machine`, `cable`, `bodyweight` (adds reps).
-- `reps` is `[low, high]`. Progression is double progression: when every set reaches `high` at a weight, the next session suggests the next weight at `low` reps. Two sessions in a row below `low` suggests about 10% less.
-- `start` is the first-session weight, or `null` if unknown.
-- Optional on an exercise or a block: `cue` (one coaching line shown under the exercise in the logger; a block's cue wins), `perSide` on a block or `repsNote` on an exercise (e.g. `"per leg"`, shown after the reps), and `optional: true` on a block (marked "Optional · first to cut" and left out of the set count unless started).
-- `rounds`, `work`, `rest` (seconds) on conditioning turn on the interval timer.
-- `base` on an exercise (a number, lb) is what a plate-loaded machine weighs with no plates on it. It turns on plate math for that exercise in the logger: weights are logged as the total, and Opus shows the plates per side. Barbell lifts use `bar` and need no `base`.
-- Exercises the owner adds in the logger are saved into `exercises` with an id made from the name (e.g. `suitcase-march`). Keep them.
+---
 
-### money
+## 2. Money
+
+### The plan's `money`
 ```json
 {
   "currency": "USD",
@@ -231,50 +193,21 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - Notifications: the owner's phone writes `push.json` in this repo (its push address and the next week of reminders, worked out from the plan). Never edit `push.json`. Reminders follow the plan, so a time on a routine item, a bill's `dueDay` and a pet's care `every` all become reminders. When you save a change, the `change` line you send is shown to the owner as a notification, so write it as a short plain sentence ("Credit card rate set to 24.99%").
 - Debt-free date: each month pays every minimum, then the rest of the debt money goes to the first debt in order. Interest uses `apr` when set.
 
-### home
-`{ "id", "title", "area", "days", "monthDay", "part", "time", "note", "pet" }`. Use `days` (same rules as routine) or `monthDay` (1–28) for monthly jobs. Items show on Today only on the days they are due. `pet` (optional) ties a daily job to a pet, by its id or a list of ids (`"pet": ["dog-id", "cat-id"]` for feeding both); the job then shows on that pet's card with how many days this week it was done.
+### Money in your outbox (`money.cash`, `money.weeks`, `money.balances`)
 
-#### home.pets
-Each pet gets its own section on Home and a profile. Everything except `id` and `name` may be `null` until it is known.
-```json
-"pets": [
-  { "id": "the-dog", "name": "Rex", "kind": "dog", "breed": "Beagle", "sex": "male",
-    "born": null, "age": 4, "ageAsOf": "2026-11-16", "weightLb": 30,
-    "food": null, "amount": null,
-    "feeding": [ { "who": "me", "when": "in the morning" }, { "who": "Dad", "when": "around 2 PM" } ],
-    "vet": { "name": null, "phone": null },
-    "care": [ { "id": "flea-tick", "title": "Flea and tick", "every": { "n": 1, "unit": "month" } },
-              { "id": "nails", "title": "Nails", "every": null, "part": "evening" } ],
-    "notes": ["one line each"] }
-]
-```
-- `kind` is `dog`, `cat` or `other`. `born` (a date) beats `age`; with only `age`, `ageAsOf` is the day it was true, so Opus can count up. `weightLb` is the starting weight; later weigh-ins go in the outbox `pets` with care `"weight"`.
-- `feeding[].who` is `"me"` for the owner, otherwise a name. `food` is the brand and kind; `amount` is per meal (text, e.g. "1½ cups").
-- `care` is anything done every so often. `every` is `{ "n", "unit" }` with unit `day`, `week` or `month`, or `null` when the owner hasn't said. Once a care job is logged and has `every`, Opus shows it on Today when it comes due (and keeps it there, marked overdue, until it is done). Care ids `weight` and `vet` are reserved. Keep each care `id` the same forever; the history is filed under it.
-- The profile lists what is still unknown ("Not known yet: …"). Fill those from the owner's own words, never by guessing.
+The outbox rules are in section 4; these are the money ones.
 
-### health
-```json
-"health": { "reference": "men-31-50" }
-```
-- `reference` is which daily amounts Food › Vitamins & minerals compares against: `"men-19-30"`, `"men-31-50"`, `"women-19-30"` or `"women-31-50"` (US Dietary Reference Intakes). The owner picks it on the phone the first time. Never set or change it yourself unless the owner tells you which.
-- Blood test results are not in the plan: they go in the outbox `labs` (section 4) and live in `logs.json` `labs`.
-- `supplements` is what the owner takes, ticked on Today and kept on Food › Supplements:
-```json
-"supplements": [ { "id": "fish-oil", "name": "Fish oil", "dose": "2 capsules", "part": "morning", "time": null,
-                   "days": "all", "withFood": true, "note": null, "since": "2026-11-18", "supply": { "left": 90, "asOf": "2026-11-18", "perDose": 2 } } ]
-```
-  `part` is `morning`, `workday` or `evening` (all of one part share one row on Today). `days` follows the routine rules. `supply` is optional: how many were on hand on `asOf` and how many one dose uses; Opus counts down from the days taken after `asOf`, warns about ten days before it runs out and adds it to the grocery list. `since` is the day they started it (Opus counts how often it was taken from then). Set `"active": false` to pause one without losing its history. Keep each `id` the same forever. Add only what the owner says they take; never suggest one, and never set a dose they didn't give.
+- **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
+  - `cash` is the total in the accounts they spend from (checking plus cash; not savings unless they say so). List each in `accounts`.
+  - `held` is everything that has to come out before payday: bills due by then (loan minimums included) and money they set aside. Leave out the weekly `plannedDebtPerWeek` payment: Opus takes that out itself in Yours this week. If you do list it, name it with the word "debt" so Opus doesn't count it twice. Give each a `due` date when it has one.
+  - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
+  - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
+  - Update it whenever you look at their accounts, and at least once a day if you can.
+  - **Moving money between the owner's own accounts is never spending.** A transfer from one of their accounts to another (to cover a bill paid from the second, say) leaves `cash` the same. While it is on its way (gone from one account, not yet in the other), list it in `transfers`: `[{ "from": "Checking", "to": "Bills account", "amount": 400, "pending": true }]`, and keep the bill it is for in `held`. Once it lands, send the new balances and `"transfers": []`. Opus then works out `cash` and `free` itself from the accounts, the money on its way and `held`, so don't take a transfer out of `free`. In a money week, a transfer goes in `transfers` (`{ "from", "to", "amount" }`), never in `spent`; Opus shows it as moved and leaves it out of the totals.
+  - **Update one account at a time** when that's all you read: send that day's `date` with just `accounts` (each `{ "name", "amount", "at" }`, `at` being when you read that account) and no `cash`, `free` or `held`. The helper folds it into that day's reading and keeps the other accounts with their own times; Opus works out the totals. On a new day, an entry with only `accounts` keeps the last `held` list (minus anything past due). Use the same account names every time, as in earlier readings. Give `at` on each account only when you actually read that account then: Money shows each balance with its time, and marks one older than a day and a half.
+- A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
 
-### mind and review
-```json
-"mind":   { "writing": { "goal": "I write clearly", "sentences": 5, "prompts": ["..."] } },
-"review": { "day": "sun", "time": "19:30", "questions": ["What worked?", "What slipped?", "One change for next week"] }
-```
-
----
-
-## 2. Weekly money block (paste route, every Friday)
+### The weekly money block (paste route, every Friday)
 
 With sync, put the week in `grok.json` instead (section 4). Without it, Grok replies with this block and the owner pastes it.
 
@@ -408,22 +341,12 @@ Put only new or corrected entries here. You may replace the whole file each time
   "supps": [ { "id": "2026-11-27:fish-oil", "date": "2026-11-27", "supp": "fish-oil" } ]
 }
 ```
-- **Free cash (`money.cash`)** is the big number at the top of Money: the cash the owner can use that isn't needed for bills or anything else before the next payday (`money.payday` in the plan).
-  - `cash` is the total in the accounts they spend from (checking plus cash; not savings unless they say so). List each in `accounts`.
-  - `held` is everything that has to come out before payday: bills due by then (loan minimums included) and money they set aside. Leave out the weekly `plannedDebtPerWeek` payment: Opus takes that out itself in Yours this week. If you do list it, name it with the word "debt" so Opus doesn't count it twice. Give each a `due` date when it has one.
-  - `free` is `cash` minus everything in `held`. If you leave it out, Opus works it out.
-  - `at` is when you read the accounts (ISO time). One entry per day: send the same `date` again to update it. The newest reading wins, even over one the owner typed in.
-  - Update it whenever you look at their accounts, and at least once a day if you can.
-  - **Moving money between the owner's own accounts is never spending.** A transfer from one of their accounts to another (to cover a bill paid from the second, say) leaves `cash` the same. While it is on its way (gone from one account, not yet in the other), list it in `transfers`: `[{ "from": "Checking", "to": "Bills account", "amount": 400, "pending": true }]`, and keep the bill it is for in `held`. Once it lands, send the new balances and `"transfers": []`. Opus then works out `cash` and `free` itself from the accounts, the money on its way and `held`, so don't take a transfer out of `free`. In a money week, a transfer goes in `transfers` (`{ "from", "to", "amount" }`), never in `spent`; Opus shows it as moved and leaves it out of the totals.
-  - **Update one account at a time** when that's all you read: send that day's `date` with just `accounts` (each `{ "name", "amount", "at" }`, `at` being when you read that account) and no `cash`, `free` or `held`. The helper folds it into that day's reading and keeps the other accounts with their own times; Opus works out the totals. On a new day, an entry with only `accounts` keeps the last `held` list (minus anything past due). Use the same account names every time, as in earlier readings. Give `at` on each account only when you actually read that account then: Money shows each balance with its time, and marks one older than a day and a half.
-- **Food the owner tells you they ate (`eaten`)** shows on Food › Today as something extra and counts in the day's totals. Give each a made-up `id` (e.g. `"grok-2026-11-27-shake"`), `date` and `name`; add `amount`, `unit`, `slot` and `macros` when you know them (`null` when you don't). If it is a planned meal eaten as planned, don't log it here; the owner ticks it on the phone.
-- **Blood tests (`labs`)**: when the owner sends a lab report or a photo of one, copy every result exactly as printed: `name`, `value` (a number), `unit`, and the lab's reference `range` as printed, with its numbers in `low` and `high` (leave one out for a range like "<100" or ">40"). `date` is the date the blood was drawn. One entry per test date; send the same `date` again to correct it. Read every number twice; if one is hard to read, leave that marker out and ask. Don't interpret, diagnose or suggest treatment. If a result is outside the lab's range, say only that, and that it is worth raising with their doctor. Opus shows the results under Food › Vitamins & minerals › Blood tests, with trends, beside the food estimates.
-- **Pet care (`pets`)**: `id` is exactly `date:pet:care`, using ids from `home.pets`. Weigh-ins use care `"weight"` with `lb`; vet visits use `"vet"` with a one-line `note`. If the owner mentions a care job the pet doesn't have yet, add it to that pet's `care` in the plan first.
-- **Supplements (`supps`)**: `id` is exactly `date:supp`, using ids from `health.supplements`. Log one only when the owner says they took it.
+
+Each section's own rules are in its tab's part: `money.*` in 2, `eaten` in 9, `pets` in 11, `labs` and `supps` in 12. These hold for all of them:
+
 - Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a blood test by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.
 - Except for cash readings: if the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
-- A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
 - Same rules as everywhere: plain numbers, `null` or leave the line out when unknown, nothing invented.
 
 ---
@@ -490,7 +413,7 @@ Claude builds and maintains the Opus app itself. You can change the plan, the ou
 - you need a place to save something and no section fits
 - a question about how Opus reads a file
 
-Read the desk first (`read_opus_file` file `desk`) so you don't repeat an open note, and read it at the start of a conversation to see Claude's replies. Claude checks it each evening, answers on the desk, and asks the owner before building anything. When a note is settled, close it (`leave_note` with `close`). Never put passwords, tokens or account numbers in a note.
+Read the desk first (`read_opus_file` file `desk`) so you don't repeat an open note, and read it at the start of a conversation to see Claude's replies. Claude reads it whenever it works on Opus, answers on the desk, and asks the owner before building anything. The owner sees open notes in Opus (Settings › Desk), so a note that needs them reaches them too. When a note is settled, close it (`leave_note` with `close`). Never put passwords, tokens or account numbers in a note.
 
 ```json
 { "format": "opus-desk", "version": 1, "updated": "2026-11-19T22:30:00Z",
@@ -510,7 +433,7 @@ The owner wants you and Claude to know the same things about them. Everything yo
 - When a fact changes, remove the old line and add the new one, so the memory stays current rather than growing.
 - Read it at the start of a conversation (`read_opus_file` file `memory`), so you know what Claude added.
 - Never put passwords, sign-in codes, card, bank or account numbers, or ID numbers in it. The helper refuses lines that look like them.
-- Claude reads it each evening and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
+- Claude reads it whenever it works on Opus and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
 
 ## 8. WHOOP (`whoop.json`, `"format": "opus-whoop"`)
 
@@ -529,13 +452,153 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
 - Opus shows it on Today (last night), Train (what today's recovery means), Food (calories burned so far) and the weekly review (the week's averages). It keeps 60 days.
 - Nothing here is a diagnosis. Never draw health conclusions from it; say what the numbers are and suggest the owner ask a doctor about anything that worries them.
 
-## Good requests to expect
+---
+
+## 9. Food
+
+### The plan's `food`
+```json
+{
+  "goal": { "start": 191, "target": 170, "unit": "lb" },
+  "budgetPerWeek": { "low": 100, "high": 150 },
+  "prepDay": "sun", "prepTime": "12:00",
+  "days": ["mon", "tue", "wed", "thu", "fri"],
+  "rules": ["Workday lunch is eaten cold."],
+  "sections": ["Produce", "Meat", "Dairy & eggs", "Bakery", "Pantry", "Frozen", "Other"],
+  "rotation": { "start": "2026-11-22", "weeks": [
+    { "name": "Week A", "breakfast": "eggs-yogurt", "lunch": "chicken-rice", "snack": "meat-stick", "dinner": "beef-chili" }
+  ]},
+  "meals": {
+    "chicken-rice": {
+      "name": "Chicken rice bowl", "slot": "lunch",
+      "how": "one line on what it is",
+      "serving": "6 oz cooked chicken thigh, 1 cup rice, 1 cup broccoli",
+      "macros": { "kcal": 580, "protein": 49, "carbs": 53, "fat": 17, "estimate": true },
+      "parts": [
+        { "name": "Chicken thigh, cooked", "amount": 170, "unit": "g", "macros": { "kcal": 354, "protein": 42, "carbs": 0, "fat": 19, "estimate": true },
+          "micros": { "fiber": 0, "sodium": 150, "potassium": 430, "calcium": 15, "iron": 1.6, "magnesium": 40, "zinc": 3.4, "vitA": 30, "vitC": 0, "vitD": 0.3, "b12": 0.8, "folate": 10, "estimate": true } },
+        { "name": "Rice, cooked", "amount": 1, "unit": "cup", "macros": { "kcal": 205, "protein": 4, "carbs": 45, "fat": 0.4, "estimate": true } },
+        { "name": "Broccoli", "amount": 1, "unit": "cup", "macros": { "kcal": 31, "protein": 2.6, "carbs": 6, "fat": 0.3, "estimate": true } }
+      ],
+      "prep": ["prep step", "prep step"],
+      "ingredients": [ { "item": "Chicken thighs", "qty": "3 lb", "section": "Meat" } ]
+    }
+  },
+  "library": [
+    { "name": "Greek yogurt cup", "amount": 1, "unit": "cup", "macros": { "kcal": 140, "protein": 15, "carbs": 10, "fat": 4, "estimate": false } }
+  ]
+}
+```
+- `days` (optional) lists the days the meal plan covers. The other days are **off days**: no planned meals, and Today shows *Log what you eat* instead. Give the meal items in `routine` the same `days`, and size `prep` and `ingredients` for that many servings (five for Monday to Friday). Food the owner logs on off days is in logs `eaten` like any extra. Leave `days` out to plan every day.
+- When the owner adds food, Opus searches their own foods, then the free USDA FoodData Central database, then Open Food Facts for brands, and fills in macros, vitamins and minerals for the amount picked. What they log arrives in logs `eaten` with those numbers; nothing for you to do.
+- The same meals are eaten all week. Week 1 of the rotation begins the Sunday of `rotation.start`, then the weeks repeat in order.
+- **Ingredient amounts are for the whole week** (one batch). The grocery list merges the same `item` across meals and groups by `section` in `sections` order.
+- Every meal id used in `rotation.weeks` must exist in `meals`.
+- **`macros` are per serving** (one serving as eaten, described in `serving`): `kcal`, then `protein`, `carbs`, `fat` in grams. Set `"estimate": true` when the numbers come from standard nutrition values, `false` when they come from the owner's labels. Use `null` for anything unknown. The app adds up the meals on Today and shows how much has been eaten so far. When you change a meal's ingredients or portion, update its `serving` and `macros` too.
+- **`parts`** are the pieces of one serving, so the owner can tick off only what was eaten (just the banana) or change an amount (150 g of chicken, not 200). Each part has `name`, `amount` (a number), `unit` (`"g"`, `"cup"`, `"tbsp"`, or `""` for a count like 4 eggs) and `macros` **for that amount**. When every part has macros, the meal's macros are their sum, so keep `macros` equal to that sum. Keep part names stable: what was eaten is logged by part name. When you change a meal, change its `parts`, `serving`, `macros`, `ingredients` and `prep` together, and save the whole `food` section (or `food.meals`) with `update_plan_section`.
+- **`micros`** (optional, on a part or a saved food) are the vitamins and minerals **for that amount**, from standard nutrition values (USDA FoodData Central), with `"estimate": true`. The keys and units are fixed: `fiber` g, `sodium` mg, `potassium` mg, `calcium` mg, `iron` mg, `magnesium` mg, `zinc` mg, `vitA` µg RAE, `vitC` mg, `vitD` µg, `b12` µg, `folate` µg DFE. Any other key is refused. Use `null` for a nutrient you don't know. Sodium leaves out salt and seasoning added while cooking. Opus adds them up on Food › Vitamins & minerals and names every food that has no `micros`, so when you add or change a meal or a saved food, give each part its `micros` too.
+- **`library`** is the owner's saved foods: things the owner eats outside the plan (a yogurt cup, a protein bar). Each has `name`, `amount`, `unit` and `macros` for that amount. They show as one-tap choices in Food › Add food, and Opus scales the macros when the amount changes. Add to it when the owner mentions a food they eat often; they can add to it on the phone too.
+
+### Food in your outbox (`eaten`)
+
+- **Food the owner tells you they ate (`eaten`)** shows on Food › Today as something extra and counts in the day's totals. Give each a made-up `id` (e.g. `"grok-2026-11-27-shake"`), `date` and `name`; add `amount`, `unit`, `slot` and `macros` when you know them (`null` when you don't). If it is a planned meal eaten as planned, don't log it here; the owner ticks it on the phone.
+
+---
+
+## 10. Training
+
+### The plan's `training`
+```json
+{
+  "schedule": { "tue": "lower-a", "thu": "upper-a", "sat": "lower-b", "sun": "upper-b" },
+  "rest": { "compound": 180, "accessory": 120, "isolation": 75, "conditioning": 60 },
+  "bar": 45,
+  "plates": [45, 35, 25, 10, 5, 2.5],
+  "dumbbells": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 52.5, 55, 60],
+  "increments": { "barbell-lower": 10, "barbell-upper": 5, "machine": 10, "cable": 5 },
+  "exercises": { "back-squat": { "name": "Back squat", "type": "compound", "load": "barbell-lower" } },
+  "workouts": {
+    "lower-a": {
+      "name": "Lower A", "focus": "Squat strength",
+      "warmup": ["..."], "cooldown": ["..."],
+      "blocks": [ { "ex": "back-squat", "sets": 4, "reps": [6, 8], "start": 230 } ],
+      "conditioning": { "name": "Bike intervals", "detail": "8 rounds: 20 s hard, 40 s easy", "minutes": 8, "rounds": 8, "work": 20, "rest": 40 }
+    }
+  }
+}
+```
+- `type` sets the rest timer: `compound` (longest), `accessory`, `isolation` (shortest), `conditioning`.
+- `load` sets how weight goes up: `barbell-lower` (+10 lb), `barbell-upper` (+5), `dumbbell` (next size in `dumbbells`), `machine`, `cable`, `bodyweight` (adds reps).
+- `reps` is `[low, high]`. Progression is double progression: when every set reaches `high` at a weight, the next session suggests the next weight at `low` reps. Two sessions in a row below `low` suggests about 10% less.
+- `start` is the first-session weight, or `null` if unknown.
+- Optional on an exercise or a block: `cue` (one coaching line shown under the exercise in the logger; a block's cue wins), `perSide` on a block or `repsNote` on an exercise (e.g. `"per leg"`, shown after the reps), and `optional: true` on a block (marked "Optional · first to cut" and left out of the set count unless started).
+- `rounds`, `work`, `rest` (seconds) on conditioning turn on the interval timer.
+- `base` on an exercise (a number, lb) is what a plate-loaded machine weighs with no plates on it. It turns on plate math for that exercise in the logger: weights are logged as the total, and Opus shows the plates per side. Barbell lifts use `bar` and need no `base`.
+- Exercises the owner adds in the logger are saved into `exercises` with an id made from the name (e.g. `suitcase-march`). Keep them.
+
+Workouts and weigh-ins the owner tells you about go in the outbox `workouts` and `weights` (section 4).
+
+---
+
+## 11. Home and pets
+
+### The plan's `home`
+`{ "id", "title", "area", "days", "monthDay", "part", "time", "note", "pet" }`. Use `days` (same rules as routine) or `monthDay` (1–28) for monthly jobs. Items show on Today only on the days they are due. `pet` (optional) ties a daily job to a pet, by its id or a list of ids (`"pet": ["dog-id", "cat-id"]` for feeding both); the job then shows on that pet's card with how many days this week it was done.
+
+### `home.pets`
+Each pet gets its own section on Home and a profile. Everything except `id` and `name` may be `null` until it is known.
+```json
+"pets": [
+  { "id": "the-dog", "name": "Rex", "kind": "dog", "breed": "Beagle", "sex": "male",
+    "born": null, "age": 4, "ageAsOf": "2026-11-16", "weightLb": 30,
+    "food": null, "amount": null,
+    "feeding": [ { "who": "me", "when": "in the morning" }, { "who": "Dad", "when": "around 2 PM" } ],
+    "vet": { "name": null, "phone": null },
+    "care": [ { "id": "flea-tick", "title": "Flea and tick", "every": { "n": 1, "unit": "month" } },
+              { "id": "nails", "title": "Nails", "every": null, "part": "evening" } ],
+    "notes": ["one line each"] }
+]
+```
+- `kind` is `dog`, `cat` or `other`. `born` (a date) beats `age`; with only `age`, `ageAsOf` is the day it was true, so Opus can count up. `weightLb` is the starting weight; later weigh-ins go in the outbox `pets` with care `"weight"`.
+- `feeding[].who` is `"me"` for the owner, otherwise a name. `food` is the brand and kind; `amount` is per meal (text, e.g. "1½ cups").
+- `care` is anything done every so often. `every` is `{ "n", "unit" }` with unit `day`, `week` or `month`, or `null` when the owner hasn't said. Once a care job is logged and has `every`, Opus shows it on Today when it comes due (and keeps it there, marked overdue, until it is done). Care ids `weight` and `vet` are reserved. Keep each care `id` the same forever; the history is filed under it.
+- The profile lists what is still unknown ("Not known yet: …"). Fill those from the owner's own words, never by guessing.
+
+### Pet care in your outbox (`pets`)
+
+- **Pet care (`pets`)**: `id` is exactly `date:pet:care`, using ids from `home.pets`. Weigh-ins use care `"weight"` with `lb`; vet visits use `"vet"` with a one-line `note`. If the owner mentions a care job the pet doesn't have yet, add it to that pet's `care` in the plan first.
+
+---
+
+## 12. Health
+
+### The plan's `health`
+```json
+"health": { "reference": "men-31-50" }
+```
+- `reference` is which daily amounts Food › Vitamins & minerals compares against: `"men-19-30"`, `"men-31-50"`, `"women-19-30"` or `"women-31-50"` (US Dietary Reference Intakes). The owner picks it on the phone the first time. Never set or change it yourself unless the owner tells you which.
+- Blood test results are not in the plan: they go in the outbox `labs` (below) and live in `logs.json` `labs`.
+- `supplements` is what the owner takes, ticked on Today and kept on Food › Supplements:
+```json
+"supplements": [ { "id": "fish-oil", "name": "Fish oil", "dose": "2 capsules", "part": "morning", "time": null,
+                   "days": "all", "withFood": true, "note": null, "since": "2026-11-18", "supply": { "left": 90, "asOf": "2026-11-18", "perDose": 2 } } ]
+```
+  `part` is `morning`, `workday` or `evening` (all of one part share one row on Today). `days` follows the routine rules. `supply` is optional: how many were on hand on `asOf` and how many one dose uses; Opus counts down from the days taken after `asOf`, warns about ten days before it runs out and adds it to the grocery list. `since` is the day they started it (Opus counts how often it was taken from then). Set `"active": false` to pause one without losing its history. Keep each `id` the same forever. Add only what the owner says they take; never suggest one, and never set a dose they didn't give.
+
+### Blood tests and supplements in your outbox (`labs`, `supps`)
+
+- **Blood tests (`labs`)**: when the owner sends a lab report or a photo of one, copy every result exactly as printed: `name`, `value` (a number), `unit`, and the lab's reference `range` as printed, with its numbers in `low` and `high` (leave one out for a range like "<100" or ">40"). `date` is the date the blood was drawn. One entry per test date; send the same `date` again to correct it. Read every number twice; if one is hard to read, leave that marker out and ask. Don't interpret, diagnose or suggest treatment. If a result is outside the lab's range, say only that, and that it is worth raising with their doctor. Opus shows the results under Food › Vitamins & minerals › Blood tests, with trends, beside the food estimates.
+- **Supplements (`supps`)**: `id` is exactly `date:supp`, using ids from `health.supplements`. Log one only when the owner says they took it.
+
+---
+
+## 13. Good requests to expect
 
 - "Sync Opus." Do the steps under *Keeping Opus current*, then report what you saved and what only the owner can answer.
 - "Swap Week B dinner for something with ground beef." With the helper: read section `food`, change it, save with `update_plan_section` section `food`. Edit `food.meals` (with the new meal's `parts`, `serving`, `macros`, `ingredients` and `prep`) and `food.rotation`, keep ingredient amounts weekly.
 - "Breakfast is 3 eggs now, not 4." Change that meal's egg part (`amount` and its `macros`), then its `serving` and `macros` sum, and the weekly egg `qty` in `ingredients`.
 - "I had a protein shake after the gym." Add it to the outbox `eaten`. If they have it often, also add it to `food.library`.
-- "Add my blood test to Opus" (with a photo or PDF of the report). Copy every result into the outbox `labs` as described in section 4, then list what you saved and anything you couldn't read.
+- "Add my blood test to Opus" (with a photo or PDF of the report). Copy every result into the outbox `labs` as described in section 12, then list what you saved and anything you couldn't read.
 - "How are my vitamins looking?" Add up `micros` for what they ate (planned meals ticked, scaled by `eaten` parts, plus extras) and compare with the daily amounts for `health.reference`; name the foods without `micros`. Put any blood results beside them. No diagnosis; anything outside the lab's range is for their doctor.
 - "I gave the dog the flea pill." Add a `pets` entry for today with that care id. If its `every` is `null`, ask how often it's due and save that to the pet's `care`.
 - "The cat weighs 11 pounds now." Add a `pets` entry with care `"weight"` and `lb`.

@@ -96,7 +96,8 @@
       const f1 = h('<div class="field"><label for="sy-owner">GitHub username</label><input class="input" id="sy-owner" autocomplete="username" autocapitalize="none" spellcheck="false"></div>');
       const f2 = h('<div class="field"><label for="sy-repo">Repo</label><input class="input" id="sy-repo" autocapitalize="none" spellcheck="false" value="opus-data"></div>');
       const f3 = h('<div class="field"><label for="sy-token">Token</label><input class="input mono" id="sy-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="github_pat_…"></div>');
-      [f1, f2, f3].forEach(x => card.appendChild(x));
+      const f4 = h('<div class="field"><label for="sy-exp">Token runs out (optional)</label><input class="input" id="sy-exp" type="date"><small class="small">The date GitHub showed when you made it. Opus warns you a week before.</small></div>');
+      [f1, f2, f3, f4].forEach(x => card.appendChild(x));
       const out = h('<div></div>'); card.appendChild(out);
       const go = h('<button class="btn block" type="button">Connect</button>'); card.appendChild(go);
       go.onclick = async () => {
@@ -107,10 +108,11 @@
         const ck = await S.check(owner, repo, token);
         if (!ck.ok) { go.disabled = false; go.textContent = 'Connect'; out.appendChild(h('<div class="banner">' + U.esc(ck.error) + '</div>')); return; }
         go.textContent = 'Syncing…';
-        let res = await S.connect(owner, repo, token);
+        const exp = f4.querySelector('input').value;
+        let res = await S.connect(owner, repo, token, undefined, exp);
         if (res && res.choose) {
           const useGit = await ui.ask({ title: 'GitHub already has a plan', text: 'The repo has “' + (res.choose.name || 'a plan') + '”' + (res.choose.updated ? ' from ' + res.choose.updated : '') + ', and it differs from the plan on this phone. Which one should Opus use? Your logs are kept either way.', yes: 'Use GitHub’s plan', no: 'Keep this phone’s' });
-          res = await S.connect(owner, repo, token, useGit ? 'github' : 'phone');
+          res = await S.connect(owner, repo, token, useGit ? 'github' : 'phone', exp);
         }
         if (res && res.error) ui.toast(res.error.message);
         else ui.toast('Connected to ' + owner + '/' + repo);
@@ -142,6 +144,7 @@
     if (hv.behind) card.appendChild(h('<div class="banner"><b>The Grok helper is behind.</b><br>It’s on ' + U.esc(hv.have) + ', and this Opus needs ' + U.esc(hv.want) + ', so Grok’s newest saves may fail. If Cloudflare is linked to your opus repo, it catches up on its own within the hour. If not, paste the new helper code into Cloudflare once.</div>'));
     const facts = [];
     facts.push('Grok helper: ' + (hv.have ? hv.have + (hv.behind ? ' (needs ' + hv.want + ')' : ', up to date') : 'reports in after its next update'));
+    if (c.helper && c.helper.expires) facts.push('Helper’s GitHub sign-in runs out ' + U.fmtDateShort(new Date(c.helper.expires)));
     if (c.backupMonth) facts.push('Monthly backup: ' + U.MONTHS[+c.backupMonth.slice(5, 7) - 1] + ' saved in opus-data › backups');
     card.appendChild(h('<p class="small">' + facts.map(U.esc).join('<br>') + '</p>'));
     if (c.undoPlan) {
@@ -149,6 +152,28 @@
       un.onclick = () => ui.ask({ title: 'Put the earlier plan back?', text: 'Opus goes back to the plan you had before the update on ' + U.fmtDateShort(new Date(c.undoPlan.at)) + ', and saves that to GitHub. Logs stay as they are.', yes: 'Put it back' }).then(ok => { if (ok) { S.undoPlan(); S.sync({ now: true, quiet: true }); api.rerender(); } });
       card.appendChild(un);
     }
+    const tk = h('<div class="field"><label for="sy-exp2">This phone’s token runs out</label><input class="input" id="sy-exp2" type="date"><small class="small">' + (c.tokenExpires ? 'Opus warns you a week before, on Today and with a notification.' : 'Add the date GitHub shows for the token (Settings › Developer settings › Personal access tokens), and Opus warns you a week before.') + '</small></div>');
+    tk.querySelector('input').value = c.tokenExpires || '';
+    tk.querySelector('input').onchange = e => { S.setExpires(e.target.value); api.rerender(); };
+    card.appendChild(tk);
+    const nt = h('<button class="btn quiet sm" type="button">Paste a new token</button>');
+    nt.onclick = () => ui.sheet({ title: 'New token', kicker: 'Same repo, same setup', render(sh) {
+      const b = sh.body;
+      b.appendChild(h('<p class="note">Make one at github.com/settings/personal-access-tokens/new, the same way as before: only opus-data, Contents set to Read and write, the longest expiration it offers.</p>'));
+      const t1 = h('<div class="field"><label for="nt-token">Token</label><input class="input mono" id="nt-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="github_pat_…"></div>');
+      const t2 = h('<div class="field"><label for="nt-exp">Runs out</label><input class="input" id="nt-exp" type="date"></div>');
+      const out = h('<div></div>'), go = h('<button class="btn block" type="button">Use this token</button>');
+      [t1, t2, out, go].forEach(x => b.appendChild(x));
+      go.onclick = async () => {
+        const token = t1.querySelector('input').value.trim(); out.innerHTML = '';
+        if (!token) { out.appendChild(h('<div class="banner">Paste the token first.</div>')); return; }
+        go.disabled = true; go.textContent = 'Checking…';
+        const r = await S.replaceToken(token, t2.querySelector('input').value);
+        if (!r.ok) { go.disabled = false; go.textContent = 'Use this token'; out.appendChild(h('<div class="banner">' + U.esc(r.error) + '</div>')); return; }
+        ui.toast('New token in. Synced.'); sh.close(); api.rerender();
+      };
+    } });
+    card.appendChild(nt);
     const bb = h('<div class="btns"><button class="btn quiet" type="button">Sync now</button><button class="btn" type="button">Copy Grok setup prompt</button></div>');
     bb.children[0].onclick = async () => { await S.sync({ now: true }); api.rerender(); };
     bb.children[1].onclick = () => ui.copy(S.grokPrompt());

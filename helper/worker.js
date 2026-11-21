@@ -9,8 +9,8 @@
   choice, 2026-11-20). Everything Grok writes here is signed Grok.
   Since 1.12.0 Cassius has an address of his own, /<CASSIUS_KEY>/mcp. It does everything Grok's does, signed Cassius,
   and one thing more: save_growth, which writes the Growth page (version 2). Grok's address still can't touch it.
-  It never writes logs.json. It also writes helper.json ({ version, since }) once per new version, so Opus can tell
-  when the helper is behind the app. Cloudflare redeploys it from the opus repo (helper/) on every change there.
+  It never writes logs.json. It also writes helper.json ({ version, since, push, token }) when one changes, so Opus can tell
+  when the helper is behind the app and when its GitHub token runs out (it also sends a notification a week and a day before). Cloudflare redeploys it from the opus repo (helper/) on every change there.
 
   Two secrets, set in Cloudflare (Settings > Variables and Secrets), never in this file:
     GITHUB_TOKEN  a fine-grained GitHub token: only opus-data, Contents read and write
@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -153,6 +153,15 @@ Plan.validate = function (p) {
 /* ---------- GitHub ---------- */
 function b64enc(s) { const b = new TextEncoder().encode(s); let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(x); }
 function b64dec(s) { const x = atob(String(s).replace(/\s/g, '')); const b = new Uint8Array(x.length); for (let i = 0; i < x.length; i++) b[i] = x.charCodeAt(i); return new TextDecoder().decode(b); }
+/* GitHub says on every answer when the helper's token runs out; report() puts it in helper.json so Opus can warn */
+let tokenExp;
+const seeExp = r => { const x = r.headers.get('github-authentication-token-expiration'); tokenExp = x ? expIso(x) : null; };
+function expIso(x) {
+  const m = String(x).trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})\s*(UTC|Z|[+-]\d{2}:?\d{2})?$/);
+  if (!m) { const t = Date.parse(x); return isFinite(t) ? new Date(t).toISOString() : null; }
+  const z = !m[3] || m[3] === 'UTC' || m[3] === 'Z' ? 'Z' : m[3].replace(/^([+-]\d{2})(\d{2})$/, '$1:$2');
+  const t = Date.parse(m[1] + 'T' + m[2] + z); return isFinite(t) ? new Date(t).toISOString() : null;
+}
 function gh(env, by) {
   const repo = env.REPO || DEFAULT_REPO;
   const H = { Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'opus-grok-helper' };
@@ -160,6 +169,7 @@ function gh(env, by) {
   return {
     async get(p) {
       const r = await fetch(url(p), { headers: H });
+      if (r.ok || r.status === 404) seeExp(r);
       if (r.status === 404) return { missing: true };
       if (!r.ok) throw new Error('GitHub answered ' + r.status + ' reading ' + p + (r.status === 401 ? ' (the token is wrong or expired)' : ''));
       const j = await r.json();
@@ -266,7 +276,7 @@ function sinceFilter(v, since) {
 }
 function guideSection(text, section) {
   const want = String(section).toLowerCase().replace(/^#+\s*/, '').trim();
-  const match = (t, mark) => { const head = t.split('\n')[0].toLowerCase(); return head.startsWith(mark + want + '.') || head.includes(want); };
+  const match = (t, mark) => { const head = t.split('\n')[0].toLowerCase(); return head.startsWith(mark + want + '.') || (!/^\d+$/.test(want) && head.includes(want)); };
   const hit = text.split(/\n(?=## )/).filter(t => match(t, '## '));
   if (hit.length) return hit.join('\n');
   const sub = text.split(/\n(?=#{2,3} )/).filter(t => t.startsWith('### ') && match(t, '### '));
@@ -380,7 +390,7 @@ function memText(m) {
   return m.head.trim() + '\n' + secs.map(s => '\n## ' + s.name + '\n' + s.lines.map(l => '- ' + l).join('\n') + '\n').join('');
 }
 const TOOLS = [
-  { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page, which belongs to Cassius alone: you may read it, but nothing here can change it. "whoop" is whoop.json, the owner\'s WHOOP data by day (recovery, sleep, strain, calories, workouts), which the helper pulls itself; read only. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
+  { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: with no section it gives the short core, the rules and a list of parts; then read the part for what you\'re doing with section, like \"money\", \"food\", \"training\", \"home\", \"health\" or \"outbox\"). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page, which belongs to Cassius alone: you may read it, but nothing here can change it. "whoop" is whoop.json, the owner\'s WHOOP data by day (recovery, sleep, strain, calories, workouts), which the helper pulls itself; read only. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
     inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth', 'desk', 'memory', 'whoop'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
   { name: 'update_plan_section', description: 'Change one part of plan.json without sending the whole plan. section is a top-level key ("money", "training", "food", "home", "routine", "schedule", "mind", "review", "profile", "notes", "name") or a dotted path inside one ("money.debts", "money.takeHomePerWeek", "training.schedule"). value replaces that part whole, so read that section first, change it, and send it back. Everything else in the plan stays exactly as it is, including edits the owner or Claude made meanwhile. Opus checks the whole plan with its own rules before saving and refuses a broken one, naming the problem. Never invent numbers; use null when unknown.',
     inputSchema: { type: 'object', properties: { section: { type: 'string' }, value: { description: 'The new value for that section (object, list, number, text or null).' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['section', 'value', 'change'] } },
@@ -446,8 +456,15 @@ async function callTool(name, args, env, as) {
     const r = await G.get(f);
     if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Cassius has not written it yet.' : args.file === 'desk' ? ' Nobody has left a note yet. Use leave_note to start it.' : args.file === 'memory' ? ' Nothing is in the shared memory yet. Use update_memory to start it.' : ''));
     let out = r.text, label = f;
-    if (args.section != null && String(args.section).trim()) {
-      const sec = String(args.section).trim();
+    const sec0 = args.section != null ? String(args.section).trim() : '';
+    // the guide comes as a short core plus one part per tab (since 1.16.0): no section gives the core, "all" the whole guide
+    if (args.file === 'guide' && (!sec0 || /^(all|whole|everything)$/i.test(sec0))) {
+      const cut = r.text.indexOf('\n## 1. ');
+      if (!sec0 && /\n## Reading this guide/.test(r.text) && cut > 0) { out = r.text.slice(0, cut).trimEnd() + '\n\n(This is the core of the guide. Read the part for what you\'re doing with section, for example "money" or "food"; "all" gives the whole guide.)\n'; label = f + ' (core)'; }
+      return text(paged(out, args.part, label));
+    }
+    if (sec0) {
+      const sec = sec0;
       if (args.file === 'guide' || args.file === 'memory') { out = guideSection(r.text, sec); if (out == null) return text('No heading in ' + f + ' matches "' + sec + '". Headings: ' + guideHeads(r.text), true); }
       else {
         let o; try { o = JSON.parse(r.text); } catch (e) { return text(f + ' is not valid JSON right now: ' + e.message, true); }
@@ -687,16 +704,37 @@ async function notifyChange(env, who, change, tab) {
   } catch (e) {}
 }
 
-/* ---------- helper.json: tell Opus which version is live (written once per version) ---------- */
-let reported = null;
-async function report(env) {
-  if (reported === VERSION) return;
+/* ---------- helper.json: tell Opus which version is live, and when the helper's GitHub token runs out ----------
+   Checked once an hour. "token": { "expires": ISO or null for never, "warned": [7, 1] } — a week and a day before it
+   runs out, the helper sends a notification itself (so the owner hears even without opening Opus), once each. */
+let reported = null, reportedAt = 0;
+const WARN_DAYS = [7, 1];
+async function report(env, now) {
+  now = now || Date.now();
+  if (reported === VERSION && now - reportedAt < 3600e3) return;
   try {
     const G = gh(env), cur = await G.get('helper.json');
     let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) {} }
     const key = (await vapid(env)).pub;
-    if (!old || old.version !== VERSION || !old.push || old.push.key !== key) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: old && old.version === VERSION && old.since ? old.since : new Date().toISOString(), push: { key } }, null, 2) + '\n', cur.sha, 'Helper: now ' + VERSION);
-    reported = VERSION;
+    const ot = old && isObj(old.token) ? old.token : null;
+    const expires = tokenExp === undefined ? (ot ? ot.expires || null : null) : tokenExp;
+    let warned = ot && ot.expires === expires && Array.isArray(ot.warned) ? ot.warned.filter(d => WARN_DAYS.includes(d)) : [];
+    const left = expires ? (Date.parse(expires) - now) / 864e5 : Infinity;
+    const due = WARN_DAYS.filter(d => left <= d && left > 0 && !warned.includes(d));
+    if (due.length) {
+      try {
+        const push = await readPush(G);
+        if (push && (push.subs || []).length) {
+          const day = new Date(expires).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: push.tz || 'America/New_York' });
+          await fanOut(env, G, push, { title: 'The helper’s GitHub sign-in runs out ' + day, body: 'Make a new token and put it in Cloudflare, or Grok, Cassius and notifications stop. Steps in Settings › Sync.', tab: 'settings', tag: 'token:' + expires });
+        }
+      } catch (e) {}
+      warned = [...new Set(warned.concat(due))].sort((x, y) => y - x);
+    }
+    const token = { expires, warned };
+    const same = old && old.version === VERSION && old.push && old.push.key === key && ot && ot.expires === expires && JSON.stringify(ot.warned || []) === JSON.stringify(warned);
+    if (!same) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: old && old.version === VERSION && old.since ? old.since : new Date().toISOString(), push: { key }, token }, null, 2) + '\n', cur.sha, old && old.version !== VERSION ? 'Helper: now ' + VERSION : 'Helper: token ' + (expires ? 'runs out ' + expires.slice(0, 10) : 'has no end date'));
+    reported = VERSION; reportedAt = now;
   } catch (e) { /* try again next time */ }
 }
 
@@ -991,7 +1029,7 @@ async function handleRpc(msg, env, ctx, as) {
   const err = (code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof method !== 'string') return err(-32600, 'Invalid request');
   if (id === undefined) return null; // a notification: nothing to answer
-  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: as.key === 'cassius' ? 'You are Cassius, the owner\'s teacher, and this is your own address. Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts); section 5 is your Growth page. Save the Growth page with save_growth, sending only the parts you change. What the owner writes, keeps and reads there is in logs.json (read it with read_opus_file file "logs"). You can also change the plan with update_plan_section or save_plan, log things with add_to_outbox, leave notes for Claude, who builds the app, with leave_note, and add to the shared memory with update_memory. Everything you save is signed Cassius. You can never change logs.json.' : 'Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide"; long files come in parts). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan) and things you log with add_to_outbox. The Growth page (growth.json) belongs to Cassius alone: read it if you like, but never try to change it. Leave anything about the app itself for Claude, who builds it, with leave_note, and read Claude\'s replies with read_opus_file file "desk". What you know about the owner goes in the shared memory with update_memory, so Claude knows it too (read it with read_opus_file file "memory"). You can never change logs.json.' });
+  if (method === 'initialize') return ok({ protocolVersion: (params && params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'opus', version: VERSION }, instructions: as.key === 'cassius' ? 'You are Cassius, the owner\'s teacher, and this is your own address. Opus is the owner\'s phone app. Read GUIDE.md first (read_opus_file with file "guide" gives its short core); section 5, section "growth", is your Growth page. Save the Growth page with save_growth, sending only the parts you change. What the owner writes, keeps and reads there is in logs.json (read it with read_opus_file file "logs"). You can also change the plan with update_plan_section or save_plan, log things with add_to_outbox, leave notes for Claude, who builds the app, with leave_note, and add to the shared memory with update_memory. Everything you save is signed Cassius. You can never change logs.json.' : 'Opus is the owner\'s phone app. Read GUIDE.md first: read_opus_file with file "guide" gives its short core, then read the part for what you\'re doing with section ("money", "food", "training", "home", "health", "outbox"). Save a change to one part of the plan with update_plan_section (or the whole plan with save_plan) and things you log with add_to_outbox. The Growth page (growth.json) belongs to Cassius alone: read it if you like, but never try to change it. Leave anything about the app itself for Claude, who builds it, with leave_note, and read Claude\'s replies with read_opus_file file "desk". What you know about the owner goes in the shared memory with update_memory, so Claude knows it too (read it with read_opus_file file "memory"). You can never change logs.json.' });
   if (method === 'ping') return ok({});
   if (method === 'tools/list' || method === 'tools/call') { const p = report(env); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else await p; }
   if (method === 'tools/list') return ok({ tools: toolsFor(as) });
@@ -1021,7 +1059,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (!env.GITHUB_TOKEN || !env.ACCESS_KEY) return;
     const E = await withKept(env);
-    ctx.waitUntil(report(env));
+    ctx.waitUntil(report(env, event.scheduledTime || Date.now()));
     ctx.waitUntil(sendDue(env, event.scheduledTime || Date.now()).catch(() => 0));
     ctx.waitUntil(whoopScheduled(E, event.scheduledTime || Date.now()).catch(() => 0));
   },

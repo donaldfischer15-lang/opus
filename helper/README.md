@@ -5,6 +5,8 @@ Tools: read_opus_file (guide, plan, logs, outbox, growth, desk, memory), update_
 
 Since 1.12.0 Cassius has his own address, https://opus-helper.<you>.workers.dev/<CASSIUS_KEY>/mcp, added in Claude as a second custom connector. It has every tool above, signed Cassius, plus save_growth (the version 2 Growth page). Since 1.14.0 there is nothing to put in Cloudflare: open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/cassius once and it makes Cassius's key, keeps it (sealed in opus-data/keys.json) and shows the finished address, the same one on every visit; add that address in Claude. Make a new address on that page if the old one ever leaks. A CASSIUS_KEY secret in Cloudflare, if set, still wins.
 
+Since 1.16.0 the helper reads when its GITHUB_TOKEN runs out (GitHub says so on every answer), writes it to helper.json for Opus, and sends a notification a week and a day before. To renew: make a new token the same way (only opus-data, Contents read and write), then edit GITHUB_TOKEN in Cloudflare (Workers › opus-helper › Settings › Variables and Secrets). Also since 1.16.0, read_opus_file "guide" with no section gives the guide's short core; each tab has its own part (section "money", "food", "training", "home", "health", "outbox"…), and section "all" gives the whole guide.
+
 worker.js is built from worker.src.js by `node build.js` (copies Plan.validate from site/js/core.js). The public copy for pasting is in the opus repo at helper/worker.js.
 
 ## Setup (owner)

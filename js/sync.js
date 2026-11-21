@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
-  const HELPER = '1.15.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.16.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -287,6 +287,32 @@
     }
   }
 
+  /* GitHub sign-ins that run out within a week: this phone's token (the date you gave in Settings › Sync)
+     and the helper's (the helper reads it from GitHub and puts it in helper.json) */
+  function expiring(now) {
+    if (!cfg || !cfg.token) return [];
+    now = now || Date.now();
+    const out = [], one = (who, iso) => { const t = iso ? Date.parse(iso) : NaN; if (!isFinite(t)) return; const days = (t - now) / 864e5; if (days <= 7) out.push({ who, at: new Date(t), days, gone: days <= 0 }); };
+    one('phone', cfg.tokenExpires ? cfg.tokenExpires + 'T23:59:00' : null);
+    one('helper', cfg.helper && cfg.helper.expires);
+    return out.sort((a, b) => a.at - b.at);
+  }
+  const whenDay = d => { const k = U.key(d), t = U.key(), tm = U.key(U.addDays(new Date(), 1)); return k === t ? 'today' : k === tm ? 'tomorrow' : U.DAY_NAMES[d.getDay()] + ' ' + U.fmtDateShort(d); };
+  function expiryNotice(now) {
+    const ex = expiring(now); if (!ex.length) return null;
+    const e = ex[0];
+    const phrase = x => x.gone ? 'ran out' : 'runs out ' + whenDay(x.at);
+    if (ex.length > 1) {
+      const p = ex.find(x => x.who === 'phone'), hp = ex.find(x => x.who === 'helper');
+      return { title: ex.some(x => x.gone) ? 'A GitHub sign-in has run out' : 'Two GitHub sign-ins run out soon', text: 'This phone’s ' + phrase(p) + ', and the helper’s ' + phrase(hp) + '. Make new tokens on GitHub, then paste one in Settings › Sync and one into Cloudflare as GITHUB_TOKEN. Tap for the steps.', expiry: true };
+    }
+    const what = e.who === 'phone' ? 'This phone’s GitHub sign-in' : 'The helper’s GitHub sign-in';
+    const title = what + (e.gone ? ' has run out' : ' runs out ' + whenDay(e.at));
+    const fix = e.who === 'phone' ? 'Make a new token on GitHub, then Settings › Sync › Paste a new token. Nothing else changes.' : 'Make a new token on GitHub and paste it into Cloudflare as GITHUB_TOKEN. Tap for the steps.';
+    const stops = e.who === 'phone' ? 'This phone can’t sync until it’s replaced. ' : 'Grok, Cassius and notifications stop until it’s replaced. ';
+    return { title, text: (e.gone ? stops : '') + fix, expiry: true };
+  }
+
   /* a plain warning for the top of Today and Food when this phone has stopped getting changes from GitHub */
   function notice() {
     if (!cfg || !cfg.token) return null;
@@ -298,7 +324,7 @@
     if (S.status === 'blocked') return { title: 'Sync is paused', text: 'Plan changes from Claude and Grok wait until you open Settings › Sync and choose what to keep.' };
     if (S.status === 'problem' && old) return { title: at ? 'Opus hasn’t synced since ' + at : 'Opus hasn’t synced yet', text: (S.msg || 'Something stopped it.') + ' Until then, plan changes from Claude and Grok can’t reach this phone.' };
     if (old && S.status !== 'syncing') return { title: at ? 'Opus hasn’t synced since ' + at : 'Opus hasn’t synced yet', text: (S.status === 'offline' ? 'This phone is offline. ' : '') + 'Until it does, plan changes from Claude and Grok can’t reach this phone. Tap to check Sync.' };
-    return null;
+    return expiryNotice();
   }
   function noticeEl() {
     if (!cfg || !cfg.token) return null;
@@ -329,7 +355,7 @@
 
     // which helper is live (it writes helper.json when it starts a new version)
     if (rh.missing) cfg.helper = null;
-    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null, push: hj.push && typeof hj.push.key === 'string' ? hj.push.key : null }; }
+    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null, push: hj.push && typeof hj.push.key === 'string' ? hj.push.key : null, expires: hj.token && typeof hj.token.expires === 'string' && isFinite(Date.parse(hj.token.expires)) ? hj.token.expires : null }; }
 
     // Cassius's growth page (read only: only Cassius writes growth.json)
     if (!rgw.missing) {
@@ -538,8 +564,8 @@
       return { ok: true };
     } finally { cfg = keep; }
   }
-  async function connect(owner, repo, token, first) {
-    cfg = { owner: owner.trim(), repo: repo.trim(), token: token.trim(), problems: [] };
+  async function connect(owner, repo, token, first, expires) {
+    cfg = { owner: owner.trim(), repo: repo.trim(), token: token.trim(), problems: [], tokenExpires: /^\d{4}-\d{2}-\d{2}$/.test(expires || '') ? expires : null };
     base = null; saveBase(); saveCfg();
     const res = await sync({ first, now: true });
     return res;
@@ -583,13 +609,26 @@
       ['Make a private repo for your data', 'Go to github.com/new. Name it opus-data. Choose Private. Tick “Add a README file”. Tap Create repository.'],
       ['Make a key for Opus', 'Go to github.com/settings/personal-access-tokens/new. Name: Opus phone. Expiration: the longest it offers. Repository access: Only select repositories, then pick opus-data. Under Permissions, find Contents and set it to Read and write. Tap Generate token, then copy the token. GitHub shows it only once.'],
       ['Connect Opus', 'In Opus: gear › Sync with GitHub. Type your GitHub username, keep opus-data, paste the token, and tap Connect. Opus puts your plan, your logs and the guide into the repo.'],
-      ['Connect Grok', 'In Grok, open its GitHub connector and give it access to opus-data. Then, in Opus, tap Copy Grok setup prompt and paste it to Grok once.']
+      ['Connect Grok', 'In Grok, open its GitHub connector and give it access to opus-data. Then, in Opus, tap Copy Grok setup prompt and paste it to Grok once.'],
+      ['When a token runs out', 'Opus warns you a week before. For this phone: make a new token the same way, then Settings › Sync › Paste a new token. For the helper: make one the same way (name it Opus helper), then in Cloudflare open Workers › opus-helper › Settings › Variables and Secrets, edit GITHUB_TOKEN and paste it. The helper picks it up on its own.']
     ];
   }
 
+  /* a new token when the old one runs out: same repo, same everything else */
+  async function replaceToken(token, expires) {
+    if (!cfg || !cfg.token) return { error: 'Sync isn’t on.' };
+    const ck = await check(cfg.owner, cfg.repo, token);
+    if (!ck.ok) return ck;
+    cfg.token = token.trim(); cfg.tokenExpires = /^\d{4}-\d{2}-\d{2}$/.test(expires || '') ? expires : null;
+    problem('sync', null); saveCfg();
+    await sync({ now: true, quiet: true });
+    return { ok: true };
+  }
+  function setExpires(d) { if (!cfg) return; cfg.tokenExpires = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null; saveCfg(); setStatus(S.status); }
+
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
-    blocked: () => S.blocked, grokPrompt, steps, dirty, notice, noticeEl,
+    blocked: () => S.blocked, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
     helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests
     _: { merge3, mergeLogs, mergeSetMap, mergeKeyed, applyGrok, logsOf, droppedFrom, toB64, fromB64, eq }
