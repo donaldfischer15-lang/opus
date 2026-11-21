@@ -242,6 +242,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.18.0': [['today', 'WHOOP: once you connect it, Today shows last night’s sleep and this morning’s recovery. Tap it for the last 7 days.'], ['train', 'With WHOOP, today’s workout says what your recovery means: on a low day, go lighter or move the session.'], ['food', 'With WHOOP, Food shows the calories you’ve burned so far today next to your plan.']],
     '1.17.2': [['train', 'Plate math now works on plate-loaded machines too. The hip thrust machine counts its own 45 lb, so the logger shows the plates per side for your weight.']],
     '1.17.1': [['today', 'If Opus stops syncing, Today and Food now say so at the top, with what stopped it, so you know when plan changes from Claude and Grok aren’t reaching your phone.']],
     '1.17.0': [['food', 'Search when you add food: your own foods first, then the free USDA database of common, restaurant and packaged foods, then more brands from Open Food Facts. Pick how much and the macros, vitamins and minerals fill in.'], ['food', 'The meal plan covers Monday to Friday. Saturday and Sunday are off days: nothing planned, and Today asks you to log what you eat. Prep and groceries are sized for five days.']],

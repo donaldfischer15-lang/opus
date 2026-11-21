@@ -17,7 +17,7 @@
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store;
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
-  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json' };
+  const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
   const HELPER = '1.12.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
@@ -324,7 +324,7 @@
   async function run(opts) {
     opts = opts || {};
     const local = Store.data;
-    const [rp, rl, rg, rgw, rh] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok), getFile(F.growth), getFile(F.helper).catch(() => ({ missing: true }))]);
+    const [rp, rl, rg, rgw, rh, rw] = await Promise.all([getFile(F.plan), getFile(F.logs), getFile(F.grok), getFile(F.growth), getFile(F.helper).catch(() => ({ missing: true })), getFile(F.whoop).catch(() => ({ missing: true }))]);
     const notes = [];
 
     // which helper is live (it writes helper.json when it starts a new version)
@@ -346,6 +346,12 @@
           }
         }
       }
+    }
+
+    // WHOOP (read only: only the helper writes whoop.json)
+    if (!rw.missing) {
+      let wj = null; try { wj = parseJSON(rw.text); } catch (e) {}
+      if (wj && wj.format === 'opus-whoop' && wj.days && typeof wj.days === 'object' && !eq(wj, local.whoop)) { local.whoop = wj; applying = true; Store.save(true); applying = false; S.refreshLater = true; }
     }
 
     // plan

@@ -69,6 +69,7 @@
     const filled = items.filter(it => Plan.isChecked(d, it.id)).length;
     const hero = h('<div class="hero">' + ui.arch(items.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + items.length + ' DONE</div></div><div class="lede"></div></div>');
     v.appendChild(hero);
+    const whc = Opus.whoop && Opus.whoop.todayCard(d); if (whc) v.appendChild(whc);
 
     const rv = (Store.data.reviews || []).slice().sort((a, b) => b.weekOf.localeCompare(a.weekOf))[0];
     if (rv && rv.change && U.daysBetween(U.parseKey(rv.weekOf), d) < 8) v.appendChild(h('<div class="change-line">This week’s change: <b>' + U.esc(rv.change) + '</b></div>'));
@@ -230,6 +231,7 @@
         b.appendChild(h('<div class="stats"><div class="stat"><span class="v">' + (st.pct == null ? '—' : st.pct + '%') + '</span><span class="k">Day done</span></div>' +
           '<div class="stat"><span class="v">' + st.wk + '/' + st.planned + '</span><span class="k">Workouts</span></div>' +
           '<div class="stat"><span class="v">' + (st.weight == null ? '—' : U.wt(st.weight)) + '</span><span class="k">Weight' + (st.weight != null && st.prevW != null ? ' ' + (st.weight - st.prevW >= 0 ? '+' : '') + U.wt(st.weight - st.prevW) : '') + '</span></div></div>'));
+        const wb = Opus.whoop && Opus.whoop.weekBlock(ws); if (wb) b.appendChild(wb);
         if (st.missed && st.missed[1] >= 2) b.appendChild(h('<div class="banner gold">Slipped most: <b>' + U.esc(st.missed[0]) + '</b>, ' + st.missed[1] + ' times this week.</div>'));
         if (prev && prev.change) b.appendChild(h('<p class="note">Last week’s change was <b style="color:var(--gold-2);font-weight:500">' + U.esc(prev.change) + '</b>. Did it stick?</p>'));
         const keys = ['worked', 'slipped', 'change'];

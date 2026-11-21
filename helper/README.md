@@ -27,3 +27,16 @@ Secrets stay in Cloudflare. Free plan: 3,000 build minutes a month; each build t
 After each new version the helper writes `helper.json` in opus-data (within 5 minutes, or at Grok's next call); Opus warns in Settings if it is behind.
 
 Last linked to Cloudflare builds: 2026-11-18. A copy of wrangler.jsonc also sits at the repo root, so the build deploys the helper even if its root directory is left blank.
+
+## WHOOP (1.13.0, free, needs a WHOOP membership)
+The helper pulls the owner's WHOOP recovery, sleep, strain and workouts into whoop.json in opus-data (hourly 4 AM to noon,
+every 3 hours after, and on WHOOP's webhook if set). Setup:
+1. developer.whoop.com > sign in with the WHOOP account > create a Team if asked > Create App.
+   Name: Opus. Scopes: read:recovery, read:sleep, read:cycles, read:workout, read:body_measurement (and offline if listed).
+   Redirect URL: https://opus-helper.<you>.workers.dev/whoop/callback . Privacy policy: https://<owner>.github.io/opus/privacy.html .
+   Webhook URL (optional, model v2): https://opus-helper.<you>.workers.dev/whoop/webhook .
+2. Cloudflare > Workers & Pages > opus-helper > Settings > Variables and Secrets: add Secret WHOOP_CLIENT_ID and Secret WHOOP_CLIENT_SECRET
+   (copy each from the WHOOP app page). Deploy.
+3. Open https://opus-helper.<you>.workers.dev/<ACCESS_KEY>/whoop and tap Connect WHOOP.
+The sign-in is kept in opus-data/whoop-auth.json, sealed (AES-GCM) with a key made from WHOOP_CLIENT_SECRET.
+Disconnect: delete whoop-auth.json, or remove the app in WHOOP. Sandbox apps allow up to 10 WHOOP members, plenty for one.

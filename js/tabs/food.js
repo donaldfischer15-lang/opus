@@ -373,6 +373,7 @@
         t.querySelector('.sh .c').textContent = pl.estimate || ea.estimate ? 'estimates' : '';
       }
       const note = t.querySelector('.mac-note'), bits = [];
+      const bu = Opus.whoop && Opus.whoop.burned(d); if (bu) bits.push('WHOOP: ' + bu.kcal.toLocaleString('en-US') + ' cal burned' + (bu.open ? ' so far today' : ' today') + '.');
       if (ea.extras) bits.push('Eaten includes ' + ea.extras + ' extra' + (ea.extras === 1 ? '' : 's') + (ea.unknown ? ', ' + ea.unknown + ' without macros' : '') + '.');
       note.textContent = bits.join(' '); note.hidden = !bits.length;
     };

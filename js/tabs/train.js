@@ -108,6 +108,7 @@
     const cur = currentBlock(s);
 
     b.appendChild(headerCard(s, cur));
+    { const wl = s.date === U.key() && Opus.whoop && Opus.whoop.trainLine(new Date()); if (wl) b.appendChild(wl); }
     if ((w.warmup || []).length) b.appendChild(checklist('Warm-up', w.warmup, s.warm));
 
     if (!s.blocks.length) b.appendChild(h('<div class="card pad"><p class="empty" style="padding:8px"><span class="serif-h" style="display:block">Add your first exercise</span>Then tap Set as you finish each one.</p></div>'));
@@ -475,9 +476,11 @@
       const w = Plan.workoutFor(d), doneToday = Store.data.workouts.some(x => x.date === U.key(d));
       if (w && !doneToday) {
         const est = (w.blocks || []).reduce((m, b) => m + b.sets * (Plan.restFor(b.ex) + 45), 0) / 60 + ((w.conditioning || {}).minutes || 0) + 8;
+        const wl = Opus.whoop && Opus.whoop.trainLine(d);
         const c = h('<div class="next" style="flex-direction:column;align-items:stretch"><div class="body"><div class="k">Today · ' + U.esc(w.name) + '</div><div class="h">' + U.esc(w.focus || w.name) + '</div><div class="s">' + U.esc(Plan.workoutSummary(w)) + ' · about ' + Math.round(est / 5) * 5 + ' min</div></div><button class="btn block" type="button">Start workout</button><button class="link" type="button" style="align-self:center">Log a different session</button></div>');
         c.querySelector('.btn').onclick = () => start(w.id);
         c.querySelector('.link').onclick = () => chooseWorkout();
+        if (wl) c.insertBefore(wl, c.querySelector('.btn'));
         v.appendChild(c);
       } else {
         const nx = Plan.nextWorkoutAfter(d);

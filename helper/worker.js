@@ -17,13 +17,15 @@
     ACCESS_KEY    a long random string; the helper only answers at https://<worker>/<ACCESS_KEY>/mcp
     CASSIUS_KEY   optional, another long random string (24+ characters): Cassius's own address, https://<worker>/<CASSIUS_KEY>/mcp.
                   Open https://<worker>/<ACCESS_KEY>/cassius for a fresh one while it isn't set.
+  WHOOP (1.13.0): with WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET set, the helper pulls the owner's WHOOP data into whoop.json
+  (see the WHOOP section below). Grok and Cassius can read it; nobody writes it but the helper.
   Notifications: Opus writes push.json (push address + schedule); this helper sends what falls due every five minutes.
   Plain variables (optional):
     REPO          donaldfischer15-lang/opus-data   (default below)
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -345,7 +347,7 @@ function mergeGrowth(old, add, today) {
 }
 
 /* ---------- tools ---------- */
-const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json', desk: 'desk.json', memory: 'memory.md' };
+const FILES = { plan: 'plan.json', logs: 'logs.json', guide: 'GUIDE.md', outbox: 'grok.json', growth: 'growth.json', desk: 'desk.json', memory: 'memory.md', whoop: 'whoop.json' };
 /* ---------- the shared memory (memory.md) ---------- */
 const MEM_SECTIONS = ['About', 'Work', 'Training', 'Food', 'Health', 'Money', 'Home', 'Pets', 'People', 'Goals', 'Preferences', 'Other'];
 const MEM_HEAD = '# Shared memory\n\nWhat Grok, Cassius and Claude know about the owner, one fact per line, with who wrote it and when. Written through the Opus helper (update_memory) or by Claude. Never passwords, card, bank or account numbers, ID numbers or sign-in codes.\n';
@@ -364,8 +366,8 @@ function memText(m) {
   return m.head.trim() + '\n' + secs.map(s => '\n## ' + s.name + '\n' + s.lines.map(l => '- ' + l).join('\n') + '\n').join('');
 }
 const TOOLS = [
-  { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page, which belongs to Cassius alone: you may read it, but nothing here can change it. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
-    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth', 'desk', 'memory'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
+  { name: 'read_opus_file', description: 'Read a file from the owner\'s Opus repo. "guide" is GUIDE.md (read it first: it explains every file and the rules). "plan" is plan.json, the plan you may change. "logs" is logs.json, everything the owner entered on the phone (read only); its "sync" section says when Opus last synced and what it picked up from your outbox. "outbox" is grok.json, entries you added. "growth" is growth.json, the Growth page, which belongs to Cassius alone: you may read it, but nothing here can change it. "whoop" is whoop.json, the owner\'s WHOOP data by day (recovery, sleep, strain, calories, workouts), which the helper pulls itself; read only. Long files come in parts of about 14,000 characters: the first line says "part 1 of N", and you ask for the next with part. To read less, give section: a top-level key such as "money" or "training", or a dotted path such as "money.debts" (plan and logs), or a heading number or word such as "4" or "outbox" (guide). since ("YYYY-MM-DD") keeps only list entries from that date on, for example logs section "workouts".',
+    inputSchema: { type: 'object', properties: { file: { type: 'string', enum: ['guide', 'plan', 'logs', 'outbox', 'growth', 'desk', 'memory', 'whoop'] }, section: { type: 'string', description: 'Optional: one part of the file, like "money", "money.debts", "training.exercises" or "workouts".' }, since: { type: 'string', description: 'Optional: YYYY-MM-DD; only list entries from this date on.' }, part: { type: 'integer', description: 'Optional: which part of a long result, starting at 1.' } }, required: ['file'] } },
   { name: 'update_plan_section', description: 'Change one part of plan.json without sending the whole plan. section is a top-level key ("money", "training", "food", "home", "routine", "schedule", "mind", "review", "profile", "notes", "name") or a dotted path inside one ("money.debts", "money.takeHomePerWeek", "training.schedule"). value replaces that part whole, so read that section first, change it, and send it back. Everything else in the plan stays exactly as it is, including edits the owner or Claude made meanwhile. Opus checks the whole plan with its own rules before saving and refuses a broken one, naming the problem. Never invent numbers; use null when unknown.',
     inputSchema: { type: 'object', properties: { section: { type: 'string' }, value: { description: 'The new value for that section (object, list, number, text or null).' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['section', 'value', 'change'] } },
   { name: 'leave_note', description: 'Leave a note on the shared desk (desk.json) for Claude, who builds and maintains the Opus app. Use it for anything you cannot do through the plan, outbox or Growth page: something in the app that looks wrong or broken, a feature or screen the owner asked for, a field or kind of entry Opus does not have, or a question about how Opus works. Claude checks the desk each evening, answers on the desk, and asks the owner before building anything. Read the desk first (read_opus_file with file "desk") so you do not repeat an open note. re answers an earlier note by its id. close marks one of your notes done once it is settled. Write plain sentences; never put passwords, tokens or account numbers in a note.',
@@ -426,7 +428,7 @@ async function callTool(name, args, env, as) {
   const G = gh(env, as.name);
   args = args || {};
   if (name === 'read_opus_file') {
-    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox, growth, desk or memory.', true);
+    const f = FILES[args.file]; if (!f) return text('file must be guide, plan, logs, outbox, growth, desk, memory or whoop.', true);
     const r = await G.get(f);
     if (r.missing) return text(f + ' does not exist yet.' + (args.file === 'outbox' ? ' Use add_to_outbox to start it.' : args.file === 'growth' ? ' Cassius has not written it yet.' : args.file === 'desk' ? ' Nobody has left a note yet. Use leave_note to start it.' : args.file === 'memory' ? ' Nothing is in the shared memory yet. Use update_memory to start it.' : ''));
     let out = r.text, label = f;
@@ -684,6 +686,212 @@ async function report(env) {
   } catch (e) { /* try again next time */ }
 }
 
+/* ---------- WHOOP (since 1.13.0) ----------
+   The owner's own WHOOP data, pulled with WHOOP's official API (free; needs a WHOOP membership).
+   Two more secrets, set in Cloudflare and never in the repo: WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET, from the
+   owner's app at developer.whoop.com. Its redirect URL is https://<worker>/whoop/callback.
+   Connect once at https://<worker>/<ACCESS_KEY>/whoop. The sign-in is kept in opus-data as whoop-auth.json, sealed
+   (AES-GCM) with a key made from WHOOP_CLIENT_SECRET, so nobody reading the repo can use it. The data Opus shows goes
+   in whoop.json: one entry per day (recovery, sleep, strain, calories, workouts), the last 60 days. */
+const WHOOP_AUTH = 'https://api.prod.whoop.com/oauth/oauth2/auth', WHOOP_TOKEN = 'https://api.prod.whoop.com/oauth/oauth2/token';
+const WHOOP_SCOPES = 'offline read:recovery read:sleep read:cycles read:workout read:body_measurement';
+const WHOOP_FILES = { data: 'whoop.json', auth: 'whoop-auth.json' };
+const whoopApi = env => (env.WHOOP_API || 'https://api.prod.whoop.com/developer');
+const whoopReady = env => !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET);
+async function sealKey(env) {
+  const base = await crypto.subtle.importKey('raw', utf8(String(env.WHOOP_CLIENT_SECRET)), 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: utf8('opus-whoop'), info: utf8('whoop-auth.json') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function seal(env, obj) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await sealKey(env), utf8(JSON.stringify(obj))); return { format: 'opus-whoop-auth', note: 'Sealed WHOOP sign-in for the Opus helper. Only the helper can open it. Delete this file to disconnect WHOOP.', iv: b64u(iv), data: b64u(new Uint8Array(ct)) }; }
+async function unseal(env, f) { const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(f.iv) }, await sealKey(env), unb64u(f.data)); return JSON.parse(new TextDecoder().decode(pt)); }
+/* WHOOP wants a state of exactly 8 characters: 4 random, 4 from an HMAC of them with the access key and the hour */
+async function whoopState(env, r, hour) {
+  const k = await crypto.subtle.importKey('raw', utf8(String(env.ACCESS_KEY)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return r + b64u(new Uint8Array(await crypto.subtle.sign('HMAC', k, utf8('whoop-state:' + r + ':' + hour)))).replace(/[-_]/g, 'x').slice(0, 4);
+}
+async function newState(env) { const a = crypto.getRandomValues(new Uint8Array(3)); const r = b64u(a).replace(/[-_]/g, 'x').slice(0, 4); return whoopState(env, r, Math.floor(Date.now() / 3600e3)); }
+async function stateOk(env, s) { if (typeof s !== 'string' || s.length !== 8) return false; const h = Math.floor(Date.now() / 3600e3); for (const x of [h, h - 1]) if (same(await whoopState(env, s.slice(0, 4), x), s)) return true; return false; }
+async function whoopTokenCall(env, form) {
+  const r = await fetch(WHOOP_TOKEN, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(Object.assign({ client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET }, form)).toString() });
+  if (!r.ok) { const e = new Error('WHOOP answered ' + r.status + ' to the sign-in' + (r.status === 400 || r.status === 401 ? ' (connect WHOOP again)' : '')); e.status = r.status; throw e; }
+  const j = await r.json();
+  if (!j.access_token) throw new Error('WHOOP sent no access token');
+  return { access: j.access_token, refresh: j.refresh_token || null, expires: Date.now() + Math.max(60, Number(j.expires_in) || 3600) * 1000 - 120e3 };
+}
+async function saveAuth(G, env, tok, sha) {
+  const body = JSON.stringify(await seal(env, tok), null, 2) + '\n';
+  for (let i = 0; i < 3; i++) {
+    try { return await G.put(WHOOP_FILES.auth, body, sha, 'Helper: WHOOP sign-in kept (sealed)'); }
+    catch (e) { if (!e.conflict || i === 2) throw e; const cur = await G.get(WHOOP_FILES.auth); sha = cur.missing ? null : cur.sha; }
+  }
+}
+/* a working access token: the kept one if it is still good, otherwise a refresh (WHOOP hands out a new refresh token each time) */
+async function whoopAccess(env, G) {
+  const cur = await G.get(WHOOP_FILES.auth);
+  if (cur.missing) return null;
+  let tok; try { tok = await unseal(env, JSON.parse(cur.text)); } catch (e) { throw new Error('The kept WHOOP sign-in could not be opened (was WHOOP_CLIENT_SECRET changed?). Connect WHOOP again.'); }
+  if (tok.access && tok.expires > Date.now()) return tok.access;
+  if (!tok.refresh) throw new Error('No WHOOP refresh token kept. Connect WHOOP again.');
+  let n;
+  try { n = await whoopTokenCall(env, { grant_type: 'refresh_token', refresh_token: tok.refresh, scope: 'offline' }); }
+  catch (e) {
+    // another pull (a webhook and the schedule at once) may have refreshed first: WHOOP then refuses the old token. Use theirs.
+    await new Promise(r => setTimeout(r, 1500));
+    const again = await G.get(WHOOP_FILES.auth);
+    if (!again.missing && again.sha !== cur.sha) { try { const t2 = await unseal(env, JSON.parse(again.text)); if (t2.access && t2.expires > Date.now()) return t2.access; } catch (x) {} }
+    throw e;
+  }
+  if (!n.refresh) n.refresh = tok.refresh;
+  await saveAuth(G, env, n, cur.sha);
+  return n.access;
+}
+async function whoopGet(env, access, path, q) {
+  const out = []; let next = null;
+  for (let page = 0; page < 6; page++) {
+    const u = new URL(whoopApi(env) + path);
+    for (const k of Object.keys(q || {})) u.searchParams.set(k, q[k]);
+    u.searchParams.set('limit', '25'); if (next) u.searchParams.set('nextToken', next);
+    const r = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + access } });
+    if (r.status === 401) { const e = new Error('WHOOP did not accept the sign-in. Connect WHOOP again.'); e.status = 401; throw e; }
+    if (r.status === 429) throw new Error('WHOOP asked the helper to slow down; it tries again later.');
+    if (!r.ok) throw new Error('WHOOP answered ' + r.status + ' for ' + path);
+    const j = await r.json();
+    out.push(...(j.records || []));
+    next = j.next_token || null; if (!next) break;
+  }
+  return out;
+}
+/* the owner's local date of a WHOOP time, using the offset WHOOP sends with it ("-05:00", "Z") */
+function localDate(iso, off) {
+  const t = Date.parse(iso); if (!isFinite(t)) return null;
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(off || '')); const mins = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
+  return new Date(t + mins * 60e3).toISOString().slice(0, 10);
+}
+const kcalOf = kj => num(kj) ? Math.round(kj / 4.184) : null;
+const minOf = ms => num(ms) ? Math.round(ms / 60000) : null;
+const r1 = x => num(x) ? Math.round(x * 10) / 10 : null;
+/* WHOOP records into Opus's days. Sleep and recovery belong to the day you wake up; a cycle's strain and calories to the
+   day of that recovery (or, without one, the day the cycle starts); a workout to the day it starts. */
+function whoopDays(rec, slp, cyc, wo) {
+  const days = {}; const day = k => (days[k] = days[k] || {});
+  const sleepById = new Map(), dayByCycle = new Map();
+  for (const s of slp) {
+    if (s.nap) continue;
+    const k = localDate(s.end || s.start, s.timezone_offset); if (!k) continue;
+    sleepById.set(s.id, k);
+    const sc = s.score || {}, st = sc.stage_summary || {}, need = sc.sleep_needed || {};
+    const asleep = num(st.total_light_sleep_time_milli) ? (st.total_light_sleep_time_milli + (st.total_slow_wave_sleep_time_milli || 0) + (st.total_rem_sleep_time_milli || 0)) : null;
+    const d = day(k);
+    if (d.sleep && d.sleep.asleep != null && asleep != null && d.sleep.asleep > minOf(asleep)) continue; // keep the main sleep
+    d.sleep = { start: s.start || null, end: s.end || null, scored: s.score_state === 'SCORED', inBed: minOf(st.total_in_bed_time_milli), asleep: minOf(asleep), deep: minOf(st.total_slow_wave_sleep_time_milli), rem: minOf(st.total_rem_sleep_time_milli), light: minOf(st.total_light_sleep_time_milli), awake: minOf(st.total_awake_time_milli), disturbances: num(st.disturbance_count) ? st.disturbance_count : null, performance: num(sc.sleep_performance_percentage) ? Math.round(sc.sleep_performance_percentage) : null, efficiency: num(sc.sleep_efficiency_percentage) ? Math.round(sc.sleep_efficiency_percentage) : null, consistency: num(sc.sleep_consistency_percentage) ? Math.round(sc.sleep_consistency_percentage) : null, need: num(need.baseline_milli) ? minOf((need.baseline_milli || 0) + (need.need_from_sleep_debt_milli || 0) + (need.need_from_recent_strain_milli || 0) + (need.need_from_recent_nap_milli || 0)) : null, respiratory: r1(sc.respiratory_rate) };
+  }
+  for (const r of rec) {
+    const k = sleepById.get(r.sleep_id) || null; if (!k) continue;
+    const sc = r.score || {}; const d = day(k);
+    d.recovery = { scored: r.score_state === 'SCORED', calibrating: !!sc.user_calibrating, score: num(sc.recovery_score) ? Math.round(sc.recovery_score) : null, rhr: num(sc.resting_heart_rate) ? Math.round(sc.resting_heart_rate) : null, hrv: num(sc.hrv_rmssd_milli) ? Math.round(sc.hrv_rmssd_milli) : null, spo2: r1(sc.spo2_percentage), skinTemp: r1(sc.skin_temp_celsius) };
+    if (r.cycle_id != null) dayByCycle.set(String(r.cycle_id), k);
+  }
+  for (const c of cyc) {
+    const k = dayByCycle.get(String(c.id)) || localDate(c.start, c.timezone_offset); if (!k) continue;
+    const sc = c.score || {};
+    day(k).day = { scored: c.score_state === 'SCORED', open: !c.end, strain: r1(sc.strain), kcal: kcalOf(sc.kilojoule), avgHr: num(sc.average_heart_rate) ? sc.average_heart_rate : null, maxHr: num(sc.max_heart_rate) ? sc.max_heart_rate : null };
+  }
+  for (const w of wo) {
+    const k = localDate(w.start, w.timezone_offset); if (!k) continue;
+    const sc = w.score || {}, z = sc.zone_durations || {};
+    const d = day(k); d.workouts = d.workouts || [];
+    d.workouts.push({ id: w.id, sport: w.sport_name || null, start: w.start || null, end: w.end || null, minutes: w.start && w.end ? Math.round((Date.parse(w.end) - Date.parse(w.start)) / 60000) : null, strain: r1(sc.strain), kcal: kcalOf(sc.kilojoule), avgHr: num(sc.average_heart_rate) ? sc.average_heart_rate : null, maxHr: num(sc.max_heart_rate) ? sc.max_heart_rate : null, zones: ['zero', 'one', 'two', 'three', 'four', 'five'].map(n => minOf(z['zone_' + n + '_milli'])) });
+  }
+  for (const k of Object.keys(days)) if (days[k].workouts) days[k].workouts.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  return days;
+}
+let whoopLast = 0;
+/* pull the last 10 days and fold them into whoop.json; keeps 60 days. Returns a short line for the status page. */
+async function whoopPull(env, why) {
+  const G = gh(env, 'Helper');
+  const cur = await G.get(WHOOP_FILES.data);
+  let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) {} }
+  const base = old && old.format === 'opus-whoop' ? old : { format: 'opus-whoop', version: 1, days: {} };
+  const out = Object.assign({}, base, { days: Object.assign({}, base.days || {}) });
+  const now = new Date();
+  try {
+    const access = await whoopAccess(env, G);
+    if (!access) { out.connected = false; out.problem = null; }
+    else {
+      const start = new Date(now.getTime() - 10 * 86400e3).toISOString();
+      const q = { start };
+      const [rec, slp, cyc, wo] = await Promise.all([whoopGet(env, access, '/v2/recovery', q), whoopGet(env, access, '/v2/activity/sleep', q), whoopGet(env, access, '/v2/cycle', q), whoopGet(env, access, '/v2/activity/workout', q)]);
+      const fresh = whoopDays(rec, slp, cyc, wo);
+      for (const k of Object.keys(fresh)) out.days[k] = fresh[k];
+      out.connected = true; out.problem = null; out.pulled = now.toISOString();
+    }
+  } catch (e) { out.problem = { at: now.toISOString(), text: String(e.message || e).slice(0, 200) }; if (e.status === 401) out.connected = false; }
+  const keep = new Date(now.getTime() - 60 * 86400e3).toISOString().slice(0, 10);
+  for (const k of Object.keys(out.days)) if (k < keep) delete out.days[k];
+  const sorted = {}; for (const k of Object.keys(out.days).sort()) sorted[k] = out.days[k]; out.days = sorted;
+  const cmp = o => JSON.stringify(Object.assign({}, o, { pulled: null, updated: null }));
+  if (!old || cmp(old) !== cmp(out)) {
+    out.updated = now.toISOString();
+    const body = JSON.stringify(out, null, 1) + '\n';
+    try { await G.put(WHOOP_FILES.data, body, cur.missing ? null : cur.sha, 'Helper: WHOOP ' + (why || 'update')); } catch (e) { if (!e.conflict) throw e; }
+  }
+  return out;
+}
+/* every 5 minutes Cloudflare asks; the helper pulls hourly from 4 AM to noon (the owner's time) and every 3 hours after */
+function whoopDue(env, t) {
+  let h = 0; try { h = Number(new Intl.DateTimeFormat('en-US', { timeZone: env.TIME_ZONE || 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(new Date(t))); } catch (e) {}
+  const gap = h >= 4 && h < 12 ? 55 * 60e3 : 175 * 60e3;
+  return t - whoopLast >= gap;
+}
+async function whoopScheduled(env, t) {
+  if (!whoopReady(env) || !whoopDue(env, t)) return;
+  whoopLast = t;
+  try {
+    const G = gh(env, 'Helper'); const cur = await G.get(WHOOP_FILES.data);
+    // another copy of the helper may have pulled lately: go by the file, not just this copy's memory
+    if (!cur.missing) { try { const j = JSON.parse(cur.text); if (j.pulled && t - Date.parse(j.pulled) < 50 * 60e3) return; } catch (e) {} }
+    await whoopPull(env, 'morning and daily pull');
+  } catch (e) { /* next time */ }
+}
+/* WHOOP's notice that something changed (optional; set its Webhook URL to https://<worker>/whoop/webhook, model v2) */
+async function whoopWebhook(request, env, ctx) {
+  const raw = await request.text();
+  const ts = request.headers.get('X-WHOOP-Signature-Timestamp') || '', sig = request.headers.get('X-WHOOP-Signature') || '';
+  const k = await crypto.subtle.importKey('raw', utf8(String(env.WHOOP_CLIENT_SECRET)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const want = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', k, utf8(ts + raw)))));
+  if (!ts || !same(want, sig) || Math.abs(Date.now() - Number(ts)) > 15 * 60e3) return new Response('Bad signature', { status: 401 });
+  let ev = null; try { ev = JSON.parse(raw); } catch (e) {}
+  if (ev && /^(recovery|sleep|workout)\./.test(String(ev.type || ''))) ctx.waitUntil(whoopPull(env, ev.type).catch(() => 0));
+  return new Response(null, { status: 204 });
+}
+const page = (title, body) => new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title><style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;background:#1b1714;color:#efe6da;margin:0;padding:28px max(20px,env(safe-area-inset-left))}main{max-width:34em;margin:auto}h1{font-weight:500;letter-spacing:.04em}a.b{display:inline-block;margin-top:14px;padding:12px 20px;border:1px solid #c99a62;border-radius:12px;color:#f2d3a0;text-decoration:none}code{background:#2a241f;padding:2px 6px;border-radius:6px;word-break:break-all}.m{color:#b7a99a}</style><main><h1>' + title + '</h1>' + body + '</main>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+const escH = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function whoopStart(url, env) {
+  const cb = url.origin + '/whoop/callback';
+  if (!whoopReady(env)) return page('Connect WHOOP', '<p>Two secrets are missing in Cloudflare (opus-helper › Settings › Variables and Secrets):</p><p><code>WHOOP_CLIENT_ID</code> and <code>WHOOP_CLIENT_SECRET</code>, from your app at developer.whoop.com.</p><p>That app\'s Redirect URL must be exactly:</p><p><code>' + escH(cb) + '</code></p><p class="m">After you add them and the helper redeploys, open this page again.</p>');
+  const G = gh(env, 'Helper'); const d = await G.get(WHOOP_FILES.data); let j = null; if (!d.missing) { try { j = JSON.parse(d.text); } catch (e) {} }
+  const a = await G.get(WHOOP_FILES.auth);
+  const st = await newState(env);
+  const go = WHOOP_AUTH + '?' + new URLSearchParams({ response_type: 'code', client_id: env.WHOOP_CLIENT_ID, redirect_uri: cb, scope: WHOOP_SCOPES, state: st }).toString();
+  const now = !a.missing ? '<p>WHOOP is connected.' + (j && j.pulled ? ' Last pulled ' + escH(j.pulled.replace('T', ' ').slice(0, 16)) + ' UTC.' : '') + '</p>' + (j && j.problem ? '<p class="m">Last problem: ' + escH(j.problem.text) + '</p>' : '') : '<p>WHOOP isn\'t connected yet.</p>';
+  return page('Connect WHOOP', now + '<p>Sign in to WHOOP and allow Opus to read your recovery, sleep, strain, workouts and body measurements. Opus only reads.</p><a class="b" href="' + escH(go) + '">' + (a.missing ? 'Connect WHOOP' : 'Connect again') + '</a><p class="m">The button works for about an hour. To disconnect, delete whoop-auth.json in opus-data, or remove Opus in your WHOOP app settings.</p>');
+}
+async function whoopCallback(url, env) {
+  if (!whoopReady(env)) return page('WHOOP', '<p>The WHOOP secrets aren\'t set in Cloudflare yet.</p>');
+  if (url.searchParams.get('error')) return page('WHOOP said no', '<p>' + escH(url.searchParams.get('error_description') || url.searchParams.get('error')) + '</p><p class="m">Nothing was saved. You can try again from the Connect WHOOP page.</p>');
+  const code = url.searchParams.get('code'), st = url.searchParams.get('state');
+  if (!code || !(await stateOk(env, st))) return page('Link expired', '<p>This sign-in link is too old or wasn\'t made by your helper. Open the Connect WHOOP page again and tap the button there.</p>');
+  let tok;
+  try { tok = await whoopTokenCall(env, { grant_type: 'authorization_code', code, redirect_uri: url.origin + '/whoop/callback' }); }
+  catch (e) { return page('WHOOP sign-in failed', '<p>' + escH(e.message) + '</p><p class="m">Check that the Redirect URL in your WHOOP app is exactly <code>' + escH(url.origin + '/whoop/callback') + '</code> and that the client id and secret in Cloudflare match that app.</p>'); }
+  if (!tok.refresh) return page('Almost', '<p>WHOOP didn\'t send a refresh token, so the helper couldn\'t keep the sign-in. In your WHOOP app, make sure the offline scope is allowed, then connect again.</p>');
+  const G = gh(env, 'Helper'); const cur = await G.get(WHOOP_FILES.auth);
+  await saveAuth(G, env, tok, cur.missing ? null : cur.sha);
+  let j = null; try { j = await whoopPull(env, 'connected'); } catch (e) {}
+  const n = j ? Object.keys(j.days || {}).length : 0;
+  return page('WHOOP is connected', '<p>' + (j && j.problem ? 'Connected, but the first pull had a problem: ' + escH(j.problem.text) : n ? 'Pulled ' + n + ' day' + (n === 1 ? '' : 's') + ' of WHOOP data.' : 'Connected. Nothing to pull yet; data shows up once your WHOOP has scored a sleep.') + '</p><p class="m">The helper pulls each hour from 4 AM to noon and every three hours after. Open Opus and it shows up on Today.</p>');
+}
+
 /* ---------- MCP over HTTP (stateless, JSON replies) ---------- */
 async function handleRpc(msg, env, ctx, as) {
   as = as || GROK;
@@ -723,6 +931,7 @@ export default {
     if (!env.GITHUB_TOKEN || !env.ACCESS_KEY) return;
     ctx.waitUntil(report(env));
     ctx.waitUntil(sendDue(env, event.scheduledTime || Date.now()).catch(() => 0));
+    ctx.waitUntil(whoopScheduled(env, event.scheduledTime || Date.now()).catch(() => 0));
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -737,6 +946,13 @@ export default {
     const ck = env.CASSIUS_KEY && String(env.CASSIUS_KEY).length >= 24 && String(env.CASSIUS_KEY) !== String(env.ACCESS_KEY) ? String(env.CASSIUS_KEY) : null;
     const as = parts.length && same(parts[0], env.ACCESS_KEY) ? GROK : parts.length && ck && same(parts[0], ck) ? CASSIUS : null;
     const plain = (t, st) => new Response(t, { status: st || 200, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    // WHOOP: the redirect and webhook live at fixed addresses (WHOOP needs them exact); connecting needs the access key
+    if (parts[0] === 'whoop' && parts.length === 2) {
+      if (parts[1] === 'callback' && request.method === 'GET') return whoopCallback(url, env);
+      if (parts[1] === 'webhook' && request.method === 'POST' && whoopReady(env)) return whoopWebhook(request, env, ctx);
+      return notFound();
+    }
+    if (as === GROK && parts[1] === 'whoop' && parts.length === 2 && request.method === 'GET') return whoopStart(url, env);
     if (as === GROK && parts[1] === 'cassius' && parts.length === 2 && request.method === 'GET') {
       // setting up Cassius's address: a fresh key, made on every visit and never stored
       if (ck) return plain('Cassius already has his own address (the CASSIUS_KEY secret is set). To change it, put a new key in that secret, deploy, and update the connector in Claude.');

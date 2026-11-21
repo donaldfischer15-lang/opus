@@ -16,6 +16,8 @@ The owner keeps Opus data in a **private GitHub repo** (usually `opus-data`). Op
 | `desk.json` | you, Cassius and Claude | the shared desk: notes about the app itself, and Claude's replies (section 6). |
 | `memory.md` | you, Cassius and Claude | the shared memory: what you know about the owner, so Claude knows it too (section 7). |
 | `push.json` | only the app | the phone's notification schedule. Never edit it. |
+| `whoop.json` | only the Opus helper | the owner's WHOOP data by day (section 8). Read it, never edit it. |
+| `whoop-auth.json` | only the Opus helper | the WHOOP sign-in, sealed so only the helper can open it. Never read, edit or copy it. Deleting it disconnects WHOOP. |
 | `helper.json` | the Opus helper | which helper version is live (`{ "version", "since" }`). Opus warns the owner when it is behind. |
 | `backups/opus-backup-YYYY-MM.json` | the app, once a month | a full backup (plan, logs and settings, `"format": "opus-data"`) from the first sync of that month. Never edit these. To restore one, the owner imports it in Settings › Your data › Import backup. |
 
@@ -25,7 +27,7 @@ If you have the opus connector, use its tools; they check everything before savi
 
 | tool | use it to |
 |---|---|
-| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox`, `growth`, `desk` or `memory`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`, memory `"Training"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
+| `read_opus_file` | read `guide`, `plan`, `logs`, `outbox`, `growth`, `desk`, `memory` or `whoop`. Long files come in parts of about 14,000 characters (the first line says "part 1 of N"; ask for the next with `part`). Read less with `section` (`"money"`, `"money.debts"`, `"training"`, logs `"workouts"`, guide `"4"`, memory `"Training"`) and `since` (`"YYYY-MM-DD"`, list entries from that date on). |
 | `update_plan_section` | change one part of the plan (`"money"`, `"money.debts"`, `"training.schedule"`…). Only that part is replaced, so edits the owner or Claude made elsewhere are safe. Read the part first and send it back whole. **Use this for almost every plan change.** |
 | `save_plan` | replace the whole plan. Only when the change touches many parts; read every part first. |
 | `add_to_outbox` | log entries for the owner (section 4). |
@@ -194,6 +196,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - `start` is the first-session weight, or `null` if unknown.
 - Optional on an exercise or a block: `cue` (one coaching line shown under the exercise in the logger; a block's cue wins), `perSide` on a block or `repsNote` on an exercise (e.g. `"per leg"`, shown after the reps), and `optional: true` on a block (marked "Optional · first to cut" and left out of the set count unless started).
 - `rounds`, `work`, `rest` (seconds) on conditioning turn on the interval timer.
+- `base` on an exercise (a number, lb) is what a plate-loaded machine weighs with no plates on it. It turns on plate math for that exercise in the logger: weights are logged as the total, and Opus shows the plates per side. Barbell lifts use `bar` and need no `base`.
 - Exercises the owner adds in the logger are saved into `exercises` with an id made from the name (e.g. `suitcase-march`). Keep them.
 
 ### money
@@ -502,6 +505,23 @@ The owner wants you and Claude to know the same things about them. Everything yo
 - Read it at the start of a conversation (`read_opus_file` file `memory`), so you know what Claude added.
 - Never put passwords, sign-in codes, card, bank or account numbers, or ID numbers in it. The helper refuses lines that look like them.
 - Claude reads it each evening and writes to it the same way. The owner sees it in Opus (Settings › Shared memory).
+
+## 8. WHOOP (`whoop.json`, `"format": "opus-whoop"`)
+
+The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hourly from 4 AM to noon and every three hours after, and right away when WHOOP says something changed. Nobody else writes this file. Read it with `read_opus_file` file `whoop` when the owner's sleep, recovery or training load matters.
+
+```json
+{ "format": "opus-whoop", "version": 1, "connected": true, "pulled": "2026-11-23T10:05:00Z", "problem": null,
+  "days": { "2026-11-23": {
+    "recovery": { "scored": true, "calibrating": false, "score": 64, "hrv": 52, "rhr": 54, "spo2": 96.1, "skinTemp": 33.6 },
+    "sleep": { "start": "...", "end": "...", "scored": true, "inBed": 452, "asleep": 418, "deep": 92, "rem": 101, "light": 225, "awake": 34, "disturbances": 9, "performance": 85, "efficiency": 92, "consistency": 71, "need": 490, "respiratory": 15.2 },
+    "day": { "scored": true, "open": true, "strain": 11.4, "kcal": 2610, "avgHr": 71, "maxHr": 158 },
+    "workouts": [ { "sport": "weightlifting", "start": "...", "end": "...", "minutes": 58, "strain": 8.1, "kcal": 311, "avgHr": 112, "maxHr": 160, "zones": [1, 20, 15, 5, 0, 0] } ] } } }
+```
+- A day is the owner's local date. Sleep and recovery belong to the day the owner woke up; the day's strain and calories to that same day (`open: true` while WHOOP's day is still running, so `kcal` is so far); a workout to the day it started. Sleep figures are minutes. Naps are left out.
+- Recovery bands, WHOOP's own: green 67 and up, yellow 34 to 66, red 33 and under. On a red day Opus suggests a lighter session (drop the last set of each lift, stop 2 to 3 reps short) or moving it a day.
+- Opus shows it on Today (last night), Train (what today's recovery means), Food (calories burned so far) and the weekly review (the week's averages). It keeps 60 days.
+- Nothing here is a diagnosis. Never draw health conclusions from it; say what the numbers are and suggest the owner ask a doctor about anything that worries them.
 
 ## Good requests to expect
 

@@ -175,6 +175,12 @@
         cr.onclick = () => Opus.changes.history(null);
         const cc = ss.querySelector('.card'); (cc || ss).appendChild(cr);
       }
+      if (Opus.whoop && Opus.sync && (Opus.sync.cfg() || {}).token) {
+        const wr = h('<div class="row' + (Opus.whoop.data() ? ' tap' : '') + '"><span class="tx"><b>WHOOP</b><small></small></span>' + (Opus.whoop.data() ? ui.icon('chev', 'chev ico') : '') + '</div>');
+        wr.querySelector('small').textContent = Opus.whoop.status();
+        if (Opus.whoop.data()) wr.onclick = () => Opus.whoop.weekSheet();
+        const cc = ss.querySelector('.card'); (cc || ss).appendChild(wr);
+      }
       if (Opus.desk) { const cc = ss.querySelector('.card'); (cc || ss).appendChild(Opus.desk.row()); (cc || ss).appendChild(Opus.desk.memoryRow()); }
 
       // tabs
