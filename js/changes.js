@@ -242,6 +242,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.20.0': [['money', 'Each bill can say which account it comes out of. Before payday, Money checks that account and, if it’s short, says how much to move and by when, counting money already on its way.']],
     '1.19.0': [['money', 'Money you move between your own accounts no longer counts as spending. While it’s on its way it still counts as yours, so it isn’t taken out of free cash.'], ['money', 'Free cash shows each of your accounts under it, with when it was last read, and an old one is marked. Grok can update one account at a time.']],
     '1.18.0': [['today', 'WHOOP: once you connect it, Today shows last night’s sleep and this morning’s recovery. Tap it for the last 7 days.'], ['train', 'With WHOOP, today’s workout says what your recovery means: on a low day, go lighter or move the session.'], ['food', 'With WHOOP, Food shows the calories you’ve burned so far today next to your plan.']],
     '1.17.2': [['train', 'Plate math now works on plate-loaded machines too. The hip thrust machine counts its own 45 lb, so the logger shows the plates per side for your weight.']],

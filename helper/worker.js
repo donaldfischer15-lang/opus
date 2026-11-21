@@ -121,7 +121,7 @@ Plan.validate = function (p) {
   const mo = p.money || {};
   if (mo.cushion != null && !(typeof mo.cushion === 'number' && mo.cushion >= 0)) errors.push('money.cushion must be a number of dollars, 0 or more, or null.');
   (mo.debts || []).forEach((d, i) => { if (!d.name) errors.push('money.debts item ' + (i + 1) + ' needs a "name".'); });
-  (mo.bills || []).forEach((b, i) => { if (!b.name) errors.push('money.bills item ' + (i + 1) + ' needs a "name".'); if (b.every && !['week', 'month', 'year'].includes(b.every)) errors.push('bill "' + b.name + '": every must be week, month or year.'); });
+  (mo.bills || []).forEach((b, i) => { if (!b.name) errors.push('money.bills item ' + (i + 1) + ' needs a "name".'); if (b.every && !['week', 'month', 'year'].includes(b.every)) errors.push('bill "' + b.name + '": every must be week, month or year.'); if (b.account != null && typeof b.account !== 'string') errors.push('bill "' + b.name + '": account must be the name of the account it comes out of, like in money.cash accounts.'); });
   const hids = new Set();
   (((p.home || {}).items) || []).forEach((h, i) => {
     if (!h.id || !h.title) errors.push('home item ' + (i + 1) + ' needs "id" and "title".');

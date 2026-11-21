@@ -715,18 +715,51 @@
       if (items.length) src = 'From the due days in your plan';
     }
     items = items.filter(x => !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= today).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
+    items.forEach(x => { x.account = x.account || billAccount(x.name); });
+    const short = shortfalls(c, items);
     const sec = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Before payday</span><span class="c num"></span></div><div class="card"></div></div>');
     const card = sec.querySelector('.card');
     if (!items.length) { card.appendChild(h('<p class="empty">Grok lists what has to come out before payday when it updates your free cash.</p>')); return sec; }
     sec.querySelector('.c').textContent = U.money(U.sum(items.map(x => x.amount)));
+    short.forEach(sf => card.appendChild(h('<div class="acct-short"><b>Move ' + U.money(Math.ceil(sf.gap)) + (sf.from ? ' from ' + U.esc(sf.from) : '') + ' to ' + U.esc(sf.account) + ' by ' + U.esc(byLabel(sf.by)) + '</b><span>' + U.esc(sf.account) + ' has ' + U.money(sf.have, { cents: true }) + (sf.incoming ? ' with ' + U.money(sf.incoming) + ' on its way' : '') + ', and ' + U.esc(sf.bills) + ' need' + (sf.count === 1 ? 's' : '') + ' ' + U.money(sf.need, { cents: true }) + ' ' + U.esc(dueLabel(sf.due)) + '.</span></div>')));
     items.forEach(x => {
       const soon = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && U.daysBetween(new Date(), U.parseKey(x.due)) <= 1;
-      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (x.due ? '<small>' + U.esc(dueLabel(x.due)) + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
+      const sf = x.account && short.find(y => y.account === x.account && y.names.includes(x.name));
+      const sub = [x.due ? dueLabel(x.due) : '', x.account ? 'from ' + x.account : ''].filter(Boolean).join(' · ');
+      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (sub ? '<small' + (sf ? ' style="color:var(--warn)"' : '') + '>' + U.esc(sub) + (sf ? ' · short' : '') + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
     });
     if (src) card.appendChild(h('<div class="row" style="min-height:0;padding:8px 0 10px"><span class="tx"><small>' + U.esc(src) + '</small></span></div>'));
     return sec;
   }
   const days0 = d => U.daysBetween(new Date(), d) === 0;
+  /* which account pays a bill: the plan bill's "account" (matched by name), else none */
+  function billAccount(name) {
+    const n = String(name || '').toLowerCase().trim(); if (!n) return null;
+    const bl = (M().bills || []).find(b => String(b.name || '').toLowerCase().trim() === n) || (M().bills || []).find(b => b.name && (n.startsWith(String(b.name).toLowerCase()) || String(b.name).toLowerCase().startsWith(n)));
+    return bl && typeof bl.account === 'string' && bl.account.trim() ? bl.account.trim() : null;
+  }
+  /* for each account that pays bills before payday: is there enough in it, counting money on its way to it? */
+  function shortfalls(c, items) {
+    const acc = accountsOf(c); if (!acc.length) return [];
+    const bal = n => { const a = acc.find(x => String(x.name || '').toLowerCase() === String(n).toLowerCase()); return a ? a.amount : null; };
+    const incoming = n => U.sum(transitOf(c).filter(t => String(t.to || '').toLowerCase() === String(n).toLowerCase()).map(t => t.amount));
+    const out = [], byAcct = new Map();
+    items.filter(x => x.account && x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due)).forEach(x => { if (!byAcct.has(x.account)) byAcct.set(x.account, []); byAcct.get(x.account).push(x); });
+    for (const [name, list] of byAcct) {
+      const have = bal(name); if (have == null) continue;
+      const inc = incoming(name), avail = have + inc;
+      let need = 0, first = null; const names = [];
+      for (const x of list) { need += x.amount; names.push(x.name); if (need > avail + 0.005 && !first) first = x; }
+      if (!first) continue;
+      const gap = need - avail, last = list[list.length - 1];
+      // move it from the account with the most in it that isn't this one
+      const from = acc.filter(a => String(a.name).toLowerCase() !== name.toLowerCase()).sort((a, b) => b.amount - a.amount)[0];
+      const by = U.key(U.addDays(U.parseKey(first.due), -1));
+      out.push({ account: name, have, incoming: inc, need, gap, due: last.due, by: by < U.key() ? U.key() : by, names, count: names.length, bills: names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1], from: from ? from.name : null });
+    }
+    return out;
+  }
+  const byLabel = k => { const n = U.daysBetween(new Date(), U.parseKey(k)); return n <= 0 ? 'today' : n === 1 ? 'tomorrow' : n < 7 ? U.DAY_NAMES[U.parseKey(k).getDay()] : U.fmtDateShort(k); };
 
 
   /* ---------- bills: a month calendar against paydays, pay-week totals, subscriptions ---------- */
