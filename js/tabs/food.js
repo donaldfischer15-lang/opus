@@ -360,6 +360,7 @@
     const d = new Date(), f = Plan.p.food || {};
     const rw = Plan.rotationWeek(d);
     v.appendChild(h('<div class="top"><div><div class="eyebrow">' + (rw ? U.esc(rw.week.name || 'Week') + ' · ' + (rw.index + 1) + ' of ' + rw.count : 'No rotation') + '</div><div class="title">Food</div></div></div>'));
+    const sw = Opus.sync && Opus.sync.noticeEl && Opus.sync.noticeEl(); if (sw) v.appendChild(sw);
 
     // today: the planned meals, what you actually ate of them, and anything extra
     const today = Plan.itemsFor(d).filter(it => it.kind === 'meal');

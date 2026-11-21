@@ -64,6 +64,7 @@
     const top = h('<div class="top"><span style="width:40px"></span><div class="eyebrow">' + dateLine + '</div><button class="icon-btn" type="button" aria-label="Settings">' + ui.icon('gear') + '</button></div>');
     top.querySelector('button').onclick = () => Opus.openSettings();
     v.appendChild(top);
+    const sw = Opus.sync && Opus.sync.noticeEl && Opus.sync.noticeEl(); if (sw) v.appendChild(sw);
 
     const filled = items.filter(it => Plan.isChecked(d, it.id)).length;
     const hero = h('<div class="hero">' + ui.arch(items.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + items.length + ' DONE</div></div><div class="lede"></div></div>');

@@ -287,6 +287,28 @@
     }
   }
 
+  /* a plain warning for the top of Today and Food when this phone has stopped getting changes from GitHub */
+  function notice() {
+    if (!cfg || !cfg.token) return null;
+    const last = cfg.lastSync ? new Date(cfg.lastSync) : null;
+    const at = last ? (U.key(last) === U.key() ? 'earlier today' : U.fmtDateShort(last)) + ' at ' + U.fmtTimeAP(U.pad(last.getHours()) + ':' + U.pad(last.getMinutes())) : null;
+    const planP = (cfg.problems || []).find(p => p.code === 'plan');
+    if (planP) return { title: 'Opus is using an older plan', text: planP.text };
+    const old = !last || Date.now() - last.getTime() > 6 * 3600e3;
+    if (S.status === 'blocked') return { title: 'Sync is paused', text: 'Plan changes from Claude and Grok wait until you open Settings › Sync and choose what to keep.' };
+    if (S.status === 'problem' && old) return { title: at ? 'Opus hasn’t synced since ' + at : 'Opus hasn’t synced yet', text: (S.msg || 'Something stopped it.') + ' Until then, plan changes from Claude and Grok can’t reach this phone.' };
+    if (old && S.status !== 'syncing') return { title: at ? 'Opus hasn’t synced since ' + at : 'Opus hasn’t synced yet', text: (S.status === 'offline' ? 'This phone is offline. ' : '') + 'Until it does, plan changes from Claude and Grok can’t reach this phone. Tap to check Sync.' };
+    return null;
+  }
+  function noticeEl() {
+    if (!cfg || !cfg.token) return null;
+    const el = Opus.ui.h('<button type="button" class="sync-warn" role="status" hidden><i></i><span><b></b><small></small></span></button>');
+    const paint = () => { const n = notice(); el.hidden = !n; if (n) { el.querySelector('b').textContent = n.title; el.querySelector('small').textContent = n.text; } };
+    paint(); S.listeners.push(() => { if (el.isConnected) paint(); });
+    el.onclick = () => Opus.openSettings();
+    return el;
+  }
+
   /* ---------- the sync ---------- */
   let applying = false;
   function apply(plan, logs) {
@@ -560,7 +582,7 @@
 
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
-    blocked: () => S.blocked, grokPrompt, steps, dirty,
+    blocked: () => S.blocked, grokPrompt, steps, dirty, notice, noticeEl,
     helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests
     _: { merge3, mergeLogs, mergeSetMap, mergeKeyed, applyGrok, logsOf, droppedFrom, toB64, fromB64, eq }

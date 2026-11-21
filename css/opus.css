@@ -945,3 +945,10 @@ button.g-pline:active { color: var(--gold-2); }
 .fs-go { margin: 4px 14px 12px; width: calc(100% - 28px); }
 .fs-f { padding: 10px 14px 12px; font-size: 12px; color: var(--faint); border-top: 1px solid var(--line-soft); margin-top: 4px; line-height: 1.5; }
 .fs-f .link { font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+
+/* 1.17.1: a phone that has stopped syncing says so at the top of Today and Food */
+.sync-warn { display: flex; align-items: flex-start; gap: 12px; width: 100%; margin: 0 0 14px; padding: 13px 15px; border: 1px solid rgba(227, 154, 107, .42); border-radius: var(--r-sm); background: rgba(227, 154, 107, .07); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.sync-warn i { flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px rgba(227, 154, 107, .16); }
+.sync-warn span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sync-warn b { font-weight: 600; font-size: 14.5px; }
+.sync-warn small { font-size: 13px; line-height: 1.4; color: var(--ink-2); }
