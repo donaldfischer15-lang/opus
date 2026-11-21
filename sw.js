@@ -1,5 +1,5 @@
 /* Opus service worker: keeps the app working offline. Bump VERSION when files change. */
-const VERSION = 'opus-1.17.1';
+const VERSION = 'opus-1.17.2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js', 'js/changes.js', 'js/weekahead.js', 'js/notify.js', 'js/desk.js',

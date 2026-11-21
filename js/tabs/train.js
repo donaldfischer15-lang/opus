@@ -7,15 +7,16 @@
   const typeName = { compound: 'Big compound', accessory: 'Accessory', isolation: 'Isolation', conditioning: 'Conditioning' };
 
   /* ---------- plate math view ---------- */
-  function plateView(total) {
-    const r = T.plates(total);
+  function plateView(total, base, what) {
+    const r = T.plates(total, base);
+    what = what || 'bar';
     if (!r) return '<div class="platetext">Enter a weight to see plates.</div>';
-    if (r.under) return '<div class="platetext">That is less than the ' + r.bar + ' lb bar.</div>';
+    if (r.under) return '<div class="platetext">That is less than the ' + U.wt(r.bar) + ' lb ' + (what === 'bar' ? 'bar' : 'the machine starts at') + '.</div>';
     const known = new Set(['45', '35', '25', '10', '5', '2.5']);
     const ps = r.perSide.map(p => '<span class="plate' + (known.has(String(p)) ? '' : ' other') + '" data-w="' + p + '">' + U.wt(p) + '</span>').join('');
-    const txt = r.perSide.length ? 'Per side: ' + r.perSide.map(U.wt).join(' + ') : 'Just the bar';
+    const txt = r.perSide.length ? 'Per side: ' + r.perSide.map(U.wt).join(' + ') : (what === 'bar' ? 'Just the bar' : 'No plates');
     return '<div style="display:flex;flex-direction:column;gap:6px"><div class="plates" aria-hidden="true"><span class="collar"></span>' + ps + '<span class="sleeve"></span></div>' +
-      '<div class="platetext num">' + txt + (r.leftover ? ' <span class="warn">(' + U.wt(r.leftover) + ' lb can’t be made with your plates; loads ' + U.wt(r.loaded) + ')</span>' : '') + ' · ' + r.bar + ' lb bar</div></div>';
+      '<div class="platetext num">' + txt + (r.leftover ? ' <span class="warn">(' + U.wt(r.leftover) + ' lb can’t be made with your plates; loads ' + U.wt(r.loaded) + ')</span>' : '') + (what === 'bar' ? ' · ' + U.wt(r.bar) + ' lb bar' : ' · the machine is ' + U.wt(r.bar) + ' lb empty') + '</div></div>';
   }
 
   /* ---------- active session helpers ---------- */
@@ -182,7 +183,8 @@
     };
     body.appendChild(sug);
 
-    const plateBox = T.isBarbell(blk.ex) ? h('<div></div>') : null;
+    const pBase = T.plateBase(blk.ex), pWhat = T.isBarbell(blk.ex) && Plan.exercise(blk.ex).base == null ? 'bar' : 'machine';
+    const plateBox = pBase != null ? h('<div></div>') : null;
     if (plateBox) body.appendChild(plateBox);
 
     const sets = h('<div class="sets"><div class="sethead"><span>lb</span><span></span><span>Reps</span><span></span><span></span></div></div>');
@@ -203,7 +205,7 @@
       wI.onfocus = rI.onfocus = e => { try { e.target.select(); } catch (x) {} };
       const num = el => { const v = parseFloat(String(el.value).replace(',', '.')); return isNaN(v) ? null : v; };
       if (lg) { wI.readOnly = rI.readOnly = true; minus.disabled = plus.disabled = true; }
-      wI.oninput = () => { if (lg) return; const dd = draft(s, blk.ex, i, blk); dd.w = num(wI); dd.touched = true; Store.save(); if (plateBox && i === firstOpen) plateBox.innerHTML = plateView(dd.w); };
+      wI.oninput = () => { if (lg) return; const dd = draft(s, blk.ex, i, blk); dd.w = num(wI); dd.touched = true; Store.save(); if (plateBox && i === firstOpen) plateBox.innerHTML = plateView(dd.w, pBase, pWhat); };
       rI.oninput = () => { if (lg) return; rI.value = rI.value.replace(/[^0-9]/g, ''); const dd = draft(s, blk.ex, i, blk); dd.r = num(rI); dd.touched = true; Store.save(); };
       const bump = k => { if (lg) return; const dd = draft(s, blk.ex, i, blk); dd.r = Math.max(0, (num(rI) || 0) + k); dd.touched = true; rI.value = dd.r; Store.save(); ui.buzz(6); };
       minus.onclick = () => bump(-1); plus.onclick = () => bump(1);
@@ -217,7 +219,7 @@
       if (lg && lg.pr) sets.appendChild(h('<span class="best" style="padding-left:4px">' + ui.icon('laurel', '') + 'New best · ' + U.wt(lg.weight) + ' × ' + lg.reps + '</span>'));
     }
     body.appendChild(sets);
-    if (plateBox) { const d0 = firstOpen >= 0 ? draft(s, blk.ex, firstOpen, blk) : { w: (setsFor(s, blk.ex).pop() || {}).weight }; plateBox.innerHTML = plateView(d0.w); }
+    if (plateBox) { const d0 = firstOpen >= 0 ? draft(s, blk.ex, firstOpen, blk) : { w: (setsFor(s, blk.ex).pop() || {}).weight }; plateBox.innerHTML = plateView(d0.w, pBase, pWhat); }
 
     const more = h('<div class="btns lgb"><button class="btn quiet sm" type="button">+ Set</button><button class="btn quiet sm" type="button">− Set</button><button class="btn quiet sm" type="button">Swap</button><button class="btn quiet sm" type="button">Remove</button></div>');
     const [bAdd, bLess, bSwap, bDel] = more.children;

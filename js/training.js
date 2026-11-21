@@ -101,6 +101,9 @@
       return { bar, perSide: out, leftover, total, loaded: total - leftover };
     },
     isBarbell(exId) { const l = Plan.exercise(exId).load || ''; return l.startsWith('barbell'); },
+    /* what the empty bar or machine weighs, for plate math: an exercise's own "base" (a plate-loaded machine), or the bar for barbell lifts */
+    plateBase(exId) { const e = Plan.exercise(exId), b = Number(e.base); if (e.base != null && e.base !== '' && isFinite(b) && b >= 0) return b; if (this.isBarbell(exId)) { const c = this.cfg(); return c.bar != null ? c.bar : 45; } return null; },
+    hasPlates(exId) { return this.plateBase(exId) != null; },
 
     /* lift trends: best estimated 1-rep max per session */
     trend(exId) {
