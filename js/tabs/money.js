@@ -524,7 +524,7 @@
       const paid = first && d.balance != null && first > 0 ? U.clamp(1 - d.balance / first, 0, 1) : null;
       const isFocus = cds.findIndex(x => x.balance == null || x.balance > 0) === n;
       const r = h('<div class="row tap" style="flex-wrap:wrap;row-gap:8px"><span class="tag" style="min-width:26px">' + U.roman(n + 1) + '</span><span class="tx"><b>' + U.esc(d.name) + (isFocus ? ' <span class="tag" style="margin-left:6px">Focus</span>' : '') + '</b><small>' +
-        [ms && ms.date && !ms.paid ? '<span style="color:var(--gold-2)">paid off ' + monShort(ms.date) + '</span>' : null, d.apr != null ? d.apr + '% APR' : null, d.minMonthly != null ? U.money(d.minMonthly) + '/mo min' : null].filter(Boolean).join(' · ') + '</small></span>' +
+        [ms && ms.date && !ms.paid ? '<span style="color:var(--gold-2)">paid off ' + monShort(ms.date) + '</span>' : null, d.apr != null ? d.apr + '% APR' : null, d.minMonthly != null ? U.money(d.minMonthly) + '/mo min' : null].concat(debtExtras(d)).filter(Boolean).join(' · ') + '</small></span>' +
         '<span class="num" style="font-weight:600;' + (d.balance == null ? 'color:var(--gold);font-weight:500;font-size:13px' : '') + '">' + (d.balance == null ? 'Add balance' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span>' +
         (paid != null ? '<div class="bar" style="flex-basis:100%;margin-left:40px"><i style="width:' + (paid * 100).toFixed(1) + '%"></i></div>' : '') + '</div>');
       r.onclick = () => editDebt(i, onChange);
@@ -537,7 +537,7 @@
       card.appendChild(h('<div class="row" style="min-height:0;padding:12px 0 4px"><span class="tx"><small>Paid as bills, not counted in your debt</small></span></div>'));
       billed.forEach(d => {
         const r = h('<div class="row tap" style="opacity:.72"><span class="tag" style="min-width:26px">·</span><span class="tx"><b>' + U.esc(d.name) + '</b><small>' +
-          [d.minMonthly != null ? U.money(d.minMonthly) + '/mo as a bill' : 'paid as a bill', d.apr != null ? d.apr + '% APR' : null].filter(Boolean).join(' · ') + '</small></span><span class="num" style="color:var(--dim)">' + (d.balance == null ? '—' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span></div>');
+          [d.minMonthly != null ? U.money(d.minMonthly) + '/mo as a bill' : 'paid as a bill', d.apr != null ? d.apr + '% APR' : null].concat(debtExtras(d)).filter(Boolean).join(' · ') + '</small></span><span class="num" style="color:var(--dim)">' + (d.balance == null ? '—' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span></div>');
         r.onclick = () => editDebt(ds.indexOf(d), onChange);
         card.appendChild(r);
       });
@@ -549,6 +549,9 @@
     const d = M().debts[i];
     const ci = CD().indexOf(d);
     ui.sheet({ title: d.name, kicker: counted(d) ? 'Payoff order ' + U.roman(ci + 1) : 'Paid as a bill, not counted in your debt', render(api) {
+      const facts = debtFacts(d);
+      if (facts.length) api.body.appendChild(h('<div class="card pad" style="margin-bottom:14px">' + facts.map(f => '<div class="kv"><span>' + f[0] + '</span><span class="num" style="text-align:right">' + f[1] + '</span></div>').join('') + '</div>'));
+      if (d.note) { const p = h('<p class="small" style="margin:-4px 4px 14px"></p>'); p.textContent = d.note; api.body.appendChild(p); }
       api.body.appendChild(h('<div style="display:flex;flex-direction:column;gap:12px">' + numField('db-bal', 'Balance now', d.balance) + '<div class="grid2">' + numField('db-apr', 'APR %', d.apr) + numField('db-min', 'Minimum a month', d.minMonthly) + '</div></div>'));
       api.body.appendChild(h('<p class="small">Leave a field blank if you don’t know it yet.</p>'));
       const sv = h('<button class="btn block" type="button">Save</button>');
@@ -883,6 +886,97 @@
     } });
   }
 
+  /* ---------- credit: scores and what drives them (money.credit, from Grok's reads of the owner's credit report) ---------- */
+  const isObj = o => !!o && typeof o === 'object' && !Array.isArray(o);
+  const toneOf = r => !r ? '' : /needs work|fair|poor|bad/i.test(r) ? 'var(--warn)' : /excellent|good/i.test(r) ? 'var(--good)' : '';
+  const ymd = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? U.parseKey(v) : null;
+  const dateY = v => { const d = ymd(v); return !d ? '—' : U.fmtDateShort(v) + (d.getFullYear() !== new Date().getFullYear() ? ', ' + d.getFullYear() : ''); };
+  // when an installment loan's last payment falls: opened + term
+  function endsOf(d) {
+    const o = ymd(d.opened), t = Number(d.termMonths);
+    if (!o || !(t > 0)) return null;
+    return new Date(o.getFullYear(), o.getMonth() + t, 1);
+  }
+  function debtExtras(d) {
+    const out = [];
+    if (d.limit > 0 && d.balance != null) out.push(Math.round(d.balance / d.limit * 100) + '% of ' + U.money(d.limit) + ' limit');
+    const e = endsOf(d); if (e && !(d.balance === 0)) out.push('last payment ~' + monShort(e));
+    return out;
+  }
+  function debtFacts(d) {
+    const f = [];
+    if (d.lender) f.push(['Lender', U.esc(d.lender)]);
+    if (d.limit != null) f.push(['Credit limit', U.money(d.limit)]);
+    if (d.highest != null) f.push(['Highest balance', U.money(d.highest)]);
+    if (d.termMonths != null) f.push(['Term', d.termMonths + ' months']);
+    if (ymd(d.opened)) f.push(['Opened', dateY(d.opened)]);
+    const e = endsOf(d); if (e) f.push(['Last payment due', 'around ' + monthYear(e)]);
+    if (ymd(d.lastPayment)) f.push(['Last paid', dateY(d.lastPayment)]);
+    if (d.onTime != null) f.push(['Payment history', d.onTime === true ? '<span style="color:var(--good)">All on time</span>' : d.onTime === false ? '<span style="color:var(--warn)">Some late</span>' : U.esc(String(d.onTime))]);
+    if (Array.isArray(d.loans) && d.loans.length) {
+      const nums = d.loans.map(x => typeof x === 'number' ? x : x && x.balance).filter(x => typeof x === 'number');
+      f.push([d.loans.length + ' loans', nums.map(x => U.money(x)).join(' · ')]);
+    }
+    if (ymd(d.reported)) f.push(['Balance reported', dateY(d.reported)]);
+    return f;
+  }
+  function creditSec(n) {
+    const cr = M().credit;
+    if (!isObj(cr)) return null;
+    const scores = (Array.isArray(cr.scores) ? cr.scores : []).filter(x => x && typeof x.score === 'number');
+    const factors = (Array.isArray(cr.factors) ? cr.factors : []).filter(x => x && x.name);
+    const cards = (Array.isArray(cr.cards) ? cr.cards : []).filter(x => x && x.name);
+    const inq = (Array.isArray(cr.inquiries) ? cr.inquiries : []).filter(x => x && (x.lender || x.date));
+    if (!scores.length && !factors.length && !cards.length) return null;
+    const sec = h('<div class="sec"><div class="sh"><span class="r">' + U.roman(n) + '</span><span class="t">Credit</span><span class="c">' + (ymd(cr.asOf) ? 'as of ' + U.fmtDateShort(cr.asOf) : '') + '</span></div></div>');
+    const card = h('<div class="card pad"></div>');
+    if (scores.length) {
+      const g = h('<div class="grid2" style="gap:8px"></div>');
+      scores.slice(0, 4).forEach(x => {
+        const ch = typeof x.change === 'number' && x.change ? '<span style="color:' + (x.change > 0 ? 'var(--good)' : 'var(--warn)') + '">' + (x.change > 0 ? '▲ ' : '▼ ') + Math.abs(x.change) + '</span>' : null;
+        g.appendChild(h('<div class="figure"><div class="v num">' + x.score + '</div><div class="k">' + U.esc(x.bureau || 'Score') + '</div><div class="sub">' + [ch, x.band ? '<span style="color:' + (toneOf(x.band) || 'var(--dim)') + '">' + U.esc(x.band) + '</span>' : null].filter(Boolean).join(' · ') + '</div></div>'));
+      });
+      card.appendChild(g);
+      // score history, once there is more than one read
+      const hist = (Array.isArray(cr.history) ? cr.history : []).filter(x => x && ymd(x.date) && isObj(x.scores)).sort((a, b) => a.date.localeCompare(b.date));
+      const b0 = scores[0].bureau, pts = hist.map(x => ({ date: x.date, v: x.scores[b0] })).filter(x => typeof x.v === 'number');
+      if (pts.length > 1) {
+        const d = pts[pts.length - 1].v - pts[0].v;
+        const row = h('<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0 2px"><span class="small">' + U.esc(b0) + ' ' + (d === 0 ? 'unchanged' : (d > 0 ? 'up ' : 'down ') + Math.abs(d)) + ' since ' + U.fmtDateShort(pts[0].date) + '</span><span class="spk">' + ui.spark(pts.slice(-20), { w: 110, h: 30 }) + '</span></div>');
+        card.appendChild(row);
+      }
+    }
+    const list = h('<div></div>');
+    factors.forEach(x => {
+      const sub = [x.rating ? '<span style="color:' + (toneOf(x.rating) || 'var(--dim)') + '">' + U.esc(x.rating) + '</span>' : null, x.impact ? U.esc(x.impact) + ' impact' : null, x.note ? U.esc(x.note) : null].filter(Boolean).join(' · ');
+      const isInq = /inquir/i.test(x.name) && inq.length;
+      const r = h('<div class="row' + (isInq ? ' tap' : '') + '"><span class="tx"><b>' + U.esc(x.name) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span><span class="num" style="font-weight:600">' + U.esc(x.value == null ? '—' : String(x.value)) + '</span></div>');
+      if (isInq) r.onclick = () => inquiries(inq);
+      list.appendChild(r);
+    });
+    if (inq.length && !factors.some(x => /inquir/i.test(x.name))) { const r = h('<div class="row tap"><span class="tx"><b>Hard inquiries</b></span><span class="num" style="font-weight:600">' + inq.length + '</span></div>'); r.onclick = () => inquiries(inq); list.appendChild(r); }
+    if (typeof cr.netWorth === 'number') list.appendChild(h('<div class="row"><span class="tx"><b>Net worth</b><small>the credit report’s estimate</small></span><span class="num" style="font-weight:600">' + (cr.netWorth < 0 ? '−' : '') + U.money(Math.abs(cr.netWorth)) + '</span></div>'));
+    if (cards.length) {
+      list.appendChild(h('<div class="row" style="min-height:0;padding:12px 0 4px"><span class="tx"><small>Open cards not in your debts</small></span></div>'));
+      cards.forEach(x => list.appendChild(h('<div class="row"><span class="tx"><b>' + U.esc(x.name) + '</b><small>' + [x.limit != null ? U.money(x.limit) + ' limit' : null, x.limit > 0 && x.balance != null ? Math.round(x.balance / x.limit * 100) + '% used' : null].filter(Boolean).join(' · ') + '</small></span><span class="num">' + (x.balance == null ? '—' : U.money(x.balance)) + '</span></div>')));
+    }
+    if (list.children.length) { list.style.marginTop = scores.length ? '8px' : '0'; card.appendChild(list); }
+    if (cr.source) { const p = h('<p class="small" style="margin-top:10px"></p>'); p.textContent = 'From ' + cr.source + '. Grok updates this when you share a new report.'; card.appendChild(p); }
+    sec.appendChild(card);
+    return sec;
+  }
+  function inquiries(inq) {
+    ui.sheet({ title: 'Hard inquiries', kicker: 'Lenders who checked your credit', render(api) {
+      const c = h('<div class="card"></div>');
+      inq.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).forEach(x => {
+        const age = ymd(x.date) ? U.daysBetween(U.parseKey(x.date), new Date()) : null;
+        c.appendChild(h('<div class="row"><span class="tx"><b>' + U.esc(x.lender || 'Lender') + '</b><small>' + (age != null ? (age < 730 ? 'drops off your report around ' + monShort(new Date(U.parseKey(x.date).getFullYear() + 2, U.parseKey(x.date).getMonth(), 1)) : 'over two years old') : '') + '</small></span><span class="num">' + dateY(x.date) + '</span></div>'));
+      });
+      api.body.appendChild(c);
+      api.body.appendChild(h('<p class="small">A hard inquiry stays on a report for two years and counts toward scores for about one.</p>'));
+    } });
+  }
+
   /* ---------- the tab ---------- */
   function render(v) {
     const c = calc(), m = M();
@@ -928,6 +1022,8 @@
       });
     }
     v.appendChild(hs);
+
+    const cs = creditSec(6); if (cs) v.appendChild(cs);
 
     v.appendChild(h('<p class="small" style="text-align:center;padding:0 12px">Everything you enter here is saved for Grok to read.</p>'));
   }

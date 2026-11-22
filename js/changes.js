@@ -21,10 +21,11 @@
     lightsOut: 'lights out', wake: 'wake time', monthDay: 'day of the month', dayOffMidday: 'day-off midday', dayOffEvening: 'day-off evening',
     restSeconds: 'rest', minutes: 'minutes', perWeek: 'per week', kcal: 'calories', protein: 'protein', carbs: 'carbs', fat: 'fat',
     cue: 'cue', sets: 'sets', reps: 'reps', load: 'load', step: 'step', start: 'start', target: 'target', unit: 'unit',
+    limit: 'credit limit', highest: 'highest balance', termMonths: 'term in months', opened: 'opened', lastPayment: 'last payment', onTime: 'payment history', lender: 'lender', loans: 'loans', reported: 'reported', asOf: 'as of', netWorth: 'net worth', score: 'score', bureau: 'bureau', band: 'band', rating: 'rating', impact: 'impact',
     phone: 'phone', vet: 'vet', care: 'care', feeding: 'feeding', dose: 'dose', when: 'when', part: 'part of the day', low: 'low', high: 'high'
   };
   const human = k => FIELD[k] || String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').toLowerCase();
-  const MONEYISH = /^(amount|balance|minMonthly|minimum|cushion|plannedDebtPerWeek|takeHome|paycheck|low|high|cash|free|limit)$/;
+  const MONEYISH = /^(amount|balance|minMonthly|minimum|cushion|plannedDebtPerWeek|takeHome|paycheck|low|high|cash|free|limit|highest|netWorth)$/;
   function fmt(v, key, inMoney) {
     if (blank(v)) return 'blank';
     if (typeof v === 'boolean') return v ? 'on' : 'off';
@@ -242,6 +243,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.23.0': [['money', 'Money has a Credit part now: your scores, what moves them, hard inquiries and open cards, from your latest credit report.'], ['money', 'Tap a debt to see its lender, term, when the last payment falls and its payment history. Cards show how much of the limit is used.']],
     '1.22.0': [['today', 'Opus no longer zooms in when you pinch or double-tap by accident, and tapping a field doesn’t zoom either.']],
     '1.21.0': [['today', 'Opus opens straight from your phone now, so it’s up at once even with a weak signal or none. Updates download in the background and switch in the next time you open it.'], ['today', 'A week before a GitHub sign-in runs out, this phone’s or the helper’s, Today warns you and you get a notification. Settings › Sync has Paste a new token, so renewing takes a minute and nothing else changes.']],
     '1.20.0': [['money', 'Each bill can say which account it comes out of. Before payday, Money checks that account and, if it’s short, says how much to move and by when, counting money already on its way.']],

@@ -178,6 +178,20 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - `debts` are in **payoff order**. The first with a balance above zero is the focus.
 - `counted: false` on a debt keeps it listed but leaves it out of every debt figure: total debt, the focus, payoff order, the debt-free date and debt charts. Its payment is a regular bill. **It is the owner's rule:** never set it back to counted, keep its balance current, and never count it in any debt total, payoff plan or debt-free date you work out in chat either. Why each one is set that way is in `money.notes`.
 - `every` is `week`, `month` or `year`.
+- A debt can also hold what a credit report shows about it, all optional: `lender`, `limit` (a card's credit limit; Money shows how much of it is used), `highest` (highest balance), `termMonths` and `opened` (`YYYY-MM-DD`; Money works out the month of the last payment), `lastPayment` (date), `onTime` (`true`, `false`, or a short line such as `"81% on time"`), `reported` (the date the report's balance is from), `loans` (a list of each loan's balance when one debt is several loans) and `note` (one short line). Leave out what you don't know.
+- `credit` (optional) is the Credit part of Money, from the owner's credit report. Replace it whole each time you read a new report, and add that day's scores to `history` (keep the older entries):
+```json
+"credit": {
+  "asOf": "YYYY-MM-DD", "source": "where it came from",
+  "scores": [ { "bureau": "TransUnion", "score": 700, "change": 10, "band": "Good" } ],
+  "factors": [ { "name": "Card use", "value": "4%", "rating": "Excellent", "impact": "high", "note": "one short line" } ],
+  "inquiries": [ { "lender": "…", "date": "YYYY-MM-DD" } ],
+  "cards": [ { "name": "…", "balance": 0, "limit": 1000 } ],
+  "netWorth": -1000,
+  "history": [ { "date": "YYYY-MM-DD", "scores": { "TransUnion": 700 } } ]
+}
+```
+  `cards` are open cards that are not in `debts` (for example ones at $0). A card with a balance the owner is paying off belongs in `debts`. `change` is what the report says the score moved since its last read. Never guess a score or a figure; leave it out.
 - `sub: true` on a bill marks a subscription. Money totals them in one line.
 - `due` (optional) lists one-time amounts with a date, such as the rest of a card statement: `[{ "name": "…", "amount": 262.38, "date": "YYYY-MM-DD" }]`. They show on the bill calendar on that day and are never counted as a monthly bill. Remove an entry once it is paid or past.
 - `spendGroups` sorts spending: the store name exactly as you log it in `spent`, in lower case, mapped to one group: Groceries, Eating out, Pets, Gas, Clothes & gear, Health, Fun, Home, Gifts, Cash, Transfers or Other. Add a store only when you are sure what it is. Leave the rest out: Opus shows them as "Not sorted yet" and Claude asks the owner.
