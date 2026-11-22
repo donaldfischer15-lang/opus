@@ -1012,3 +1012,9 @@ button.g-pline:active { color: var(--gold-2); }
 .wr-dot.green { background: var(--good); } .wr-dot.yellow { background: var(--gold); } .wr-dot.red { background: var(--warn); }
 .wr-stats { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .wr-ring .f { transition: none; } }
+
+/* Food: what's left of the day for dinner */
+.left-din { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: linear-gradient(160deg, rgba(214, 163, 94, .12), rgba(255, 232, 200, .02)); }
+.left-din .ld-k { font-family: var(--display); font-size: 10px; letter-spacing: .24em; color: var(--gold); text-transform: uppercase; }
+.left-din .ld-v { font-family: var(--serif); font-size: 24px; font-weight: 600; color: var(--gold-2); }
+.left-din small { font-size: 12.5px; color: var(--dim); }

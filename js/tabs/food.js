@@ -364,7 +364,7 @@
 
     // today: the planned meals, what you actually ate of them, and anything extra
     const today = Plan.itemsFor(d).filter(it => it.kind === 'meal');
-    const t = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Today</span><span class="c"></span></div><div class="mac"></div><div class="card"></div><p class="small mac-note" style="padding:0 4px" hidden></p></div>');
+    const t = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Today</span><span class="c"></span></div><div class="mac"></div><div class="left-din" hidden><div class="ld-k">Left for dinner</div><div class="ld-v num"></div><small></small></div><div class="card"></div><p class="small mac-note" style="padding:0 4px" hidden></p></div>');
     const drawTotals = () => {
       const pl = Plan.dayMacros(d), ea = Plan.dayMacros(d, true);
       const box = t.querySelector('.mac'); box.innerHTML = '';
@@ -376,6 +376,18 @@
       const bu = Opus.whoop && Opus.whoop.burned(d); if (bu) bits.push('WHOOP: ' + bu.kcal.toLocaleString('en-US') + ' cal burned' + (bu.open ? ' so far today' : ' today') + '.');
       if (ea.extras) bits.push('Eaten includes ' + ea.extras + ' extra' + (ea.extras === 1 ? '' : 's') + (ea.unknown ? ', ' + ea.unknown + ' without macros' : '') + '.');
       note.textContent = bits.join(' '); note.hidden = !bits.length;
+      // before dinner: what's left of the day's calories and protein, so the add-on fits
+      const lf = Plan.leftForDinner(d), lbox = t.querySelector('.left-din');
+      lbox.hidden = !(lf && !lf.dinnerDone);
+      if (lf && !lf.dinnerDone) {
+        const dk = lf.dinner && lf.dinner.kcal != null ? lf.dinner : null;
+        lbox.querySelector('.ld-v').textContent = n0(Math.max(0, lf.kcal)) + ' cal · ' + n0(Math.max(0, lf.protein)) + ' g protein';
+        const sm = [];
+        if (dk) sm.push('After the planned dinner: ' + n0(Math.max(0, lf.kcal - dk.kcal)) + ' cal and ' + n0(Math.max(0, lf.protein - (dk.protein || 0))) + ' g protein for something else.');
+        if (lf.assumed.length) { const a = lf.assumed.map(x => String(x).toLowerCase()), many = a.length > 1, w = a.slice(0, -1).join(', ') + (many ? ' and ' : '') + a[a.length - 1]; sm.push(w.charAt(0).toUpperCase() + w.slice(1) + (many ? ' are' : ' is') + ' counted as planned until you tick ' + (many ? 'them' : 'it') + '.'); }
+        if (lf.unknown) sm.push(lf.unknown + ' item' + (lf.unknown === 1 ? ' has' : 's have') + ' no macros, so it’s not counted.');
+        lbox.querySelector('small').textContent = sm.join(' '); lbox.querySelector('small').hidden = !sm.length;
+      }
     };
     const card = t.querySelector('.card');
     if (!today.length) card.appendChild(h('<p class="empty">' + (Plan.foodOff(d) ? 'Off day. No meal plan today, so log what you eat as you go.' : 'No meals planned today.') + '</p>'));

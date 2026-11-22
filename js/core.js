@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.26.2';
+  Opus.VERSION = '1.26.3';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -281,6 +281,26 @@
       }
       return out;
     },
+    /* what's left of the day's targets for dinner: meals you ticked as you logged them, earlier meals not ticked yet as planned, plus extras */
+    leftForDinner(d) {
+      const t = (this.p.food || {}).targets; if (!t || !(Number(t.kcal) > 0)) return null;
+      d = d || new Date(); if (this.foodOff(d)) return null;
+      const items = this.itemsFor(d).filter(it => it.kind === 'meal' && it.meal), din = items.find(it => it.slot === 'dinner');
+      if (!din) return null;
+      const out = { kcal: Number(t.kcal), protein: Number(t.protein) || 0, assumed: [], unknown: 0, dinnerDone: this.isChecked(d, din.id), dinner: this.macros(din.meal) };
+      const take = x => { out.kcal -= Number(x.kcal) || 0; out.protein -= Number(x.protein) || 0; };
+      for (const it of items) {
+        if (it === din) continue;
+        const e = this.eatenEntry(d, it.id), on = this.isChecked(d, it.id);
+        if (on && e && !e.skipped && e.macros) { take(e.macros); continue; }
+        if (!on && e && e.skipped) continue;
+        const x = this.macros(it.meal); if (!x || x.kcal == null) { out.unknown++; continue; }
+        take(x); if (!on) out.assumed.push(it.slot || it.meal.name);
+      }
+      for (const e of this.eatenOn(d)) { if (!e.extra) continue; if (!e.macros || e.macros.kcal == null) { out.unknown++; continue; } take(e.macros); }
+      out.kcal = Math.round(out.kcal); out.protein = Math.round(out.protein);
+      return out;
+    },
     library() { const f = this.p.food || {}; return Array.isArray(f.library) ? f.library : []; },
     /* training */
     workoutFor(d) {
@@ -322,7 +342,7 @@
         const it = { id: r.id, title: r.title, part: r.part || 'morning', time: r.time || null, kind: r.kind || (r.meal ? 'meal' : 'task'), detail: r.detail || '' };
         if (r.meal) {
           const m = this.mealFor(d, r.meal);
-          if (m) { it.meal = m; it.title = m.name.toLowerCase() === String(r.title).toLowerCase() ? r.title : r.title + ': ' + lower1(m.name); it.detail = r.detail ? r.detail : (m.how || ''); }
+          if (m) { it.meal = m; it.slot = r.meal; it.title = m.name.toLowerCase() === String(r.title).toLowerCase() ? r.title : r.title + ': ' + lower1(m.name); it.detail = r.detail ? r.detail : (m.how || ''); }
         }
         if (it.kind === 'workout') {
           const w = this.workoutFor(d); if (!w) continue;
