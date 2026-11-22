@@ -52,6 +52,7 @@
       cut(/\bin\s+(\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(days?|weeks?)\b/i, m => { const n = WORDN[m[1].toLowerCase()] || Number(m[1]); out.date = U.addDays(now, n * (/^w/i.test(m[2]) ? 7 : 1)); }) ||
       cut(/\b(?:(on|this|next)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)\b/i, m => {
         const w = m[2].toLowerCase(); if (!m[1] && w.length < 6) return false; // a bare "sat" or "wed" is a word, not a day
+        if (!m[1] && (/\b(every|each|most|usually|always|takes?|took)\b/i.test(text) || /^\s*(prep|night|morning|nights|mornings|routine|workout|lift|run)\b/i.test(s.slice(m.index + m[0].length)))) return false; // "Sunday prep takes 90 minutes" is a habit, not a plan
         let n = (DAYS[w] - now.getDay() + 7) % 7; if (n === 0 && (m[1] || '').toLowerCase() !== 'this') n = 7;
         out.date = U.addDays(now, n);
       });
@@ -73,12 +74,12 @@
   const TAGS = ['Note', 'To do', 'Plans', 'Birthday', 'Gym', 'Food', 'Money', 'Home', 'Health'];
   const RULES = [
     ['Gym', /\b(leg day|push day|pull day|squat|bench|deadlift|press|lift(s|ed|ing)?|gym|workout|reps?|sets?|row|curls?|thrust|pull-?ups?|cardio|run|bike|plates?|machine|pr)\b/i],
-    ['Food', /\b(eat|ate|meals?|lunch|dinner|breakfast|snacks?|grocer(y|ies)|recipe|calories|cal|protein|carbs|chicken|eggs?|turkey|beef|food|cook|enchiladas?)\b/i],
+    ['Food', /\b(eat|ate|meals?|prep|lunch|dinner|breakfast|snacks?|grocer(y|ies)|recipe|calories|cal|protein|carbs|chicken|eggs?|turkey|beef|food|cook|enchiladas?)\b/i],
     ['Money', /\$|\b(pay|paid|payday|bill|bills|bank|rent|debt|budget|price|cost|bought|card|loan|savings?|money|refund)\b/i],
     ['Health', /\b(doctor|dentist|dermatologist|blood|labs?|vitamins?|supplements?|sleep|whoop|meds?|medicine|prescription|checkup|physical|therapy|hair|skin)\b/i],
     ['Home', /\b(house|home|clean|laundry|yard|lawn|mow|car|oil change|tires?|fix|repair|trash|dishes|vet|dog|cat|pets?|walk|groom)\b/i]
   ];
-  const TODO = /^(call|text|email|buy|get|pick up|set up|setup|book|schedule|pay|send|fix|clean|order|renew|cancel|return|remember to|make|finish|check|ask|bring|grab|mail|sign|submit|file|wash|change|replace|look into|find)\b/i;
+  const TODO = /^(call|text|email|buy|get|pick up|set up|setup|book(?!s|\s+(to|idea|club|list)\b)|schedule|pay|send|fix|clean|order|renew|cancel|return|remember to|make|finish|check|ask|bring|grab|mail|sign|submit|file|wash|change|replace|look into|find)\b/i;
   function tagFor(e) {
     if (e.yearly && YEARLY.test(e.text)) return 'Birthday';
     if (TODO.test(e.text)) return 'To do';
