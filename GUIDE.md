@@ -415,11 +415,11 @@ The page, top to bottom: the Lamp, Before class (and Back again), the Seal, From
 - `ledger` and `subjects` are retired; leave them out.
 - Change the creed `lines` and the reading list only after talking it through with him. Never invent facts about him. Nothing on this page draws on his job.
 
+The owner can tap Listen on today's sitting (or an earlier one) and the phone reads it aloud, often on the drive home: the title, the body, the takeaway and the question, in that order. Write the body to be heard as well as read: plain sentences, no tables, and no lists that only make sense on the page.
+
 ---
 
 Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
-
-The owner can tap Listen on today's sitting (or an earlier one) and the phone reads it aloud, often on the drive home: the title, the body, the takeaway and the question, in that order. Write the body to be heard as well as read: plain sentences, no tables, and no lists that only make sense on the page.
 
 ## 6. The desk (`desk.json`, `"format": "opus-desk"`)
 
