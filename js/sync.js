@@ -246,6 +246,14 @@
     else { const r2 = await gh('GET', '/contents/' + name, null, 'application/vnd.github.raw+json'); text = await r2.text(); }
     return { sha: j.sha, text };
   }
+  /* a file as it is, for audio and other binary files (never merged; read only) */
+  async function raw(name) {
+    if (!cfg || !cfg.token) throw new SyncError('off', 'Sync is off');
+    const r = await gh('GET', '/contents/' + name, null, 'application/vnd.github.raw+json');
+    if (r.status === 404) return null;
+    if (!r.ok) throw new SyncError('later', 'GitHub answered ' + r.status + ' for ' + name + '.');
+    return r.blob();
+  }
   /* who last changed a file in GitHub, from the start of its commit message ("Grok: ...", "Cassius: ...") */
   async function lastAuthor(name) {
     try {
@@ -628,7 +636,7 @@
 
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
-    blocked: () => S.blocked, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
+    blocked: () => S.blocked, raw, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
     helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests
     _: { merge3, mergeLogs, mergeSetMap, mergeKeyed, applyGrok, logsOf, droppedFrom, toB64, fromB64, eq }

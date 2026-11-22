@@ -136,5 +136,47 @@
     b.onclick = ev => { ev.stopPropagation(); play(typeof o === 'function' ? o() : o); };
     return b;
   }
-  Opus.listen = { ok, play, stop, toggle, button, parts, plain, state: () => st };
+  /* natural voice samples: the helper makes the opening of a Cassius sitting in three voices with Cloudflare's AI,
+     once, as real audio files. Played as audio, so they work with the phone on silent and keep going like a podcast. */
+  function samplesRow() {
+    const r = h('<div class="row tap"><span class="tx"><b>Natural voice samples</b><small>Hear Cassius in three natural voices</small></span>' + Opus.ui.icon('chev', 'chev ico') + '</div>');
+    r.onclick = samplesSheet;
+    return r;
+  }
+  function samplesSheet() {
+    stop();
+    const urls = [];
+    Opus.ui.sheet({ title: 'Natural voices', kicker: 'Listen', onClose: () => urls.forEach(u => URL.revokeObjectURL(u)), render(api) {
+      const b = api.body;
+      const intro = h('<p class="note" style="padding:0 4px">The opening of a Cassius sitting, read by three of Cloudflare’s natural voices. These play as audio, so they work with your phone on silent.</p>');
+      const box = h('<div class="card"></div>');
+      b.appendChild(intro); b.appendChild(box);
+      const say = t => { box.innerHTML = ''; box.appendChild(h('<div class="row"><span class="tx"><small></small></span></div>')); box.querySelector('small').textContent = t; };
+      say('Loading the samples…');
+      (async () => {
+        let idx = null;
+        try { const bl = await Opus.sync.raw('voice/samples.json'); idx = bl ? JSON.parse(await bl.text()) : null; } catch (e) { say('Couldn’t reach your data just now. Try again with a signal.'); return; }
+        if (!idx) { say('The helper hasn’t made them yet. It does within about ten minutes of its update. Check back shortly.'); return; }
+        if (idx.making) { say('The helper is making them right now. Check back in a minute.'); return; }
+        const vs = Array.isArray(idx.voices) ? idx.voices : [];
+        if (!vs.length) { say('The helper couldn’t make them' + (idx.error ? ': ' + idx.error : '') + '. It tries again in a few hours.'); return; }
+        box.innerHTML = '';
+        for (const v of vs) {
+          const row = h('<div class="row voice-s" style="flex-direction:column;align-items:stretch;gap:8px"><span class="tx"><b></b><small>Loading…</small></span><audio controls preload="auto" playsinline style="width:100%"></audio></div>');
+          row.querySelector('b').textContent = v.name;
+          box.appendChild(row);
+          const a = row.querySelector('audio'), sm = row.querySelector('small');
+          // only one plays at a time
+          a.addEventListener('play', () => box.querySelectorAll('audio').forEach(o => { if (o !== a) o.pause(); }));
+          try {
+            const bl = await Opus.sync.raw(v.file); if (!bl) throw new Error('missing');
+            const u = URL.createObjectURL(new Blob([bl], { type: 'audio/mpeg' })); urls.push(u); a.src = u;
+            sm.textContent = 'Tap play';
+          } catch (e) { sm.textContent = 'Couldn’t load this one.'; a.remove(); }
+        }
+        if (idx.from) b.appendChild(h('<p class="small" style="padding:0 4px">From the sitting of ' + U.esc(U.fmtDateShort(idx.from)) + '.</p>'));
+      })();
+    } });
+  }
+  Opus.listen = { ok, play, stop, toggle, button, parts, plain, state: () => st, samplesRow, samplesSheet };
 })();

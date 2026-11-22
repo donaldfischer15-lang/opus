@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.16.0';
+const VERSION = '1.17.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -152,6 +152,7 @@ Plan.validate = function (p) {
 
 /* ---------- GitHub ---------- */
 function b64enc(s) { const b = new TextEncoder().encode(s); let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(x); }
+function b64bytes(b) { let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(x); }
 function b64dec(s) { const x = atob(String(s).replace(/\s/g, '')); const b = new Uint8Array(x.length); for (let i = 0; i < x.length; i++) b[i] = x.charCodeAt(i); return new TextDecoder().decode(b); }
 /* GitHub says on every answer when the helper's token runs out; report() puts it in helper.json so Opus can warn */
 let tokenExp;
@@ -176,7 +177,7 @@ function gh(env, by) {
       return { text: b64dec(j.content || ''), sha: j.sha };
     },
     async put(p, text, sha, message) {
-      const body = { message, content: b64enc(text), committer: { name: (by || 'Grok') + ' via Opus helper', email: 'opus-helper@users.noreply.github.com' } };
+      const body = { message, content: text instanceof Uint8Array ? b64bytes(text) : b64enc(text), committer: { name: (by || 'Grok') + ' via Opus helper', email: 'opus-helper@users.noreply.github.com' } };
       if (sha) body.sha = sha;
       const r = await fetch(url(p), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H), body: JSON.stringify(body) });
       if (r.status === 409 || r.status === 422) { const e = new Error('The file changed while saving (the phone probably synced). Read it again and redo the change.'); e.conflict = true; throw e; }
@@ -707,6 +708,64 @@ async function notifyChange(env, who, change, tab) {
 /* ---------- helper.json: tell Opus which version is live, and when the helper's GitHub token runs out ----------
    Checked once an hour. "token": { "expires": ISO or null for never, "warned": [7, 1] } — a week and a day before it
    runs out, the helper sends a notification itself (so the owner hears even without opening Opus), once each. */
+/* ---------- natural voice samples ----------
+   A one-time try-out: the opening of today's Cassius sitting in three natural voices, made with Cloudflare's own
+   Workers AI (the free daily amount only; on the free plan it stops rather than charges). Saved to voice/ in the data
+   repo so Opus can play them like a podcast. Delete voice/samples.json to make them again. */
+const VOICE_MODEL = '@cf/deepgram/aura-2-en';
+const VOICE_SAMPLES = [['orion', 'Orion'], ['apollo', 'Apollo'], ['thalia', 'Thalia']];
+const VOICE_INDEX = 'voice/samples.json';
+let voiceBusy = false;
+const sayable = t => String(t || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/^#{1,3}\s+/gm, '')
+  .replace(/^\s*[-•]\s+/gm, '').replace(/^\s*>\s?/gm, '').replace(/[ \t]+/g, ' ').trim();
+function sampleText(g) {
+  const l = g && g.lesson; if (!l || !l.body) return null;
+  let out = sayable(l.title || ''); if (out && !/[.!?]$/.test(out)) out += '.';
+  for (const para of sayable(l.body).split(/\n\s*\n/)) {
+    const ss = para.replace(/\n/g, ' ').match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g) || [para];
+    for (const x of ss) { if ((out + ' ' + x).length > 560) return out.trim(); out = (out + ' ' + x).trim(); }
+    if (out.length >= 380) break;
+  }
+  return out.trim() || null;
+}
+async function audioBytes(out) {
+  if (!out) return null;
+  if (out instanceof Uint8Array) return out;
+  if (out instanceof ArrayBuffer) return new Uint8Array(out);
+  if (typeof ReadableStream !== 'undefined' && out instanceof ReadableStream) return new Uint8Array(await new Response(out).arrayBuffer());
+  if (typeof out.audio === 'string') { const x = atob(out.audio); const b = new Uint8Array(x.length); for (let i = 0; i < x.length; i++) b[i] = x.charCodeAt(i); return b; }
+  if (out.body) return new Uint8Array(await new Response(out.body).arrayBuffer());
+  return null;
+}
+async function voiceSamples(env, now) {
+  if (!env.AI || voiceBusy) return;
+  voiceBusy = true;
+  const G = gh(env, 'Helper');
+  try {
+    const cur = await G.get(VOICE_INDEX);
+    let old = null; if (!cur.missing) { try { old = JSON.parse(cur.text); } catch (e) {} }
+    // made once; after a failure or an unfinished try, wait six hours before trying again
+    if (old && Array.isArray(old.voices) && old.voices.length && !old.error) return;
+    if (old && old.at && now - Date.parse(old.at) < 6 * 3600e3) return;
+    const gf = await G.get('growth.json'); let g = null; if (!gf.missing) { try { g = JSON.parse(gf.text); } catch (e) {} }
+    const text = sampleText(g); if (!text) return;
+    let sha = await G.put(VOICE_INDEX, JSON.stringify({ format: 'opus-voice-samples', making: true, at: new Date(now).toISOString() }, null, 2) + '\n', cur.missing ? null : cur.sha, 'Helper: making natural voice samples');
+    const voices = []; let error = null;
+    for (const [id, name] of VOICE_SAMPLES) {
+      try {
+        const bytes = await audioBytes(await env.AI.run(VOICE_MODEL, { text, speaker: id, encoding: 'mp3' }));
+        if (!bytes || bytes.length < 1000) throw new Error('no audio came back');
+        const file = 'voice/sample-' + id + '.mp3';
+        const ex = await G.get(file).catch(() => ({ missing: true }));
+        await G.put(file, bytes, ex.missing ? null : ex.sha, 'Helper: voice sample ' + name);
+        voices.push({ id, name, file, bytes: bytes.length });
+      } catch (e) { error = String(e && e.message || e).slice(0, 200); break; }
+    }
+    await G.put(VOICE_INDEX, JSON.stringify({ format: 'opus-voice-samples', at: new Date().toISOString(), model: VOICE_MODEL, from: (g.lesson && g.lesson.date) || null, chars: text.length, text, voices, error }, null, 2) + '\n', sha, error ? 'Helper: voice samples stopped (' + error.slice(0, 60) + ')' : 'Helper: natural voice samples ready');
+  } catch (e) {
+  } finally { voiceBusy = false; }
+}
+
 let reported = null, reportedAt = 0;
 const WARN_DAYS = [7, 1];
 async function report(env, now) {
@@ -1062,6 +1121,7 @@ export default {
     ctx.waitUntil(report(env, event.scheduledTime || Date.now()));
     ctx.waitUntil(sendDue(env, event.scheduledTime || Date.now()).catch(() => 0));
     ctx.waitUntil(whoopScheduled(E, event.scheduledTime || Date.now()).catch(() => 0));
+    ctx.waitUntil(voiceSamples(env, event.scheduledTime || Date.now()).catch(() => 0));
   },
   async fetch(request, env0, ctx) {
     let env = env0;
