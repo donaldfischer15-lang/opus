@@ -97,6 +97,11 @@
       else Opus.store.flush();
     });
     window.addEventListener('pagehide', () => Opus.store.flush());
+    /* No zooming: iPhone ignores user-scalable=no, so stop pinches here. Double-tap zoom is off through touch-action in opus.css, which keeps fast taps on + and − working. */
+    try {
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+      document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+    } catch (e) {}
     try { navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', e => { const m = e.data || {}; if (m.opus === 'go' && registry[m.tab]) go(m.tab); }); } catch (e) {}
     window.addEventListener('hashchange', () => { const id = location.hash.slice(1); if (registry[id] && id !== current) go(id); });
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !/claudeusercontent|claude\.ai/.test(location.host)) {
