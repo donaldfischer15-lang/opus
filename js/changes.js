@@ -243,6 +243,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.27.2': [['today', 'Things you send Grok for Memory show up faster: an open Opus checks every two minutes, says what landed, and plans get their reminder right away.']],
     '1.27.1': [['today', 'Memory reads habits better: a line like “Sunday prep takes 90 minutes” stays a note instead of becoming a plan.']],
     '1.27.0': [['today', 'Memory: pull the copper handle at the top of any screen down, or tap it. Keep a note, a plan like “Dentist Tuesday 3pm”, or a birthday like “Sam’s birthday March 14 1990”, and Opus reads the date. One search covers what you kept and what Opus knows.'], ['today', 'Plans and birthdays now show on Today and in the week ahead, and buzz you: an hour before a plan, and a week before and on a birthday.']],
     '1.26.3': [['food', 'Before dinner, Food now shows how many calories and grams of protein you have left for the day, so you can pick what to add.']],

@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -202,6 +202,7 @@ const listErr = (o, k) => {
 const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'b12', 'folate'];
 const microsErr = m => { if (m == null) return null; if (!isObj(m)) return 'micros must be an object like { "fiber": 3.1, "potassium": 422 }'; for (const k of Object.keys(m)) { if (k === 'estimate' || k === 'note') continue; if (!MICROS.includes(k)) return 'micros.' + k + ' is not one Opus tracks (' + MICROS.join(', ') + ')'; if (m[k] != null && !(num(m[k]) && m[k] >= 0)) return 'micros.' + k + ' must be a number or null'; } return null; };
 const dateErr = (o, k) => isDate(o[k]) ? null : k + ' must be a date like "2026-11-27" (got ' + JSON.stringify(o[k]) + ')';
+const MEM_TAGS = ['Note', 'To do', 'Plans', 'Birthday', 'Gym', 'Food', 'Money', 'Home', 'Health'];
 const OUT = [
   ['money.cash', 'date', c => dateErr(c, 'date') || (num(c.cash) || num(c.free) || (Array.isArray(c.accounts) && c.accounts.length) ? null : 'needs cash (or free) as a number, or at least one account balance in accounts') || listErr(c, 'held') || listErr(c, 'accounts') || listErr(c, 'transfers') || (c.free != null && !num(c.free) ? 'free must be a number' : null) || (c.cash != null && !num(c.cash) ? 'cash must be a number' : null)],
   ['money.weeks', 'weekEnding', w => dateErr(w, 'weekEnding') || (w.paycheck == null || num(w.paycheck) ? null : 'paycheck must be a number or null') || ['spent', 'bills', 'debtPayments', 'balances', 'transfers'].map(k => listErr(w, k)).find(Boolean) || null],
@@ -212,7 +213,7 @@ const OUT = [
   ['labs', 'date', l => dateErr(l, 'date') || (Array.isArray(l.markers) && l.markers.length ? null : 'markers must be a list of results like [{ "name": "Ferritin", "value": 85, "unit": "ng/mL", "range": "30-400", "low": 30, "high": 400 }]') || l.markers.map((m, n) => !isObj(m) ? 'markers[' + n + '] must be an object' : !(typeof m.name === 'string' && m.name.trim()) ? 'markers[' + n + '].name must be the marker as the report prints it' : !num(m.value) ? 'markers[' + n + '].value must be a number (got ' + JSON.stringify(m.value) + ')' : (m.low != null && !num(m.low)) ? 'markers[' + n + '].low must be a number or left out' : (m.high != null && !num(m.high)) ? 'markers[' + n + '].high must be a number or left out' : null).find(Boolean) || null],
   ['pets', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be "date:pet:care", like "2026-11-27:the-pet-id:flea"') || dateErr(e, 'date') || (typeof e.pet === 'string' && e.pet ? null : 'pet must be the pet\'s id from plan home.pets') || (typeof e.care === 'string' && e.care ? null : 'care must be a care id from that pet\'s care list, or "weight" or "vet"') || (e.id === e.date + ':' + e.pet + ':' + e.care ? null : 'id must be exactly date:pet:care ("' + e.date + ':' + e.pet + ':' + e.care + '")') || (e.lb == null || num(e.lb) ? null : 'lb must be a number') || (e.care === 'weight' && !num(e.lb) ? 'a weight entry needs lb' : null) || (e.note == null || typeof e.note === 'string' ? null : 'note must be text')],
   ['supps', 'id', e => dateErr(e, 'date') || (typeof e.supp === 'string' && e.supp ? null : 'supp must be the supplement\'s id from plan health.supplements') || (e.id === e.date + ':' + e.supp ? null : 'id must be exactly date:supp ("' + e.date + ':' + e.supp + '")')],
-  ['remember', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be a text id like "grok-2026-11-27-dentist"') || (typeof e.text === 'string' && e.text.trim() ? null : 'text must be what to remember, like "Dentist" or "Sam\'s birthday"') || (e.text.length <= 500 ? null : 'text must be 500 characters or fewer') || (e.date == null || isDate(e.date) ? null : 'date must be a date like "2026-11-27" or left out (for a yearly date, the first one; a birth date when born is true)') || (e.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time) ? null : 'time must be 24-hour like "15:00" or left out') || (e.time && !e.date ? 'a time needs a date' : null) || (e.yearly && !e.date ? 'yearly needs a date' : null) || ['yearly', 'born', 'pinned'].map(k => e[k] == null || typeof e[k] === 'boolean' ? null : k + ' must be true or false').find(Boolean) || (e.tag == null || typeof e.tag === 'string' ? null : 'tag must be text')]
+  ['remember', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be a text id like "grok-2026-11-27-dentist"') || (typeof e.text === 'string' && e.text.trim() ? null : 'text must be what to remember, like "Dentist" or "Sam\'s birthday"') || (e.text.length <= 500 ? null : 'text must be 500 characters or fewer') || (e.date == null || isDate(e.date) ? null : 'date must be a date like "2026-11-27" or left out (for a yearly date, the first one; a birth date when born is true)') || (e.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time) ? null : 'time must be 24-hour like "15:00" or left out') || (e.time && !e.date ? 'a time needs a date' : null) || (e.yearly && !e.date ? 'yearly needs a date' : null) || ['yearly', 'born', 'pinned'].map(k => e[k] == null || typeof e[k] === 'boolean' ? null : k + ' must be true or false').find(Boolean) || (e.tag == null || MEM_TAGS.includes(e.tag) ? null : 'tag must be one of ' + MEM_TAGS.join(', ') + ', or left out so Opus picks')]
 ];
 const OUT_PATHS = OUT.map(o => o[0]);
 const getp = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
@@ -402,7 +403,7 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { section: { type: 'string', description: 'The heading, like "Training" or "People".' }, add: { type: 'array', items: { type: 'string' }, description: 'New facts, one per item (up to 400 characters each).' }, replace: { type: 'array', items: { type: 'string' }, description: 'The whole section, one fact per item. Use instead of add to rewrite it.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Facts to delete, by their text.' }, change: { type: 'string', description: 'One short line for the history.' } }, required: ['section'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember; one thing per entry, text without the date, dates worked out in the owner\'s time zone; a dated one gets its reminder right away). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a' };
@@ -526,6 +527,8 @@ async function callTool(name, args, env, as) {
     if (!any) return text('Nothing saved.' + (report.bad.length ? ' Problems:\n- ' + report.bad.join('\n- ') : ' No entries found in what you sent (top-level keys: ' + (Object.keys(add).join(', ') || 'none') + '). Send them like { "money": { "cash": [ { "date": "2026-11-27", "cash": 900 } ] } }. The sections are: ' + OUT_PATHS.join(', ') + '.'), true);
     const change = String(args.change || 'outbox').replace(/\s+/g, ' ').slice(0, 100);
     await G.put(FILES.outbox, JSON.stringify(out, null, 2) + '\n', cur.sha, as.name + ': ' + change);
+    const memAdd = getp(normalizeEntries(add).out, 'remember');
+    if (memAdd) { await remindersForMemory(env, Array.isArray(memAdd) ? memAdd : [memAdd]).catch(() => 0); }
     return text('Saved to grok.json: ' + report.added + ' new, ' + report.replaced + ' corrected.' + (report.bad.length ? ' NOT saved:\n- ' + report.bad.join('\n- ') + '\n' : ' ') + 'Opus copies them in the next time the owner opens it; logs.json section "sync" then shows what it picked up.');
   }
   if (name === 'leave_note') {
@@ -704,6 +707,60 @@ async function notifyChange(env, who, change, tab) {
     if (!push || !(push.subs || []).length || (push.kinds && push.kinds.changes === false)) return;
     await fanOut(env, G, push, { title: who + ' changed ' + (tab === 'growth' ? 'your Growth page' : 'Opus'), body: change, tab: tab || 'today', tag: 'change:' + Date.now() });
   } catch (e) {}
+}
+
+/* Memory entries Grok adds get their reminders right away, before the phone next opens: the same times Opus uses
+   (an hour before a timed plan, 7 AM for an untimed one, birthdays 8 AM a week ahead and on the day), merged into
+   push.json in the phone's time zone. The phone writes its own schedule over it on its next sync, which then has them too. */
+function zonedAt(dateKey, hm, tz) {
+  const [y, mo, d] = dateKey.split('-').map(Number), [h, mi] = hm.split(':').map(Number);
+  let t = Date.UTC(y, mo - 1, d, h, mi);
+  for (let i = 0; i < 2; i++) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(t)).map(x => [x.type, x.value]));
+    const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+    t += Date.UTC(y, mo - 1, d, h, mi) - shown;
+  }
+  return t;
+}
+const DAYN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function memEvents(e, now, tz) {
+  if (!isObj(e) || e.delete || !isDate(e.date)) return [];
+  const title = String(e.text || '').trim().slice(0, 80); if (!title) return [];
+  const out = [], until = now + 8 * 864e5, base = { kind: 'calendar', title, tab: 'today', from: 'mem:' + e.id };
+  const push = (t, body) => { if (t > now && t <= until) out.push(Object.assign({ at: new Date(t).toISOString(), body }, base)); };
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(now));
+  if (e.yearly) {
+    const [by, bm, bd] = e.date.split('-').map(Number); let y = +todayKey.slice(0, 4);
+    for (let k = 0; k < 2; k++, y++) {
+      const key = y + '-' + String(bm).padStart(2, '0') + '-' + String(bd).padStart(2, '0');
+      if (key < todayKey) continue;
+      const turns = e.born && y > by ? y - by : null, wd = DAYN[new Date(Date.UTC(y, bm - 1, bd)).getUTCDay()];
+      push(zonedAt(key, '08:00', tz), turns ? 'Turns ' + turns + ' today' : 'Today');
+      push(zonedAt(key, '08:00', tz) - 7 * 864e5, 'A week from today, ' + wd + (turns ? '. Turns ' + turns : '') + '.');
+      break;
+    }
+  } else if (e.time) {
+    const [h, m] = e.time.split(':').map(Number), ap = (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
+    push(zonedAt(e.date, e.time, tz) - 36e5, 'At ' + ap + ', in an hour');
+  } else push(zonedAt(e.date, '07:00', tz), 'Today');
+  return out;
+}
+async function remindersForMemory(env, entries) {
+  const G = gh(env);
+  for (let i = 0; i < 2; i++) {
+    const push = await readPush(G);
+    if (!push || !(push.subs || []).length || (push.kinds && push.kinds.calendar === false)) return 0;
+    const tz = push.tz || 'America/New_York', now = Date.now(), ids = new Set(entries.filter(isObj).map(e => 'mem:' + e.id));
+    const fresh = entries.flatMap(e => memEvents(e, now, tz));
+    // drop this entry's earlier reminders (a correction or a take-back), and any the phone already has at the same time
+    const kept = (push.events || []).filter(ev => !ids.has(ev.from));
+    const add = fresh.filter(f => !kept.some(k => k.kind === 'calendar' && k.at === f.at && k.title === f.title));
+    if (kept.length === (push.events || []).length && !add.length) return 0;
+    const out = Object.assign({}, push, { events: kept.concat(add).sort((a, b) => String(a.at).localeCompare(String(b.at))) }); delete out._sha;
+    try { await G.put('push.json', JSON.stringify(out, null, 1) + '\n', push._sha, 'Helper: reminders for a Memory entry'); return add.length; }
+    catch (e) { if (!e.conflict) return 0; }
+  }
+  return 0;
 }
 
 /* ---------- helper.json: tell Opus which version is live, and when the helper's GitHub token runs out ----------

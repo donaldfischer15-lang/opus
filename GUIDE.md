@@ -309,13 +309,14 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | wrote, answered a lesson or the recall question, kept words, moved a bookmark | `logs.json` `writing`, `kept`, `reading` |
 | marked a night clean or with a dot in The Ledger | `logs.json` `ledger` |
 | did the weekly review | `logs.json` `reviews` |
+| kept a note, a plan or a birthday in Memory (the pull-down at the top of every screen) | `logs.json` `remember` |
 | changed rest timers, tabs or sound | `logs.json` `prefs` |
 
 ---
 
 ## 4. Your outbox (`grok.json`, `"format": "opus-grok"`)
 
-The outbox has exactly nine sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`, `labs`, `pets`, `supps`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
+The outbox has exactly ten sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`, `labs`, `pets`, `supps`, `remember`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
 
 Put only new or corrected entries here. You may replace the whole file each time; Opus copies each entry into the logs once and keeps it, even after you take it out of this file.
 
@@ -353,16 +354,38 @@ Put only new or corrected entries here. You may replace the whole file each time
   ] } ],
   "pets": [ { "id": "2026-11-27:the-dog:flea-tick", "date": "2026-11-27", "pet": "the-dog", "care": "flea-tick" },
             { "id": "2026-11-27:the-dog:weight", "date": "2026-11-27", "pet": "the-dog", "care": "weight", "lb": 31.5 } ],
-  "supps": [ { "id": "2026-11-27:fish-oil", "date": "2026-11-27", "supp": "fish-oil" } ]
+  "supps": [ { "id": "2026-11-27:fish-oil", "date": "2026-11-27", "supp": "fish-oil" } ],
+  "remember": [ { "id": "grok-2026-11-24-dentist", "text": "Dentist", "date": "2026-11-24", "time": "15:00", "tag": "Health" },
+                { "id": "grok-sam-birthday", "text": "Sam's birthday", "date": "1990-03-14", "yearly": true, "born": true, "tag": "Birthday" },
+                { "id": "grok-note-gym-shoes", "text": "Gym shoes: size 11 in the wide fit", "tag": "Gym" } ]
 }
 ```
 
-Each section's own rules are in its tab's part: `money.*` in 2, `eaten` in 9, `pets` in 11, `labs` and `supps` in 12. These hold for all of them:
+Each section's own rules are in its tab's part: `money.*` in 2, `eaten` in 9, `pets` in 11, `labs` and `supps` in 12, `remember` just below. These hold for all of them:
 
 - Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a blood test by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.
 - Except for cash readings: if the owner already logged that day or week on the phone, **theirs is kept** and yours is skipped. Opus tells them.
 - Same rules as everywhere: plain numbers, `null` or leave the line out when unknown, nothing invented.
+
+### Memory and its calendar (`remember`)
+
+Memory is the owner's pull-down at the top of every screen: notes, plans on a date, and yearly dates like birthdays, with one search over all of it and over Opus. Plans and birthdays show on Today (today, tomorrow, birthdays within a week), in the week ahead, and as notifications (an hour before a timed plan, 7 AM for an untimed one, birthdays a week ahead and on the day). It lives in `logs.json` `remember`; add to it through the outbox.
+
+The owner often sends you a quick line meant for Memory (from the phone's Action Button), like "dentist Tuesday at 3", "Sam's birthday is March 14", or "remember the gym shoes are size 11 wide". Each one becomes one entry:
+
+- `id` (required): make one up that won't repeat, like `"grok-2026-11-24-dentist"`. Same id again corrects it; `{ "id": "...", "delete": true }` takes back one you added.
+- `text` (required): what to remember, short and in the owner's words, without the date or time in it ("Dentist", "Sam's birthday", "Gym shoes: size 11 in the wide fit"). Up to 500 characters.
+- `date`: `"YYYY-MM-DD"` for a plan. Work out "Tuesday", "tomorrow" or "next Friday" from today's date in the owner's time zone (America/New_York): a bare weekday is the next one coming, today included only if the owner says "today". Leave `date` out for a plain note. If you can't tell the day, ask the owner the one question instead of guessing.
+- `time`: 24-hour `"15:00"`, only with a date. "At 3" with no AM or PM means the afternoon for 1 to 6 and the morning for 7 to 11, unless the owner says otherwise.
+- `yearly: true` for something every year (birthdays, anniversaries). `date` is then any year's date; with `born: true` the year is the birth year and Opus shows the age. No birth year known: use the next date it falls on and leave `born` out.
+- `tag` (optional): one of Note, To do, Plans, Birthday, Gym, Food, Money, Home, Health. Leave it out and Opus picks one from the words.
+- `pinned: true` keeps a note at the top of Memory. Only when the owner asks to pin it or says it's important to keep in view.
+- One thing per entry. "Dentist Tuesday at 3 and call mom Friday" is two entries.
+- Only add what the owner told you or asked for. The pets' birthdays come from `home.pets` (`born`); don't repeat them here. Never put a password, card number or code in Memory.
+- After saving, tell the owner in one line what Opus will show, like "In Memory: Dentist, Tuesday Nov 24 at 3:00 PM. You'll get a reminder at 2:00."
+
+It reaches the phone fast: a plan or birthday you add gets its reminder right away, even before the owner opens Opus, the phone buzzes with what you saved, and an open Opus picks it up within two minutes.
 
 ---
 

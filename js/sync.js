@@ -428,7 +428,15 @@
           problem('grok', grokReport.bad.length ? 'Some entries in grok.json were skipped: ' + grokReport.bad.slice(0, 3).join('; ') + '.' : null);
           const n = grokReport.added + grokReport.changed;
           cfg.grokNote = (n || grokReport.removed || grokReport.kept.length) ? { at: new Date().toISOString(), added: grokReport.added, changed: grokReport.changed, removed: grokReport.removed, kept: grokReport.kept.slice(0, 5) } : cfg.grokNote;
-          if (n) notes.push('Grok added ' + n + ' entr' + (n === 1 ? 'y' : 'ies'));
+          if (n) {
+            // name what landed in Memory, since that usually comes from a quick note to Grok
+            const had = new Set(((local.logs || {}).remember || []).map(e => e.id + '|' + e.text + '|' + e.date + '|' + e.time));
+            const mem = ((work.logs || {}).remember || []).filter(e => e.by === 'grok' && !had.has(e.id + '|' + e.text + '|' + e.date + '|' + e.time));
+            const other = n - mem.length;
+            if (mem.length) notes.push('In Memory: ' + mem.slice(0, 2).map(e => e.text + (e.date && Opus.memory ? ' (' + Opus.memory.when(e.yearly ? Opus.memory.nextOn(e) : Opus.util.parseKey(e.date), e.time) + ')' : '')).join(', ') + (mem.length > 2 ? ' and ' + (mem.length - 2) + ' more' : ''));
+            if (other > 0) notes.push('Grok added ' + other + ' entr' + (other === 1 ? 'y' : 'ies'));
+            S.grokNews = true;
+          }
         }
       }
     }
@@ -524,7 +532,7 @@
       } else if (res.blocked) setStatus('blocked');
       else if (res.wait) { S.waiting = true; setStatus(dirty() ? 'pending' : 'idle'); }
       else if (res.choose) setStatus('idle');
-      else { S.waiting = false; setStatus((cfg.problems || []).length ? 'problem' : 'idle'); if (res.notes && res.notes.length && !opts.quiet) try { Opus.ui.toast(res.notes.join(' · '), cfg.undoPlan && res.notes[0] === 'Plan updated from GitHub' ? { label: 'Undo', run: undoPlan } : null); } catch (e) {} }
+      else { S.waiting = false; setStatus((cfg.problems || []).length ? 'problem' : 'idle'); if (res.notes && res.notes.length && (!opts.quiet || S.grokNews)) try { S.grokNews = false; Opus.ui.toast(res.notes.join(' · '), cfg.undoPlan && res.notes[0] === 'Plan updated from GitHub' ? { label: 'Undo', run: undoPlan } : null); } catch (e) {} }
       if (S.again) { S.again = false; setTimeout(() => sync({ quiet: opts.quiet }), 50); }
       return res;
     })();
@@ -546,7 +554,7 @@
   Store.applyImport = function (d) { if (base) { base.logs = null; base.plan = null; saveBase(); } return origImport(d); };
   Store.reset = function () { disconnect(); return origReset(); };
 
-  function pull() { if (!cfg || !cfg.token || Date.now() - lastPull < 15000) return; lastPull = Date.now(); sync({ quiet: false }); }
+  function pull(quiet) { if (!cfg || !cfg.token || Date.now() - lastPull < 15000) return; lastPull = Date.now(); sync({ quiet: !!quiet }); }
   Opus.onBoot(() => {
     pull();
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
@@ -557,6 +565,8 @@
       if (S.waiting && !Opus.ui.topSheet() && !S.busy) { S.waiting = false; sync({ quiet: false }); }
       if (S.refreshLater && !Opus.ui.topSheet()) { S.refreshLater = false; try { Opus.renderBar(); Opus.refresh(); } catch (e) {} }
     }, 3000);
+    // while Opus stays open, look for what Grok sent (a Memory entry from the Action Button) every two minutes
+    setInterval(() => { if (document.visibilityState === 'visible' && navigator.onLine !== false && !S.busy) pull(true); }, 120000);
   });
 
   /* ---------- connect, disconnect, undo ---------- */
@@ -600,7 +610,7 @@
       '- "plan" is my plan: schedule, routine, meals with macros, training, money (pay, bills, debts in payoff order), home jobs and my pets, and the supplements I take (health.supplements). Change one part at a time with update_plan_section (for example section "money.debts"), keep every id, and change only what I ask for or what clearly needs it.',
       '- Long files come in parts; ask for the next part, or read one section (like "money") at a time. The "sync" section of my logs says when Opus last synced and what it took from your outbox.',
       '- "logs" is everything I enter in Opus: workouts, weigh-ins, meals eaten, blood tests, supplements taken, pet care, checklists, money weeks, cash on hand, writing, reviews and my settings. Read it before you ask me anything; if it is in my logs, I already told you. You can never change it.',
-      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, my cash on hand, food I ate that is not a planned meal, a supplement I took, pet care I did (a flea pill, a bath, a weigh-in, a vet visit), or a blood test (every marker with its value, unit and the lab’s range as printed). With blood tests, never diagnose or suggest treatment; if a result is outside the lab’s range, just say so and that it is worth raising with my doctor.',
+      '- add_to_outbox is how you log things for me: a money week, a weigh-in, a debt balance, my cash on hand, food I ate that is not a planned meal, a supplement I took, pet care I did (a flea pill, a bath, a weigh-in, a vet visit), something for my Memory (a note, a plan on a date, a birthday; see the remember part of section 4), or a blood test (every marker with its value, unit and the lab’s range as printed). With blood tests, never diagnose or suggest treatment; if a result is outside the lab’s range, just say so and that it is worth raising with my doctor.',
       '- Meals have parts (4 eggs, 1 banana) with macros for each. When I change a meal, change its parts, serving, macros, ingredients and prep together with update_plan_section section "food".',
       '- Keep Opus current without being asked: whenever something comes up in any chat that belongs in Opus (a bill, a debt, a payday, a meal change, a weight, food I ate), save it right away, then tell me in one line what you saved. Don’t save guesses; ask me for the one missing detail.',
       '- When I say "Sync Opus", follow "Keeping Opus current" in the guide: check what Opus picked up, save my cash and money week, fill the blanks you can, apply changes I asked for, then tell me what you saved and what only I can answer.',
