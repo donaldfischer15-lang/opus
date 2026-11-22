@@ -246,5 +246,5 @@
     } });
   }
 
-  Opus.foodSearch = { block, settings, usda, off, mine, rank, itemFor, fromUSDA, fromOFF, tidy, hasKey: () => !!key() };
+  Opus.foodSearch = { block, settings, usda, off, mine, rank, itemFor, fromUSDA, fromOFF, tidy, hasKey: () => !!key(), key: () => key() || null };
 })();

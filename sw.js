@@ -1,17 +1,17 @@
 /* Opus service worker: opens Opus from this phone first, so it opens at once even with no signal.
    Bump VERSION when files change: the new version downloads in the background and Opus switches to it. */
-const VERSION = 'opus-1.27.2';
+const VERSION = 'opus-1.28.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js', 'js/changes.js', 'js/weekahead.js', 'js/notify.js', 'js/desk.js',
-  'js/body.js', 'js/pets.js', 'js/supps.js', 'js/tabs/today.js', 'js/foodsearch.js', 'js/whoop.js', 'js/memory.js', 'js/listen.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/growth.js', 'js/tabs/settings.js', 'js/sync.js',
+  'js/body.js', 'js/pets.js', 'js/supps.js', 'js/tabs/today.js', 'js/foodsearch.js', 'js/snap.js', 'js/whoop.js', 'js/memory.js', 'js/listen.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/growth.js', 'js/tabs/settings.js', 'js/sync.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/cassius.svg'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && !k.startsWith('opus-fonts')).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && !k.startsWith('opus-fonts') && !k.startsWith('opus-vendor')).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
@@ -26,6 +26,15 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== location.origin) return;
+  // the barcode reader (about 1 MB): fetched the first time it's used, then kept across versions
+  if (url.pathname.includes('/js/vendor/')) {
+    e.respondWith(caches.open('opus-vendor-zxing-3.1.7').then(async c => {
+      const hit = await c.match(e.request, { ignoreSearch: true });
+      if (hit) return hit;
+      const r = await fetch(e.request); if (r && r.ok) c.put(e.request, r.clone()); return r;
+    }));
+    return;
+  }
   // a file asked for fresh (the guide Opus copies to GitHub) always comes from the network
   if (e.request.cache === 'no-store') { e.respondWith(fetch(e.request).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || Response.error()))); return; }
   // app files: straight from this phone, so Opus opens at once with a weak signal or none.

@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.20.0';
+const VERSION = '1.21.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -776,15 +776,17 @@ async function phoneKey(env) {
   const raw = new Uint8Array(await crypto.subtle.sign('HMAC', k, utf8('opus phone key 1')));
   return [...raw.slice(0, 20)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
-const FOOD_MODELS = ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/google/gemma-3-12b-it'];
+// Scout looks closest at a plate; Mistral reads printed labels and typed meals as well and in a fifth of the time (food/vision.json, Nov 22).
+// Gemma is not open to this account, so it is left out.
+const FOOD_MODELS = ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct'];
+const FOOD_FIRST = { photo: FOOD_MODELS[0], label: FOOD_MODELS[1], words: FOOD_MODELS[1] };
 // neurons per million tokens (developers.cloudflare.com/workers-ai/platform/pricing, Nov 2026), for the phone's rough daily count
 const NEURONS = { '@cf/meta/llama-4-scout-17b-16e-instruct': [24545, 77273], '@cf/mistralai/mistral-small-3.1-24b-instruct': [31876, 50488], '@cf/google/gemma-3-12b-it': [31371, 50560] };
-let foodFirst = null; // the model that last answered well, tried first
 const FOOD_PROMPT = `You are the eye of a food-logging phone app. The owner photographs what they eat, or types it, and you say what it is and how much.
 List each separate food or drink as its own item (a burger, fries and a soda are three items). The owner's note always wins over what you see: if it names the place, size or amount, use it.
 For each item give:
 - "name": a short plain name, like "Cheese pizza" or "Grilled chicken breast".
-- "query": words to search the USDA FoodData Central database for it. For a chain restaurant, start with the chain as USDA writes it, like "DOMINO'S 14\\" cheese pizza hand tossed" or "McDONALD'S hamburger". For a packaged food, the brand and product.
+- "query": words to search the USDA FoodData Central database for it. For a chain restaurant, start with the chain as USDA writes it, like "DOMINO'S 14\\" cheese pizza hand tossed" or "BURGER KING WHOPPER". For a packaged food, the brand and product.
 - "brand": the restaurant or brand if the note or packaging shows it, else null.
 - "amount" and "unit": how much was eaten, in the unit a person would say (slice, piece, cup, tbsp, oz, bowl, sandwich, can, item, g).
 - "grams": your best weight for that amount, in grams.
@@ -838,14 +840,14 @@ async function readFood(env, mode, text, image) {
   if (!env.AI) return { ok: false, code: 'setup', error: 'The helper has no AI binding yet. It comes with the next deploy.' };
   const sys = mode === 'label' ? LABEL_PROMPT : FOOD_PROMPT;
   const prompt = mode === 'label' ? 'Read this label.' : (text ? 'The owner\'s note: ' + text + (image ? '' : '\nThere is no photo; go by the note alone.') : 'No note from the owner; go by the photo.');
-  const order = foodFirst ? [foodFirst].concat(FOOD_MODELS.filter(m => m !== foodFirst)) : FOOD_MODELS.slice();
+  const first = FOOD_FIRST[mode === 'label' ? 'label' : image ? 'photo' : 'words'];
+  const order = [first].concat(FOOD_MODELS.filter(m => m !== first));
   const tried = [];
   for (const model of order) {
     try {
       const a = await askModel(env, model, sys, prompt, image);
       const o = parseLoose(a.out), res = mode === 'label' ? cleanLabel(o) : cleanFood(o);
       if (!res) { tried.push(model.split('/').pop() + ': no JSON'); continue; }
-      foodFirst = model;
       return Object.assign({ ok: true, model: model.split('/').pop(), ms: a.ms, neurons: a.neurons }, mode === 'label' ? { label: res } : res);
     } catch (e) {
       const m = String(e && e.message || e);

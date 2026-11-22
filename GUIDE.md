@@ -530,7 +530,7 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
 }
 ```
 - `days` (optional) lists the days the meal plan covers. The other days are **off days**: no planned meals, and Today shows *Log what you eat* instead. Give the meal items in `routine` the same `days`, and size `prep` and `ingredients` for that many servings (five for Monday to Friday). Food the owner logs on off days is in logs `eaten` like any extra. Leave `days` out to plan every day.
-- When the owner adds food, Opus searches their own foods, then the free USDA FoodData Central database, then Open Food Facts for brands, and fills in macros, vitamins and minerals for the amount picked. What they log arrives in logs `eaten` with those numbers; nothing for you to do.
+- When the owner adds food, Opus searches their own foods, then the free USDA FoodData Central database, then Open Food Facts for brands, and fills in macros, vitamins and minerals for the amount picked. What they log arrives in logs `eaten` with those numbers; nothing for you to do. Food can also come from the food camera: `via` says how (`barcode`, `label`, `photo` or `words`), `grams` is the weight it worked out, and photo and words entries are estimates (`"estimate": true`) that the owner checked before adding. A saved food may carry a `barcode`, `per100` (macros per 100 g) and `serving` (`label`, `g`); leave those as they are.
 - The same meals are eaten all week. Week 1 of the rotation begins the Sunday of `rotation.start`, then the weeks repeat in order.
 - **Ingredient amounts are for the whole week** (one batch). The grocery list merges the same `item` across meals and groups by `section` in `sections` order.
 - Every meal id used in `rotation.weeks` must exist in `meals`.

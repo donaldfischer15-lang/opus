@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
-  const HELPER = '1.16.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.21.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -365,7 +365,7 @@
 
     // which helper is live (it writes helper.json when it starts a new version)
     if (rh.missing) cfg.helper = null;
-    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null, push: hj.push && typeof hj.push.key === 'string' ? hj.push.key : null, expires: hj.token && typeof hj.token.expires === 'string' && isFinite(Date.parse(hj.token.expires)) ? hj.token.expires : null }; }
+    else { let hj = null; try { hj = parseJSON(rh.text); } catch (e) {} if (hj && hj.version) cfg.helper = { version: String(hj.version), since: hj.since || null, push: hj.push && typeof hj.push.key === 'string' ? hj.push.key : null, expires: hj.token && typeof hj.token.expires === 'string' && isFinite(Date.parse(hj.token.expires)) ? hj.token.expires : null, phone: isObj(hj.phone) && /^[0-9a-f]{40}$/.test(hj.phone.key || '') && /^https:\/\/[a-z0-9.-]+$/i.test(hj.phone.url || '') ? { key: hj.phone.key, url: hj.phone.url } : null }; }
 
     // Cassius's growth page (read only: only Cassius writes growth.json)
     if (!rgw.missing) {
@@ -649,6 +649,7 @@
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
     blocked: () => S.blocked, raw, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
+    phone: () => (cfg && cfg.helper && cfg.helper.phone) || null,
     helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests
     _: { merge3, mergeLogs, mergeSetMap, mergeKeyed, applyGrok, logsOf, droppedFrom, toB64, fromB64, eq }

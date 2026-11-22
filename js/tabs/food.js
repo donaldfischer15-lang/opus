@@ -188,7 +188,8 @@
     ui.sheet({ title: ed ? ed.name : 'Add food', kicker: ed ? (Plan.foodOff(U.parseKey(ed.date)) ? 'Off day' : 'Something extra') : Plan.foodOff(d) ? 'Off day' : 'Not in the plan', foot: true, onClose: () => { o.after && o.after(); Opus.refresh(); }, render(api) {
       const b = api.body;
       let search = null;
-      if (!ed && Opus.foodSearch) { search = Opus.foodSearch.block(x => fill(x)); b.appendChild(search.el); }
+      if (!ed && Opus.snap) { const w = Opus.snap.buttons(d, { slot: o.slot, before: () => api.close(true) }); w.classList.add('in-sheet'); b.appendChild(w); }
+      if (!ed && Opus.foodSearch) { search = Opus.foodSearch.block(x => fill(x)); b.appendChild(search.el); if (o.query) { search.input.value = o.query; search.input.dispatchEvent(new Event('input')); search.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); } }
       if (picks.length && !ed) {
         const c = h('<div class="sec"><div class="sh"><span class="t">Your foods</span><span class="c">tap to fill in</span></div><div class="chips"></div></div>');
         picks.slice(0, 14).forEach(x => { const ch = h('<button class="chip" type="button">' + U.esc(x.name) + '</button>'); ch.onclick = () => { fill(x); c.querySelectorAll('.chip').forEach(y => y.classList.remove('on')); ch.classList.add('on'); ui.buzz(6); }; c.querySelector('.chips').appendChild(ch); });
@@ -425,7 +426,10 @@
     }
     const add = h('<button class="btn ghost add-food" type="button">' + ui.icon('plus', 'ico') + ' Add food</button>');
     add.onclick = () => addFood(d);
-    t.appendChild(add);
+    if (Opus.snap) {
+      const wait = Opus.snap.pendingCard(d); if (wait) t.appendChild(wait);
+      const ways = h('<div class="add-ways"></div>'); ways.appendChild(add); ways.appendChild(Opus.snap.buttons(d)); t.appendChild(ways);
+    } else t.appendChild(add);
     drawTotals();
     if (today.length) t.appendChild(h('<p class="small" style="padding:0 4px">Tick the circle when you eat a meal as planned. Tap it if you ate only part, more or less, or skipped it.</p>'));
     v.appendChild(t);
