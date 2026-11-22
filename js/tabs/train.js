@@ -108,7 +108,7 @@
     const cur = currentBlock(s);
 
     b.appendChild(headerCard(s, cur));
-    { const wl = s.date === U.key() && Opus.whoop && Opus.whoop.trainLine(new Date()); if (wl) b.appendChild(wl); }
+    { const wl = s.date === U.key() && Opus.whoop && Opus.whoop.trainLine(new Date(), s, () => renderLogger(api)); if (wl) b.appendChild(wl); }
     if ((w.warmup || []).length) b.appendChild(checklist('Warm-up', w.warmup, s.warm));
 
     if (!s.blocks.length) b.appendChild(h('<div class="card pad"><p class="empty" style="padding:8px"><span class="serif-h" style="display:block">Add your first exercise</span>Then tap Set as you finish each one.</p></div>'));

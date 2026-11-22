@@ -259,6 +259,31 @@ textarea.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-siz
 .restdock .tb { width: 40px; height: 36px; border-radius: 10px; border: 1px solid var(--line); font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .restdock.over { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 30px rgba(242, 211, 160, .35); }
 
+/* listen player: the phone's voice reading a piece */
+.listendock { position: fixed; left: 50%; z-index: 60; transform: translate(-50%, calc(100% + var(--tabbar) + env(safe-area-inset-bottom, 0px) + 60px));
+  visibility: hidden; pointer-events: none; transition: transform .5s var(--ease), visibility 0s linear .5s;
+  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px) + 12px); width: min(448px, calc(100% - 32px));
+  background: linear-gradient(160deg, #2a2018, #1a1410); border: 1px solid var(--line-strong); border-radius: 22px; padding: 10px 10px 10px 16px;
+  display: flex; align-items: center; gap: 4px; box-shadow: 0 16px 40px -12px #000; }
+.listendock.show { transform: translate(-50%, 0); visibility: visible; pointer-events: auto; transition: transform .5s var(--ease), visibility 0s; }
+.listendock.in-sheet { bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); }
+.listendock .lbl { flex: 1; min-width: 0; margin-right: 4px; }
+.listendock .lbl b { display: block; font-family: var(--display); font-size: 10.5px; letter-spacing: .2em; color: var(--gold); text-transform: uppercase; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listendock .lbl span { font-size: 13px; color: var(--ink-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.listendock .lp { display: block; height: 2px; border-radius: 2px; background: var(--line); margin-top: 7px; overflow: hidden; }
+.listendock .lp u { display: block; height: 100%; width: 0; background: var(--gold); transition: width .4s var(--ease); }
+.listendock .lb { width: 36px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px; color: var(--ink-2); }
+.listendock .lb svg { width: 18px; height: 18px; fill: currentColor; }
+.listendock .lb[data-a="stop"] svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; width: 16px; height: 16px; }
+.listendock .lb.main { width: 44px; height: 44px; border-radius: 50%; background: var(--gold); color: #1a1410; }
+.listendock .lb.main svg { width: 20px; height: 20px; }
+.listendock .lb.sp { font-size: 12px; font-weight: 600; width: 38px; }
+.listen-b { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.listen-b svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
+.link.listen-b svg { width: 12px; height: 12px; }
+
+.wr-act { display: block; margin-top: 6px; font-size: 13px; }
+
 /* logger */
 .ex { border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); overflow: hidden; transition: border-color .3s; }
 .ex.cur { border-color: var(--line-strong); background: linear-gradient(170deg, rgba(242, 211, 160, .08), rgba(242, 211, 160, .02) 60%); }

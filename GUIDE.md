@@ -419,6 +419,8 @@ The page, top to bottom: the Lamp, Before class (and Back again), the Seal, From
 
 Estimated 1-rep max uses Epley: weight × (1 + reps / 30).
 
+The owner can tap Listen on today's sitting (or an earlier one) and the phone reads it aloud, often on the drive home: the title, the body, the takeaway and the question, in that order. Write the body to be heard as well as read: plain sentences, no tables, and no lists that only make sense on the page.
+
 ## 6. The desk (`desk.json`, `"format": "opus-desk"`)
 
 Claude builds and maintains the Opus app itself. You can change the plan, the outbox and the Growth page, but not the app. When something needs the app, leave a note on the desk with `leave_note`:
@@ -463,7 +465,7 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
     "workouts": [ { "sport": "weightlifting", "start": "...", "end": "...", "minutes": 58, "strain": 8.1, "kcal": 311, "avgHr": 112, "maxHr": 160, "zones": [1, 20, 15, 5, 0, 0] } ] } } }
 ```
 - A day is the owner's local date. Sleep and recovery belong to the day the owner woke up; the day's strain and calories to that same day (`open: true` while WHOOP's day is still running, so `kcal` is so far); a workout to the day it started. Sleep figures are minutes. Naps are left out.
-- Recovery bands, WHOOP's own: green 67 and up, yellow 34 to 66, red 33 and under. On a red day Opus suggests a lighter session (drop the last set of each lift, stop 2 to 3 reps short) or moving it a day.
+- Recovery bands, WHOOP's own: green 67 and up, yellow 34 to 66, red 33 and under. On a red day Opus suggests a lighter session (drop the last set of each lift, stop 2 to 3 reps short) or moving it a day. In the workout, one tap (Make today lighter) takes the last set off each lift with 3 or more still ahead, and one tap puts them back.
 - Opus shows it on Today (last night), Train (what today's recovery means), Food (calories burned so far) and the weekly review (the week's averages). It keeps 60 days.
 - Nothing here is a diagnosis. Never draw health conclusions from it; say what the numbers are and suggest the owner ask a doctor about anything that worries them.
 

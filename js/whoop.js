@@ -24,14 +24,33 @@
     el.onclick = () => weekSheet();
     return el;
   }
-  /* one line for Train: what today's recovery means for the session */
-  function trainLine(d) {
+  /* one line for Train: what today's recovery means for the session.
+     With the session open (s) on a red day, one tap takes the last set off each lift that has 3 or more still ahead, and one tap puts them back. */
+  function lighten(s) {
+    const sets = ex => s.logged.filter(x => x.ex === ex).length;
+    const cut = {};
+    s.blocks.forEach(b => { const n = b.sets + (s.extra[b.ex] || 0); if (!b.optional && n >= 3 && sets(b.ex) < n) { s.extra[b.ex] = (s.extra[b.ex] || 0) - 1; cut[b.ex] = (cut[b.ex] || 0) + 1; } });
+    s.lighter = cut; return Object.keys(cut).length;
+  }
+  function unlighten(s) { Object.entries(s.lighter || {}).forEach(([ex, n]) => { s.extra[ex] = (s.extra[ex] || 0) + n; if (!s.extra[ex]) delete s.extra[ex]; }); delete s.lighter; }
+  function trainLine(d, s, redraw) {
     const r = rec(d); if (!r || r.calibrating) return null;
-    const b = band(r.score);
-    const t = b === 'red' ? 'Recovery ' + r.score + '%, low. Go lighter: drop the last set of each lift and stop 2 to 3 reps short, or move this session to tomorrow.'
+    const b = band(r.score), lit = !!(s && s.lighter);
+    const t = b === 'red' ? (lit ? 'Recovery ' + r.score + '%, low. Lighter today: the last set of each lift is off. Stop 2 to 3 reps short of failure.'
+        : 'Recovery ' + r.score + '%, low. Go lighter: drop the last set of each lift and stop 2 to 3 reps short, or move this session to tomorrow.')
       : b === 'yellow' ? 'Recovery ' + r.score + '%. Train as planned.'
       : 'Recovery ' + r.score + '%. A good day to go for the top of your rep ranges.';
-    return h('<div class="wr-line ' + b + '"><i></i><span>' + U.esc(t) + '</span></div>');
+    const el = h('<div class="wr-line ' + b + '"><i></i><span>' + U.esc(t) + '</span></div>');
+    if (s && redraw && (b === 'red' || lit)) {
+      const btn = h('<button class="link wr-act" type="button">' + (lit ? 'Put the sets back' : 'Make today lighter') + '</button>');
+      btn.onclick = () => {
+        if (lit) { unlighten(s); Opus.ui.toast('Back to the full session'); }
+        else { const n = lighten(s); Opus.ui.toast(n ? 'One set off ' + n + (n === 1 ? ' lift' : ' lifts') : 'Nothing left to take off'); }
+        Store.save(true); redraw();
+      };
+      el.querySelector('span').appendChild(btn);
+    }
+    return el;
   }
   /* calories burned so far today (the whole day once WHOOP closes it) */
   function burned(d) { const x = day(d); return x && x.day && x.day.kcal != null ? { kcal: x.day.kcal, open: !!x.day.open } : null; }
@@ -69,5 +88,5 @@
     if (w.problem && w.problem.text) return (w.connected === false ? 'Disconnected: ' : 'Problem: ') + w.problem.text;
     return w.connected === false ? 'Disconnected. Connect WHOOP again on your helper’s WHOOP page.' : 'Connected' + (w.pulled ? ' · last pulled ' + U.fmtDateShort(new Date(w.pulled)) + ', ' + new Date(w.pulled).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + ' · ' + Object.keys(w.days).length + ' days kept';
   }
-  Opus.whoop = { data: W, day, band, rec, todayCard, trainLine, burned, week, weekBlock, weekSheet, status, hm };
+  Opus.whoop = { data: W, day, band, rec, todayCard, trainLine, lighten, unlighten, burned, week, weekBlock, weekSheet, status, hm };
 })();
