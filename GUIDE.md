@@ -415,7 +415,7 @@ The page, top to bottom: the Lamp, Before class (and Back again), the Seal, From
 - `ledger` and `subjects` are retired; leave them out.
 - Change the creed `lines` and the reading list only after talking it through with him. Never invent facts about him. Nothing on this page draws on his job.
 
-The owner can tap Listen on today's sitting (or an earlier one) and the phone reads it aloud, often on the drive home: the title, the body, the takeaway and the question, in that order. Write the body to be heard as well as read: plain sentences, no tables, and no lists that only make sense on the page.
+Don't build a sitting around one thing he did that day, and don't make anything he did seem bigger than it is. His words (Nov 21): "Just use one thing I did that day and makes it seem more important than it is" is what he didn't like.
 
 ---
 

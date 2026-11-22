@@ -116,7 +116,6 @@
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
         const btns = h('<div class="btns"><button class="btn quiet" type="button">Talk it through</button>' + (l.question ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
         btns.children[0].onclick = () => talk(l);
-        if (Opus.listen && Opus.listen.ok && l.body) btns.insertBefore(Opus.listen.button(() => listenTo(l), 'btn quiet'), btns.firstChild);
         if (l.question) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'Before class', tag: 'Cassius asks' }); };
         api.foot.appendChild(btns);
       }
@@ -229,7 +228,6 @@
     const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans));
     if (n) c.appendChild(noteBox(n, (ans ? 'Cassius on your answer' : 'Cassius on this') + ' · ' + ago(n.date)));
     c.onclick = () => lessonSheet(l, () => Opus.refresh());
-    if (Opus.listen && Opus.listen.ok && l.body) c.querySelector('.g-cfoot').insertBefore(Opus.listen.button(() => listenTo(l), 'link'), c.querySelector('.g-cfoot').children[1] || null);
     s.appendChild(c);
     // a question from an earlier sitting, back for you to explain again from memory
     const r = g.recall;

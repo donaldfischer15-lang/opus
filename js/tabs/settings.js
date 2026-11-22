@@ -206,7 +206,6 @@
         if (Opus.whoop.data()) wr.onclick = () => Opus.whoop.weekSheet();
         const cc = ss.querySelector('.card'); (cc || ss).appendChild(wr);
       }
-      if (Opus.listen && Opus.listen.samplesRow && Opus.sync && (Opus.sync.cfg() || {}).token) { const cc = ss.querySelector('.card'); (cc || ss).appendChild(Opus.listen.samplesRow()); }
       if (Opus.desk) { const cc = ss.querySelector('.card'); (cc || ss).appendChild(Opus.desk.row()); (cc || ss).appendChild(Opus.desk.memoryRow()); }
 
       // tabs
