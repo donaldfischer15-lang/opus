@@ -70,7 +70,10 @@
     ['ledger', e => e.date],
     ['remember', e => e.id],
     ['receipts', r => r.id],
-    ['strips', e => e.date]
+    ['strips', e => e.date],
+    ['hair.effects', e => e.date],
+    ['hair.photos', e => e.date + ':' + e.angle],
+    ['hair.compares', e => e.id]
   ];
   const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
@@ -287,6 +290,16 @@
     if (!r.ok) throw new SyncError('later', 'GitHub answered ' + r.status + ' when saving ' + name + '.');
     const j = await r.json();
     return j.content && j.content.sha;
+  }
+  /* a binary file (a hair photo), already base64: written once, replaced if it's there */
+  async function putRaw(name, b64, message) {
+    if (!cfg || !cfg.token) throw new SyncError('off', 'Sync is off');
+    const g = await gh('GET', '/contents/' + name);
+    let sha = null; if (g.ok) { try { sha = (await g.json()).sha || null; } catch (e) {} }
+    const r = await gh('PUT', '/contents/' + name, Object.assign({ message, content: b64 }, sha ? { sha } : {}));
+    if (r.status === 403 || r.status === 404) throw new SyncError('access', 'The token can’t write to ' + cfg.repo + '. Set its Contents permission to Read and write.');
+    if (!r.ok) throw new SyncError('later', 'GitHub answered ' + r.status + ' when saving ' + name + '.');
+    return true;
   }
   const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ');
 
@@ -672,7 +685,7 @@
 
   Opus.sync = {
     status: () => S.status, line, cfg: () => cfg, on: fn => S.listeners.push(fn), sync, connect, check, disconnect, undoPlan, resolveBlocked,
-    blocked: () => S.blocked, raw, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
+    blocked: () => S.blocked, raw, putRaw, grokPrompt, steps, dirty, notice, noticeEl, expiring, replaceToken, setExpires,
     phone: () => (cfg && cfg.helper && cfg.helper.phone) || null,
     helper: () => { const h = cfg && cfg.helper; return { want: HELPER, have: h ? h.version : null, since: h ? h.since : null, behind: !!(h && vnum(h.version) < vnum(HELPER)) }; },
     // exposed for tests

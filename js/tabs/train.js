@@ -559,6 +559,9 @@
       v.appendChild(sec);
     }
 
+    // hair, when the plan has a hair routine
+    if (Opus.hair) Opus.hair.section(v, R, d);
+
     // next targets: progressive overload
     const target = Plan.workoutFor(d) || (Plan.nextWorkoutAfter(d) || {}).workout;
     if (target) {

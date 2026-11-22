@@ -39,12 +39,13 @@
     const old = root.querySelector('.next');
     let kicker = 'Up next' + (nx.time ? ' · ' + U.fmtTime(nx.time) : '');
     if (nx.overdue) kicker = 'Up next · <span class="late">' + U.fmtTime(nx.time) + '</span>';
-    const action = nx.kind === 'sleep' ? '' : (FLOW[nx.kind] || (nx.kind === 'supp' ? 'Took them' : 'Done'));
+    const action = nx.kind === 'sleep' ? '' : (FLOW[nx.kind] || (nx.open ? nx.openLabel || 'Open' : nx.kind === 'supp' ? 'Took them' : 'Done'));
     const el = h('<div class="next"><div class="body"><div class="k">' + kicker + '</div><div class="h">' + U.esc(nx.title) + '</div>' +
       (nx.detail ? '<div class="s">' + U.esc(nx.detail) + '</div>' : '') + '</div>' +
       (action ? '<button class="btn" type="button">' + action + '</button>' : '') + '</div>');
     if (action) el.querySelector('.btn').onclick = () => {
       if (FLOW[nx.kind]) openFlow(nx, () => refreshInPlace(root));
+      else if (nx.open) nx.open(() => refreshInPlace(root));
       else { Plan.setChecked(d, nx.id, true); ui.buzz(10); refreshInPlace(root); }
     };
     if (old) old.replaceWith(el); else return el;
@@ -84,7 +85,7 @@
       const sec = h('<div class="sec" data-part="' + part + '"><div class="sh"><span class="r">' + numerals[part] + '</span><span class="t">' + Plan.partLabel(part, d) + '</span><span class="c num"></span></div><div class="card"></div></div>');
       const card = sec.querySelector('.card');
       for (const it of its) {
-        const meal = it.kind === 'meal' && it.meal && Opus.food && Opus.food.eatSheet, multi = it.kind === 'supp' && (it.supps || []).length > 1 && Opus.supps, flow = !!FLOW[it.kind] || meal || multi;
+        const meal = it.kind === 'meal' && it.meal && Opus.food && Opus.food.eatSheet, multi = it.kind === 'supp' && (it.supps || []).length > 1 && Opus.supps, flow = !!FLOW[it.kind] || meal || multi || !!it.open;
         const ate = meal && Plan.isChecked(d, it.id) ? Opus.food.eatenLine(d, it) : null;
         const row = h('<div class="row tap' + (Plan.isChecked(d, it.id) ? ' done' : '') + (ate ? ' part' : '') + '" data-id="' + U.esc(it.id) + '" role="checkbox" aria-checked="' + Plan.isChecked(d, it.id) + '" tabindex="0">' +
           '<button class="ck" type="button" aria-label="Mark done">' + ui.CK + '</button>' +
@@ -95,7 +96,7 @@
           row.setAttribute('aria-checked', on); ui.buzz(on ? 12 : 6); refreshInPlace(v);
         };
         row.querySelector('.ck').onclick = e => { e.stopPropagation(); toggle(); };
-        row.onclick = () => (meal ? Opus.food.eatSheet(d, it) : multi ? Opus.supps.takeSheet(d, it, () => refreshInPlace(v)) : flow ? openFlow(it, () => refreshInPlace(v)) : toggle());
+        row.onclick = () => (meal ? Opus.food.eatSheet(d, it) : multi ? Opus.supps.takeSheet(d, it, () => refreshInPlace(v)) : it.open ? it.open(() => refreshInPlace(v)) : flow ? openFlow(it, () => refreshInPlace(v)) : toggle());
         row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); } };
         card.appendChild(row);
       }

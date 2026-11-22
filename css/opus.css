@@ -1243,6 +1243,55 @@ button.g-pline:active { color: var(--gold-2); }
 .br-ch span small { display: block; letter-spacing: 0; text-transform: none; color: var(--faint); font-size: 11px; }
 .br-cr { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .br-cr b { font-family: var(--display); font-weight: 400; font-size: 17px; color: var(--gold-2); }
+/* Hair (Body) */
+.hr-tonight { flex-wrap: wrap; row-gap: 10px; }
+.hr-tonight .tx { flex: 1 1 180px; min-width: 0; }
+.hr-ticks { display: flex; flex-wrap: wrap; gap: 8px; }
+.hr-tk { border-radius: 999px; padding: 7px 13px 7px 11px; font-size: 13px; border: 1px solid var(--line-strong); color: var(--ink-2); display: inline-flex; align-items: center; gap: 7px; }
+.hr-tk::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.hr-tk.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+.hr-tk.on::before { background: currentColor; }
+.hr-tk.extra { border-style: dashed; border-color: var(--line); color: var(--dim); }
+.hr-tk.extra.on { background: var(--panel-2); color: var(--ink-2); border-color: var(--line-strong); border-style: solid; font-weight: 500; }
+.hr-fxrow .btn { flex: none; }
+.hr-photos .btn, .hr-cp .btn { flex: none; }
+.hr-note { margin: 0; padding: 0 0 12px; line-height: 1.45; }
+.hr-blank small { color: var(--gold-2); }
+.hr-expect { border-top: 1px solid var(--line-soft); padding: 12px 0; }
+.hr-expect summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+.hr-expect summary::-webkit-details-marker { display: none; }
+.hr-expect summary::after { content: "+"; color: var(--gold); font-family: var(--display); font-size: 18px; }
+.hr-expect[open] summary::after { content: "−"; }
+.hr-expect p { margin: 8px 0 0; line-height: 1.55; max-width: 62ch; }
+.hr-cond ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-2); font-size: 14px; }
+.hr-len { display: flex; flex-direction: column; gap: 10px; }
+.hr-len small { color: var(--dim); font-size: 12.5px; }
+.hr-step { display: flex; flex-direction: column; gap: 4px; padding: 2px 4px; }
+.hr-step b { font-family: var(--serif); font-weight: 500; font-size: 24px; }
+.hr-step small { color: var(--dim); font-size: 13px; line-height: 1.45; }
+.hr-cam { position: relative; aspect-ratio: 3 / 4; max-width: 100%; border-radius: var(--r); overflow: hidden; background: #050403; border: 1px solid var(--line); }
+.hr-cam video, .hr-cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hr-cam video { opacity: 0; transition: opacity .5s; }
+.hr-cam.live video { opacity: 1; }
+.hr-cam.mirror video, .hr-cam.mirror .hr-ghost { transform: scaleX(-1); }
+.hr-ghost { opacity: 0; pointer-events: none; transition: opacity .4s; }
+.hr-cam.live .hr-ghost { opacity: .3; }
+.hr-cam.guide .hr-ghost { opacity: 1; }
+.hr-cam.missing::after { content: "Photo not on this phone yet"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); font-size: 13px; }
+.hr-cue { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: 22px 16px 12px; text-align: center; font-size: 13px; color: var(--ink); background: linear-gradient(transparent, rgba(5, 4, 3, .85)); }
+.hr-count { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-size: 84px; color: var(--gold-2); text-shadow: 0 2px 18px rgba(0, 0, 0, .6); }
+.hr-tools { justify-content: center; }
+.hr-done { display: flex; flex-direction: column; gap: 8px; }
+.hr-strip { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.hr-fig { flex: 0 0 82%; margin: 0; scroll-snap-align: center; display: flex; flex-direction: column; gap: 8px; }
+.hr-fig figcaption { display: flex; flex-direction: column; gap: 2px; padding: 0 4px; }
+.hr-fig figcaption small { color: var(--dim); font-size: 12.5px; }
+.hr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hr-pick { display: flex; flex-direction: column; gap: 6px; align-items: center; border-radius: calc(var(--r) + 4px); padding: 3px; border: 2px solid transparent; transition: border-color .2s; }
+.hr-pick .hr-cam { width: 100%; }
+.hr-pick span { font-family: var(--display); letter-spacing: .2em; color: var(--ink-2); font-size: 13px; }
+.hr-pick.on { border-color: var(--gold); }
+.hr-size .chips { margin-top: 10px; }
 .chips[hidden], .field[hidden] { display: none; } /* a hidden chip row or field stays hidden whatever its display */
 .snap-wt { align-items: center; }
 .sp-facts { padding: 0 14px; }

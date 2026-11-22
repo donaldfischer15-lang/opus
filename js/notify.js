@@ -15,6 +15,8 @@
     ['meals', 'Meals and prep', 'At each meal’s time, and prep day'],
     ['supps', 'Supplements', 'When they’re due'],
     ['weigh', 'Weigh-ins', 'At the weigh-in time'],
+    ['needling', 'Needling', 'Sunday evening reminder'],
+    ['hairphotos', 'Hair photos', 'The monthly photo day'],
     ['home', 'Home and chores', 'Chores and jobs on your day'],
     ['calendar', 'Plans and birthdays', 'An hour before a plan, and birthdays a week ahead and on the day'],
     ['pets', 'Pets', 'Care that comes due, at 6 PM, and birthdays'],
@@ -26,7 +28,7 @@
     ['changes', 'Changes from Grok and Cassius', 'Right when they save one']
   ];
   const KIND_OF = { meal: 'meals', prep: 'meals', workout: 'workouts', supp: 'supps', weigh: 'weigh', home: 'home', pet: 'pets', money: 'money', review: 'review', writing: 'growth', lesson: 'growth' };
-  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'train', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
+  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'train', needling: 'train', hairphotos: 'train', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
 
   const st = () => { const s = Store.data.settings; s.notify = s.notify || { on: false, kinds: {} }; s.notify.kinds = s.notify.kinds || {}; return s.notify; };
   const kindOn = k => st().kinds[k] !== false; // every kind is on until switched off
@@ -52,9 +54,13 @@
       for (const it of items) {
         if (!it.time) continue;
         const kind = KIND_OF[it.kind] || (String(it.id).startsWith('home:') ? 'home' : String(it.id).startsWith('supp') ? 'supps' : String(it.id).startsWith('pet') ? 'pets' : 'day');
-        add(at(d, it.time), kind, it.title, it.detail || '', { check: { date: U.key(d), id: it.id } });
+        // supplements kept private stay off the lock screen: no names, no doses
+        const priv = it.kind === 'supp' && Opus.hair && (it.supps || []).some(id => Opus.hair.privateSupp(id));
+        add(at(d, it.time), kind, priv ? 'Supplements' : it.title, priv ? 'Time for your ' + Plan.partLabel(it.part, d).toLowerCase() + ' ones.' : it.detail || '', { check: { date: U.key(d), id: it.id } });
       }
     }
+    // the hair routine's rest-day reminder and the monthly photo day
+    if (Opus.hair) { try { Opus.hair.events(now, add); } catch (e) {} }
     // bills the evening before, payday in the morning, pet care at 6 PM, the week ahead on its morning
     if (Opus.weekAhead) {
       const w = Opus.weekAhead.gather(now), w2 = Opus.weekAhead.gather(U.addDays(now, 7));

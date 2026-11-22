@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.33.0';
+  Opus.VERSION = '1.34.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -78,6 +78,7 @@
       labs: [],            // blood test results: [{ date, lab, markers: [{ name, value, unit, low, high, range }], note, at }]
       pets: [],            // pet care done, weigh-ins and vet visits: [{ id, date, pet, care, lb, note, at }]
       supps: [],           // supplements taken: [{ id: 'date:supp', date, supp, at }]
+      hair: { effects: [], photos: [], compares: [] }, // hair: side effects noted, monthly photo sets (files in the data repo's hair/), blind comparisons (see js/hair.js)
       strips: [],          // nose strips, one a night, filed under the morning you woke: [{ date, on, at }] (see js/breath.js)
       changes: [],         // what Grok, Cassius or an update changed, per tab (this phone only, never synced)
       ledger: [],          // the Growth ledger, one mark a day: [{ week, virtue, date, mark: 'clean' | 'dot', at }]
@@ -459,6 +460,31 @@
         if (x.label != null && !(x.label && typeof x.label === 'object' && Array.isArray(x.label.facts) && x.label.facts.every(q => q && typeof q.name === 'string' && q.name.trim() && Number(q.amount) >= 0 && /^(mg|mcg|g|IU)$/.test(q.unit || '')))) errors.push('supplement "' + x.id + '": label should be { "serving": "1 capsule", "servings": 240, "facts": [{ "name": "Magnesium", "amount": 200, "unit": "mg" }] } with unit mg, mcg, g or IU (or null).');
         if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
       });
+      const hr = hl && hl.hair;
+      if (hr != null) {
+        if (typeof hr !== 'object' || Array.isArray(hr)) errors.push('health.hair should be an object.');
+        else {
+          if (hr.start != null && !/^\d{4}-\d{2}-\d{2}$/.test(hr.start)) errors.push('health.hair.start should be a date like "2026-11-04".');
+          if (hr.photoDay != null && !(Number.isInteger(hr.photoDay) && hr.photoDay >= 1 && hr.photoDay <= 28)) errors.push('health.hair.photoDay should be a day of the month, 1 to 28.');
+          if (hr.photoTime != null && !TIME.test(hr.photoTime)) errors.push('health.hair.photoTime should look like "18:00" (or null).');
+          if (hr.checkpoints != null && !(Array.isArray(hr.checkpoints) && hr.checkpoints.every(c => /^\d{4}-\d{2}-\d{2}$/.test(c)))) errors.push('health.hair.checkpoints should be a list of dates.');
+          if (hr.core != null && !(Array.isArray(hr.core) && hr.core.every(c => typeof c === 'string'))) errors.push('health.hair.core should be a list of supplement ids.');
+          if (hr.effects != null && !(Array.isArray(hr.effects) && hr.effects.every(c => typeof c === 'string'))) errors.push('health.hair.effects should be a list of short lines.');
+          const hids = new Set();
+          for (const k of ['routine', 'extras']) {
+            const a = hr[k]; if (a == null) continue;
+            if (!Array.isArray(a)) { errors.push('health.hair.' + k + ' should be a list.'); continue; }
+            a.forEach((x, i) => {
+              if (!x || typeof x !== 'object' || !x.id || !x.name) { errors.push('health.hair.' + k + ' item ' + (i + 1) + ' needs "id" and "name".'); return; }
+              if (x.id === 'photos' || hids.has(x.id)) errors.push('hair id "' + x.id + '" is used twice (or is "photos", which is taken).'); hids.add(x.id);
+              if (x.part != null && !PARTS.includes(x.part)) errors.push('hair "' + x.id + '": part should be morning, workday or evening.');
+              if (x.time != null && !TIME.test(x.time)) errors.push('hair "' + x.id + '": time should look like "19:30" (or null).');
+              if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('hair "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["sun"].');
+              if (x.emptied != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.emptied)) errors.push('hair "' + x.id + '": emptied should be the date it ran out (or null).');
+            });
+          }
+        }
+      }
     }
     const f = p.food || {}, meals = f.meals || {};
     ((f.rotation || {}).weeks || []).forEach((w, i) => {
