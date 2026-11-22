@@ -8,6 +8,8 @@
   const counted = d => d && d.counted !== false;
   const CD = () => (M().debts || []).filter(counted);
   const skey = x => String(x || '').trim().toLowerCase();
+  // a counted debt that is also a bill (an installment loan on autopay) is paid by that bill each month; the debt money goes on top of it
+  const billOf = d => (M().bills || []).find(b => skey(b.name) === skey(d && d.name)) || null;
 
   /* ---------- spending groups and one-offs, both kept in the plan so Grok sees them:
      money.spendGroups maps a store name (lower case) to a group; money.oneOff marks single purchases left out of the average week ---------- */
@@ -43,7 +45,7 @@
     const billsW = U.sum(bills.filter(x => x != null)), billsMissing = bills.some(x => x == null);
     let debtW = m.plannedDebtPerWeek;
     let debtSrc = 'plan';
-    if (debtW == null) { const mins = CD().map(d => d.minMonthly).filter(x => x != null); if (mins.length) { debtW = U.sum(mins) * 12 / 52; debtSrc = 'minimums'; } }
+    if (debtW == null) { const mins = CD().filter(d => !billOf(d)).map(d => d.minMonthly).filter(x => x != null); if (mins.length) { debtW = U.sum(mins) * 12 / 52; debtSrc = 'minimums'; } }
     const ws = weeks().slice(-4);
     let spendLo, spendHi, spendSrc;
     if (ws.length) { spendLo = spendHi = U.avg(ws.map(weekEveryday)); spendSrc = 'Average of your last ' + ws.length + ' week' + (ws.length > 1 ? 's' : '') + (ws.some(w => weekEveryday(w) < weekSpent(w) - .005) ? ', one-offs left out' : ''); }
@@ -72,13 +74,16 @@
   /* month by month: interest, minimums, then everything left to the first debt in payoff order */
   function payoff(perWeek) {
     const ds = CD(), monthly = perWeek * 52 / 12;
-    const bal = ds.map(d => d.balance), apr = ds.map(d => (d.apr || 0) / 100 / 12), min = ds.map(d => d.minMonthly || 0);
+    const bal = ds.map(d => d.balance), apr = ds.map(d => (d.apr || 0) / 100 / 12);
+    const viaBill = ds.map(d => { const b = billOf(d); return b ? perMonth(b) : 0; });
+    const min = ds.map((d, i) => viaBill[i] ? 0 : d.minMonthly || 0);
     const at = bal.map(b => (b <= 0.005 ? 0 : null)), total = U.sum(bal);
     let months = 0;
     while (bal.some(b => b > 0.005) && months < 600) {
       months++;
       for (let i = 0; i < bal.length; i++) if (bal[i] > 0) bal[i] += bal[i] * apr[i];
       let pot = monthly;
+      for (let i = 0; i < bal.length; i++) if (bal[i] > 0 && viaBill[i]) bal[i] -= Math.min(bal[i], viaBill[i]);
       for (let i = 0; i < bal.length; i++) if (bal[i] > 0) { const p = Math.min(bal[i], min[i], pot); bal[i] -= p; pot -= p; }
       for (let i = 0; i < bal.length && pot > 0; i++) if (bal[i] > 0) { const p = Math.min(bal[i], pot); bal[i] -= p; pot -= p; }
       bal.forEach((b, i) => { if (at[i] == null && b <= 0.005) at[i] = months; });
@@ -524,7 +529,7 @@
       const paid = first && d.balance != null && first > 0 ? U.clamp(1 - d.balance / first, 0, 1) : null;
       const isFocus = cds.findIndex(x => x.balance == null || x.balance > 0) === n;
       const r = h('<div class="row tap" style="flex-wrap:wrap;row-gap:8px"><span class="tag" style="min-width:26px">' + U.roman(n + 1) + '</span><span class="tx"><b>' + U.esc(d.name) + (isFocus ? ' <span class="tag" style="margin-left:6px">Focus</span>' : '') + '</b><small>' +
-        [ms && ms.date && !ms.paid ? '<span style="color:var(--gold-2)">paid off ' + monShort(ms.date) + '</span>' : null, d.apr != null ? d.apr + '% APR' : null, d.minMonthly != null ? U.money(d.minMonthly) + '/mo min' : null].concat(debtExtras(d)).filter(Boolean).join(' · ') + '</small></span>' +
+        [ms && ms.date && !ms.paid ? '<span style="color:var(--gold-2)">paid off ' + monShort(ms.date) + '</span>' : null, d.apr != null ? d.apr + '% APR' : null, billOf(d) ? U.money(billOf(d).amount) + '/' + ({ week: 'wk', year: 'yr' }[billOf(d).every] || 'mo') + ' as a bill' : d.minMonthly != null ? U.money(d.minMonthly) + '/mo min' : null].concat(debtExtras(d, !!(ms && ms.date))).filter(Boolean).join(' · ') + '</small></span>' +
         '<span class="num" style="font-weight:600;' + (d.balance == null ? 'color:var(--gold);font-weight:500;font-size:13px' : '') + '">' + (d.balance == null ? 'Add balance' : d.balance === 0 ? 'Paid off' : U.money(d.balance)) + '</span>' +
         (paid != null ? '<div class="bar" style="flex-basis:100%;margin-left:40px"><i style="width:' + (paid * 100).toFixed(1) + '%"></i></div>' : '') + '</div>');
       r.onclick = () => editDebt(i, onChange);
@@ -897,10 +902,10 @@
     if (!o || !(t > 0)) return null;
     return new Date(o.getFullYear(), o.getMonth() + t, 1);
   }
-  function debtExtras(d) {
+  function debtExtras(d, noEnd) {
     const out = [];
     if (d.limit > 0 && d.balance != null) out.push(Math.round(d.balance / d.limit * 100) + '% of ' + U.money(d.limit) + ' limit');
-    const e = endsOf(d); if (e && !(d.balance === 0)) out.push('last payment ~' + monShort(e));
+    const e = noEnd ? null : endsOf(d); if (e && !(d.balance === 0)) out.push('last payment ~' + monShort(e));
     return out;
   }
   function debtFacts(d) {
