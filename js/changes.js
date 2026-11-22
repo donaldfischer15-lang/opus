@@ -244,6 +244,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.30.0': [['food', 'A scanned food is weighed now: pick oz, lb, g or kg to match your scale, type what it reads, and Opus works out the servings. A photo of food takes a weight in the same units. Opus keeps the unit you last picked.'], ['money', 'A receipt that Grok or Claude adds now ticks its items off this week’s grocery list by itself. Untick one and it stays unticked.']],
     '1.29.0': [['money', 'Receipts: Money has Groceries this week, against your weekly food budget. Add a receipt from a photo or by typing it, and every line is kept under the spending. When Grok logs the same purchase from your bank, Opus matches the two and counts it once.'], ['food', 'A receipt can tick off what it bought on the grocery list, and the list then shows what each item cost last time. Search in Memory finds an item on any receipt.']],
     '1.28.0': [['food', 'The food camera: under Add food, Scan reads a barcode for the label’s own numbers, Photo works out what’s on your plate and how much, and Describe takes your own words, like “1 slice of Domino’s large 5-cheese”. Everything is shown as an estimate you can change before it’s added. Scanned foods are kept, so the next scan is instant.']],
     '1.27.2': [['today', 'Things you send Grok for Memory show up faster: an open Opus checks every two minutes, says what landed, and plans get their reminder right away.']],

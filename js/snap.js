@@ -105,6 +105,16 @@
   const dropPending = id => ls.set(PEND_LS, pending().filter(x => x.id !== id));
 
   /* ---------- USDA: the numbers for what the photo shows ---------- */
+  /* weights: the kitchen scale reads oz, lb, g or kg */
+  const WT = { oz: 28.349523125, lb: 453.59237, g: 1, kg: 1000 }, WTS = ['oz', 'lb', 'g', 'kg'];
+  const WSTEP = { oz: 0.5, lb: 0.05, g: 5, kg: 0.01, serving: 0.5 };
+  const WDP = { oz: 1, lb: 2, g: 0, kg: 3, serving: 2 };
+  const roundU = (v, u) => { const k = Math.pow(10, WDP[u] == null ? 1 : WDP[u]); return Math.round(v * k) / k; };
+  const fmtU = (v, u) => String(roundU(v, u));
+  const scaleUnit = () => { const u = (Store.data.settings || {}).scaleUnit; return WT[u] || u === 'serving' ? u : 'oz'; };
+  const setScaleUnit = u => { (Store.data.settings = Store.data.settings || {}).scaleUnit = u; Store.save(); };
+  const showW = (g, u) => (WT[u] ? fmtU(g / WT[u], u) + ' ' + u : U.wt(Math.round(g)) + ' g');
+
   const FS = () => Opus.foodSearch;
   const unitWord = u => String(u || '').toLowerCase().replace(/^(\d+\s*)?/, '').replace(/es$|s$/, '').trim();
   function portionFor(food, unit) {
@@ -269,40 +279,61 @@
         footBtns(btn('Scan again', 'quiet', () => scanView()), btn(icon('camera') + ' Photo of the label', '', () => labelView({ code, name: food.name, brand: food.brand })));
         return;
       }
-      // how much: servings when the label gives one, else grams
+      // how much: by weight on his scale (oz, lb, g, kg), worked out in servings; servings too when the label gives one
       const byServ = !!(sv && sv.g > 0);
-      let n = byServ ? 1 : 100;
+      const units = WTS.concat(byServ ? ['serving'] : []);
+      let u = scaleUnit(); if (units.indexOf(u) < 0) u = 'oz';
+      let n = roundU((byServ ? sv.g : 100) / (u === 'serving' ? sv.g : WT[u]), u);
       const tot = h('<div class="eat-sum snap-tot"><div class="eat-k">You’re adding</div><div class="eat-v num"></div><div class="eat-p small num"></div></div>');
       b.appendChild(tot);
-      const amtSec = h('<div class="sec"><div class="sh"><span class="t">How much</span><span class="c"></span></div><div class="chips snap-qty"></div><div class="snap-step"></div></div>');
-      amtSec.querySelector('.c').textContent = byServ ? '1 serving = ' + sv.label : 'grams';
+      const amtSec = h('<div class="sec"><div class="sh"><span class="t">How much</span><span class="c"></span></div><div class="snap-units" role="group" aria-label="Unit"></div><div class="snap-step"></div><div class="chips snap-qty"></div></div>');
+      amtSec.querySelector('.c').textContent = byServ ? '1 serving = ' + sv.label : 'no serving size on the label';
       b.appendChild(amtSec);
-      const stp = ui.stepper({ label: byServ ? 'Servings' : 'Grams', unit: byServ ? 'serving' : 'g', value: n, step: (v, dir) => Math.max(0, Math.round(((v || 0) + (byServ ? 0.5 : 10) * dir) * 100) / 100), onChange: v => { n = v || 0; upd(); } });
-      amtSec.querySelector('.snap-step').appendChild(stp.el);
-      const qs = byServ ? [[0.5, '½'], [1, '1'], [1.5, '1½'], [2, '2']].concat(food.servings > 1 && food.servings <= 12 ? [[food.servings, 'Whole pack (' + U.wt(food.servings) + ')']] : []) : [[50, '50 g'], [100, '100 g'], [150, '150 g']].concat(food.packG ? [[food.packG, 'Whole pack (' + U.wt(food.packG) + ' g)']] : []);
-      qs.forEach(([v, l]) => { const c = h('<button class="chip" type="button"></button>'); c.textContent = l; c.onclick = () => { n = v; stp.set(v, true); upd(); ui.buzz(4); }; amtSec.querySelector('.snap-qty').appendChild(c); });
+      const gOf = (v, unit) => unit === 'serving' ? v * sv.g : v * WT[unit];
+      let exact = byServ ? sv.g : 100; // grams from a chip or the starting serving, kept exact through unit changes
+      const grams = () => exact != null ? exact : gOf(n, u);
+      let stp = null, qs = [];
+      function build() {
+        const ub = amtSec.querySelector('.snap-units'); ub.innerHTML = '';
+        units.forEach(x => { const c = h('<button class="snap-u" type="button"></button>'); c.textContent = x === 'serving' ? 'servings' : x; c.classList.toggle('on', x === u); c.setAttribute('aria-pressed', x === u ? 'true' : 'false'); c.onclick = () => { if (x === u) return; const g = grams(); u = x; setScaleUnit(u); n = roundU(g / gOf(1, u), u); build(); upd(); ui.buzz(4); }; ub.appendChild(c); });
+        const box = amtSec.querySelector('.snap-step'); box.innerHTML = '';
+        stp = ui.stepper({ label: u === 'serving' ? 'Servings' : 'Weight in ' + u, unit: u === 'serving' ? 'serving' : u, value: n, step: (v, dir) => Math.max(0, roundU((v || 0) + WSTEP[u] * dir, u)), onChange: v => { n = v || 0; exact = null; upd(); } });
+        stp.set(n, true); stp.input.value = fmtU(n, u);
+        box.appendChild(stp.el);
+        const base = { oz: [2, 4, 8, 16], lb: [0.25, 0.5, 1, 2], g: [50, 100, 150, 200], kg: [0.1, 0.25, 0.5, 1], serving: [0.5, 1, 1.5, 2] }[u];
+        qs = base.map(v => [v, u === 'serving' ? ({ 0.5: '½', 1: '1', 1.5: '1½', 2: '2' })[v] : fmtU(v, u) + ' ' + u]);
+        if (byServ && u !== 'serving') qs.unshift([roundU(sv.g / WT[u], u), '1 serving (' + fmtU(sv.g / WT[u], u) + ' ' + u + ')', sv.g]);
+        const packG = food.packG || (byServ && food.servings > 1 ? food.servings * sv.g : null);
+        if (packG && (u !== 'serving' || food.servings <= 12)) qs.push([roundU(packG / gOf(1, u), u), 'Whole pack (' + fmtU(packG / gOf(1, u), u) + ' ' + (u === 'serving' ? 'servings' : u) + ')', packG]);
+        const qb = amtSec.querySelector('.snap-qty'); qb.innerHTML = '';
+        qs.forEach(([v, l, g0]) => { const c = h('<button class="chip" type="button"></button>'); c.textContent = l; c.onclick = () => { n = v; exact = g0 != null ? g0 : gOf(v, u); stp.set(v, true); stp.input.value = fmtU(v, u); upd(); ui.buzz(4); }; qb.appendChild(c); });
+      }
+      build();
       b.appendChild(slotChips());
       const known = Plan.library().find(x => x.barcode === code);
       const keep = h('<button class="row tap tgb on" type="button" style="width:100%;text-align:left"><span class="ck sq">' + ui.CK + '</span><span class="tx"><b>Keep in my foods</b><small>The next scan, or one tap in Add food, fills it in, even offline.</small></span></button>');
       let keepOn = true; keep.onclick = () => { keepOn = !keepOn; keep.classList.toggle('on', keepOn); };
       if (!known) b.appendChild(keep);
-      const grams = () => byServ ? n * sv.g : n;
       function upd() {
-        const k = grams() / 100, x = {}; ['kcal', 'protein', 'carbs', 'fat'].forEach(m => { x[m] = per[m] == null ? null : per[m] * k; });
+        const g = grams(), k = g / 100, x = {}; ['kcal', 'protein', 'carbs', 'fat'].forEach(m => { x[m] = per[m] == null ? null : per[m] * k; });
         tot.querySelector('.eat-v').textContent = n > 0 ? n0(x.kcal) + ' cal · ' + n0(x.protein) + ' P · ' + n0(x.carbs) + ' C · ' + n0(x.fat) + ' F' : 'Nothing';
-        tot.querySelector('.eat-p').textContent = (byServ ? U.wt(n) + ' serving' + (n === 1 ? '' : 's') + ' · ' : '') + U.wt(Math.round(grams())) + ' g · ' + (food.label ? 'numbers from the label' : 'numbers from the database');
-        amtSec.querySelectorAll('.snap-qty .chip').forEach((c, i) => c.classList.toggle('on', qs[i][0] === n));
+        const sNum = byServ ? r1(g / sv.g) : null;
+        const parts = u === 'serving' ? [fmtU(n, u) + ' serving' + (n === 1 ? '' : 's'), U.wt(Math.round(g)) + ' g'] : [fmtU(n, u) + ' ' + u].concat(u !== 'g' ? [U.wt(Math.round(g)) + ' g'] : []).concat(byServ ? [fmtU(sNum, 'serving') + ' serving' + (sNum === 1 ? '' : 's')] : []);
+        tot.querySelector('.eat-p').textContent = parts.concat([food.label ? 'numbers from the label' : 'numbers from the database']).join(' · ');
+        amtSec.querySelectorAll('.snap-qty .chip').forEach((c, i) => c.classList.toggle('on', qs[i] && Math.abs(qs[i][0] - n) < 1e-9));
       }
       upd();
       footBtns(btn('Scan another', 'quiet', () => scanView()), btn('Add', '', () => {
         if (!(n > 0)) { ui.toast('How much did you have?'); return; }
-        const k = grams() / 100, macros = { estimate: !food.label };
+        const g = grams(), k = g / 100, macros = { estimate: !food.label };
         ['kcal', 'protein', 'carbs', 'fat'].forEach(m => { macros[m] = per[m] == null ? null : r1(per[m] * k); });
         let micros = null; if (food.micros) { micros = { estimate: !food.label }; MICROS.forEach(m => { if (food.micros[m] != null) micros[m] = Math.round(food.micros[m] * k * 100) / 100; }); }
         const name = food.brand && !food.name.toLowerCase().includes(food.brand.toLowerCase()) ? food.brand + ' ' + food.name : food.name;
-        const e = Object.assign({ id: newId(d), date: U.key(d), extra: true, name, amount: byServ ? n : Math.round(n), unit: byServ ? servUnit(sv) : 'g', slot: st.slot, macros, via: 'barcode', barcode: code, at: new Date().toISOString() }, micros ? { micros } : {});
+        const amount = u === 'g' ? Math.round(n) : roundU(n, u);
+        const e = Object.assign({ id: newId(d), date: U.key(d), extra: true, name, amount, unit: u === 'serving' ? servUnit(sv) : u, grams: r1(g), slot: st.slot, macros, via: 'barcode', barcode: code, at: new Date().toISOString() }, byServ ? { servings: roundU(g / sv.g, 'serving') } : {}, micros ? { micros } : {});
         putEaten(e);
-        if (keepOn || known) keepFood(Object.assign({ name, amount: byServ ? 1 : 100, unit: byServ ? servUnit(sv) : 'g', macros: Plan.scaleMacros(macros, (byServ ? 1 : 100) / e.amount), barcode: code, per100: per, serving: sv || null }, micros ? { micros: scaleMicros(micros, (byServ ? 1 : 100) / e.amount) } : {}));
+        const keepF = byServ ? sv.g / g : 100 / g;
+        if (keepOn || known) keepFood(Object.assign({ name, amount: byServ ? 1 : 100, unit: byServ ? servUnit(sv) : 'g', macros: Plan.scaleMacros(macros, keepF), barcode: code, per100: per, serving: sv || null }, micros ? { micros: scaleMicros(micros, keepF) } : {}));
         Store.save(); ui.buzz(12); api.close();
         ui.toast('Added ' + name, { label: 'Undo', run: () => { dropEaten(e.id); Store.save(); Opus.refresh(); } });
       }));
@@ -409,7 +440,7 @@
           const f = figure(x);
           el.classList.toggle('off', !x.on); el.querySelector('.ck').classList.toggle('on', x.on);
           el.querySelector('b').textContent = x.name;
-          el.querySelector('.num').textContent = [U.wt(x.amount) + ' ' + x.unit, f.grams != null ? '≈ ' + n0(f.grams) + ' g' : null, f.macros && f.macros.kcal != null ? n0(f.macros.kcal) + ' cal' : 'no numbers', f.macros && f.macros.protein != null ? n0(f.macros.protein) + ' g protein' : null].filter(Boolean).join(' · ');
+          el.querySelector('.num').textContent = [U.wt(x.amount) + ' ' + x.unit, f.grams != null ? (x.gramsSet != null ? '' : '≈ ') + showW(f.grams, WT[scaleUnit()] ? scaleUnit() : 'g') + (WT[scaleUnit()] && scaleUnit() !== 'g' ? ' (' + n0(f.grams) + ' g)' : '') : null, f.macros && f.macros.kcal != null ? n0(f.macros.kcal) + ' cal' : 'no numbers', f.macros && f.macros.protein != null ? n0(f.macros.protein) + ' g protein' : null].filter(Boolean).join(' · ');
           el.querySelector('.snap-from').textContent = (x.src ? 'USDA: ' : '') + f.from + (x.conf === 'low' ? ' · worth a check' : '');
           total();
         };
@@ -419,10 +450,12 @@
           const nm = h('<div class="field"><label>Name</label><input class="input" autocomplete="off"></div>');
           nm.querySelector('input').value = x.name; nm.querySelector('input').oninput = e => { x.name = e.target.value.trim() || x.base.name; paint(); };
           ed.appendChild(nm);
-          const row = h('<div class="snap-amt"><div class="field"><label>How much</label></div><div class="field"><label>Grams</label><input class="input num" inputmode="decimal" placeholder="auto"></div></div>');
+          const row = h('<div class="snap-amt"><div class="field"><label>How much</label></div><div class="field"><label>Weighed</label><div class="snap-wt"><input class="input num" inputmode="decimal" placeholder="auto"><select class="input" aria-label="Unit">' + WTS.map(w => '<option>' + w + '</option>').join('') + '</select></div></div></div>');
           const stp = ui.stepper({ label: 'Amount', unit: x.unit, value: x.amount, step: (v, dir) => Math.max(0, Math.round(((v || 0) + (/^(g|ml)$/i.test(x.unit) ? 10 : 0.5) * dir) * 100) / 100), onChange: v => { x.amount = v || 0; x.gramsSet = null; gi.value = ''; paint(); } });
           row.children[0].appendChild(stp.el);
-          const gi = row.children[1].querySelector('input'); gi.oninput = () => { const v = Number(gi.value.replace(',', '.')); x.gramsSet = gi.value.trim() && v >= 0 ? v : null; paint(); };
+          const gi = row.children[1].querySelector('input'), gu = row.children[1].querySelector('select'); gu.value = WT[scaleUnit()] ? scaleUnit() : 'oz';
+          const wIn = () => { const v = Number(gi.value.replace(',', '.')); x.gramsSet = gi.value.trim() && v >= 0 ? v * WT[gu.value] : null; paint(); };
+          gi.oninput = wIn; gu.onchange = () => { setScaleUnit(gu.value); wIn(); };
           ed.appendChild(row);
           if (x.how) ed.appendChild(h('<p class="small snap-how">Sized by: ' + esc(x.how) + '</p>'));
           const ms = h('<div class="sec"><div class="sh"><span class="t">Closest matches</span></div><div class="snap-alts"></div></div>');

@@ -112,6 +112,14 @@
   const STOP = new Set(['member', 'members', 'mark', 'mm', 'organic', 'the', 'of', 'and', 'sams', 'club', 'great', 'value', 'kirkland', 'signature', 'fresh', 'pack', 'lb', 'oz', 'ct']);
   const words = s => skey(s).replace(/\(.*?\)/g, ' ').replace(/['’]s\b/g, 's').split(/[^a-z]+/).filter(w => w.length > 2 && !STOP.has(w)).map(w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
   const foodWeek = r => U.key(U.weekStart(U.parseKey(r.date)));
+  // a receipt's linked lines tick the grocery list once; unticking by hand afterwards sticks
+  function tickInto(d, r) {
+    const want = (r.items || []).map(x => x.for).filter(Boolean); if (!want.length) return 0;
+    const st = d.settings = d.settings || {}, done = st.receiptTicked = st.receiptTicked || {}, had = done[r.id] = done[r.id] || [];
+    const gs = d.groceries = d.groceries || {}, wk = foodWeek(r), checked = gs[wk] = gs[wk] || [];
+    let n = 0; want.forEach(f => { if (had.includes(f)) return; had.push(f); if (!checked.includes(f)) { checked.push(f); n++; } });
+    return n;
+  }
   const listItems = d => { try { return Plan.groceryList(d).reduce((a, g) => a.concat(g.items.map(i => i.item)), []); } catch (e) { return []; } };
   // one receipt line per list line, best matches first; the owner confirms them
   function suggest(r) {
@@ -396,5 +404,5 @@
     return out;
   }
 
-  Opus.receipts = { list, byId, save, remove, open, add, form, allSheet, groceriesCard, weekGroceries, unmatchedIn, receiptFor, matchOf, matches, fromAccounts, rewardsPaid, sinceCash, suggest, lastPrice, weekReceipts, search, clean, weekOf, _: { scrub, words, sameStore } };
+  Opus.receipts = { list, byId, save, remove, open, add, form, allSheet, groceriesCard, weekGroceries, unmatchedIn, receiptFor, matchOf, matches, fromAccounts, rewardsPaid, sinceCash, suggest, lastPrice, weekReceipts, search, clean, weekOf, foodWeek, tickInto, _: { scrub, words, sameStore } };
 })();

@@ -213,6 +213,7 @@
           if (['claude', 'cassius'].includes(String(x.by || '').toLowerCase())) it.who = String(x.by).toLowerCase();
           if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
           if (Opus.receipts) { const c = Opus.receipts.clean(it); c.by = 'grok'; if (it.who) c.who = it.who; c.at = it.at; Object.keys(it).forEach(q => delete it[q]); Object.assign(it, c); }
+          if (Opus.receipts && Opus.receipts.tickInto) Opus.receipts.tickInto(d, it);
         }
         if ((p === 'labs' || p === 'pets' || p === 'supps') && !it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
         if (p === 'eaten') { if (it.item == null) it.extra = true; if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString(); if (it.macros && it.macros.estimate == null) it.macros = Object.assign({ estimate: true }, it.macros); }
