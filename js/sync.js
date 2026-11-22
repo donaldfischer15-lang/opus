@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
-  const HELPER = '1.21.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.22.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -68,9 +68,10 @@
     ['pets', e => e.id],
     ['supps', e => e.id],
     ['ledger', e => e.date],
-    ['remember', e => e.id]
+    ['remember', e => e.id],
+    ['receipts', r => r.id]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));
@@ -178,6 +179,8 @@
     ['pets', e => e.id, e => typeof e.id === 'string' && !!e.id && isDate(e.date) && typeof e.pet === 'string' && !!e.pet && typeof e.care === 'string' && !!e.care && (e.lb == null || num(e.lb)) && (e.note == null || typeof e.note === 'string')],
     ['supps', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.supp === 'string' && !!e.supp && e.id === e.date + ':' + e.supp],
     ['remember', e => e.id, e => typeof e.id === 'string' && !!e.id && typeof e.text === 'string' && !!e.text.trim() && e.text.length <= 500 && (e.date == null || isDate(e.date)) && (e.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time)) && (e.yearly == null || typeof e.yearly === 'boolean') && (e.born == null || typeof e.born === 'boolean') && (e.pinned == null || typeof e.pinned === 'boolean') && (e.tag == null || typeof e.tag === 'string') && !(e.yearly && !e.date) && !(e.time && !e.date)]
+,
+    ['receipts', r => r.id, r => typeof r.id === 'string' && !!r.id && isDate(r.date) && (r.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(r.time)) && typeof r.store === 'string' && !!r.store.trim() && num(r.total) && Array.isArray(r.items) && r.items.length > 0 && r.items.every(x => isObj(x) && typeof x.name === 'string' && !!x.name.trim() && num(x.amount)) && (r.paid == null || (Array.isArray(r.paid) && r.paid.every(x => isObj(x) && num(x.amount)))) && !/\d(?:[\s-]?\d){5,}/.test(JSON.stringify(r).replace(/"(id|date|time|at)":"[^"]*"/g, ''))]
   ];
   /* a money week from Grok does what a pasted one does: fills in debt balances and keeps a balance snapshot */
   function moneyWeekSideEffects(d, w) {
@@ -191,9 +194,10 @@
     const debts = {}; for (const x of ds) if (x.balance != null) debts[x.name] = x.balance;
     d.money.balances = (d.money.balances || []).filter(s => s.date !== w.weekEnding).concat([{ date: w.weekEnding, debts, by: 'grok' }]);
   }
-  function applyGrok(d, g) {
+  function applyGrok(d, g, only) {
     const r = { added: 0, changed: 0, removed: 0, kept: [], bad: [] };
     for (const [p, key, ok] of GROK) {
+      if (only && !only.includes(p)) continue;
       const list = getp(d, p) || []; setp(d, p, list);
       for (const x of getp(g, p) || []) {
         const k = isObj(x) ? key(x) : null;
@@ -202,6 +206,14 @@
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
         const it = Object.assign({}, x, { by: 'grok' });
+        if (p === 'receipts') { // read on every sync, so a receipt removed on the phone stays removed, and one changed on the phone stays as changed
+          const tomb = ((d.deleted || {}).receipts || {})[k];
+          if (tomb && !(x.at && String(x.at) > String(tomb))) continue;
+          if (i >= 0 && list[i].by !== 'grok') continue;
+          if (['claude', 'cassius'].includes(String(x.by || '').toLowerCase())) it.who = String(x.by).toLowerCase();
+          if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
+          if (Opus.receipts) { const c = Opus.receipts.clean(it); c.by = 'grok'; if (it.who) c.who = it.who; c.at = it.at; Object.keys(it).forEach(q => delete it[q]); Object.assign(it, c); }
+        }
         if ((p === 'labs' || p === 'pets' || p === 'supps') && !it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString();
         if (p === 'eaten') { if (it.item == null) it.extra = true; if (!it.at) it.at = i >= 0 && list[i].at ? list[i].at : new Date().toISOString(); if (it.macros && it.macros.estimate == null) it.macros = Object.assign({ estimate: true }, it.macros); }
         if (p === 'money.cash') { // cash on hand: the newest reading wins, whoever made it
@@ -438,6 +450,16 @@
             S.grokNews = true;
           }
         }
+      }
+    }
+
+    // receipts in grok.json are read on every sync: an older Opus may have read the file first and moved past it
+    if (!rg.missing && !grokFile) {
+      let g = null; try { g = parseJSON(rg.text); } catch (e) {}
+      if (g && g.format === 'opus-grok' && Array.isArray(g.receipts) && g.receipts.length) {
+        const w2 = U.clone(work); w2.plan = U.clone(mPlan);
+        const rr = applyGrok(w2, g, ['receipts']);
+        if (rr.added + rr.changed + rr.removed) { work = w2; mPlan = w2.plan; notes.push(rr.added ? 'A receipt was added' : 'A receipt was updated'); S.grokNews = true; }
       }
     }
 

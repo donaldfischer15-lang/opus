@@ -144,7 +144,8 @@
     ['eaten', 'food', e => (e.name || 'Food') + ' on ' + U.fmtDateShort(e.date) + (e.skipped ? ' (skipped)' : ''), e => e.id],
     ['labs', 'food', e => 'Blood test from ' + U.fmtDateShort(e.date), e => e.date],
     ['pets', 'home', e => cap(String(e.care || 'care')) + ' for ' + (e.pet || 'a pet') + ' on ' + U.fmtDateShort(e.date), e => e.id],
-    ['supps', 'today', e => 'Supplement ' + (e.supp || '') + ' on ' + U.fmtDateShort(e.date), e => e.id]
+    ['supps', 'today', e => 'Supplement ' + (e.supp || '') + ' on ' + U.fmtDateShort(e.date), e => e.id],
+    ['receipts', 'money', e => (e.store || 'Store') + ' receipt from ' + U.fmtDateShort(e.date) + ': ' + arr(e.items).length + ' items, ' + U.money(e.total, { cents: true }), e => e.id]
   ];
   const getp = (o, p) => p.split('.').reduce((x, k) => x && x[k], o);
   function logLines(before, after) {
@@ -155,7 +156,7 @@
         if (!e || !e.by) return;
         const o = old.get(key(e));
         if (o && same(o, e)) return;
-        const who = cap(String(e.by));
+        const who = cap(String(e.who || e.by));
         ((by[tab] = by[tab] || {})[who] = by[tab][who] || []).push(say(e) + (o ? ' (updated)' : ''));
       });
     }
@@ -243,6 +244,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.29.0': [['money', 'Receipts: Money has Groceries this week, against your weekly food budget. Add a receipt from a photo or by typing it, and every line is kept under the spending. When Grok logs the same purchase from your bank, Opus matches the two and counts it once.'], ['food', 'A receipt can tick off what it bought on the grocery list, and the list then shows what each item cost last time. Search in Memory finds an item on any receipt.']],
     '1.28.0': [['food', 'The food camera: under Add food, Scan reads a barcode for the label’s own numbers, Photo works out what’s on your plate and how much, and Describe takes your own words, like “1 slice of Domino’s large 5-cheese”. Everything is shown as an estimate you can change before it’s added. Scanned foods are kept, so the next scan is instant.']],
     '1.27.2': [['today', 'Things you send Grok for Memory show up faster: an open Opus checks every two minutes, says what landed, and plans get their reminder right away.']],
     '1.27.1': [['today', 'Memory reads habits better: a line like “Sunday prep takes 90 minutes” stays a note instead of becoming a plan.']],

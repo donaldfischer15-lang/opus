@@ -170,6 +170,7 @@
     for (const b of (M.debts || [])) if (hit(b.name)) out.push({ kind: 'opus', title: b.name, small: b.balance != null ? U.money(b.balance, { cents: true }) + ' left' : 'Debt', tag: 'Money', tab: 'money' });
     for (const it of (((P.home || {}).items) || [])) if (hit(it.title)) out.push({ kind: 'opus', title: it.title, small: it.detail || 'Home job', tag: 'Home', tab: 'home' });
     if (Opus.pets) for (const p of Opus.pets.list()) if (hit(p.name + ' ' + (p.kind || '') + ' ' + (p.breed || ''))) out.push({ kind: 'opus', title: p.name, small: [p.breed, p.born ? 'born ' + U.fmtDateShort(p.born) + ' ' + p.born.slice(0, 4) : null].filter(Boolean).join(' · ') || 'Pet', tag: 'Home', tab: 'home' });
+    if (Opus.receipts) out.push(...Opus.receipts.search(q));
     return out.slice(0, 24);
   }
 
@@ -235,7 +236,7 @@
         if (kept.length) { results.appendChild(section('Kept', kept.length)); const c = h('<div class="card mem-list"></div>'); kept.forEach(x => c.appendChild(entryRow(x.entry))); results.appendChild(c); }
         if (op.length) {
           results.appendChild(section('In Opus', op.length)); const c = h('<div class="card mem-list"></div>');
-          op.forEach(x => { const r = h('<button type="button" class="row mem-row"><span class="tx"><b></b><small></small></span>' + tagEl(x.tag) + '</button>'); r.querySelector('.tx b').textContent = x.title; r.querySelector('small').textContent = x.small; r.onclick = () => { close(); Opus.go(x.tab); }; c.appendChild(r); });
+          op.forEach(x => { const r = h('<button type="button" class="row mem-row"><span class="tx"><b></b><small></small></span>' + tagEl(x.tag) + '</button>'); r.querySelector('.tx b').textContent = x.title; r.querySelector('small').textContent = x.small; r.onclick = () => { if (x.open) { x.open(); return; } close(); Opus.go(x.tab); }; c.appendChild(r); });
           results.appendChild(c);
         }
         return;

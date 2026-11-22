@@ -630,5 +630,5 @@
   }
   window.addEventListener('online', () => { if (pending().length && Opus.current && Opus.current() === 'food') try { Opus.refresh(); } catch (e) {} });
 
-  Opus.snap = { open, start, buttons, pendingCard, findCode, variants, figure, portionFor, readsLeft, pending, reader, decode };
+  Opus.snap = { open, start, buttons, ask, shrink, pickPhoto, pendingCard, findCode, variants, figure, portionFor, readsLeft, pending, reader, decode };
 })();

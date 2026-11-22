@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.28.0';
+  Opus.VERSION = '1.29.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -82,7 +82,8 @@
       ledger: [],          // the Growth ledger, one mark a day: [{ week, virtue, date, mark: 'clean' | 'dot', at }]
       glimpses: [],        // Growth's night sky, one line when a moment comes together: [{ id, date, line, who: [names], at }]
       remember: [],        // Memory: [{ id, text, date, time, yearly, born, tag, pinned, at }] notes, plans and yearly dates
-      deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {}, ledger: {}, glimpses: {}, remember: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
+      receipts: [],        // store receipts with their lines: [{ id, date, time, store, items: [{ name, text, amount, qty, for }], total, paid, group, at }]
+      deleted: { workouts: {}, eaten: {}, labs: {}, pets: {}, supps: {}, ledger: {}, glimpses: {}, remember: {}, receipts: {} }, // { id: when } removed on purpose, so a sync doesn't bring them back
       seen: {},            // small UI memory, e.g. { moneyAutoOpen: '2026-11-27' }
       settings: {
         tabs: ['today', 'food', 'train', 'money', 'home', 'growth'],
@@ -120,7 +121,7 @@
       for (const k of Object.keys(base)) if (d[k] === undefined) d[k] = base[k];
       for (const k of Object.keys(base.settings)) if (d.settings[k] === undefined) d.settings[k] = base.settings[k];
       if (!d.money.weeks) d.money.weeks = []; if (!d.money.balances) d.money.balances = [];
-      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember']) if (!d.deleted[k]) d.deleted[k] = {};
+      if (!d.deleted) d.deleted = {}; for (const k of ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']) if (!d.deleted[k]) d.deleted[k] = {};
       const shipped = window.OPUS_PRELOADED_PLAN || window.OPUS_EXAMPLE_PLAN;
       if (!d.plan) d.plan = U.clone(shipped);
       else if (shipped && d.plan.name === shipped.name && (Number(shipped.rev) || 1) > (Number(d.plan.rev) || 1)) d.plan = upgradePlan(d.plan, shipped);

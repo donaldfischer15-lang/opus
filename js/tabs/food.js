@@ -283,8 +283,9 @@
     groups.forEach(g => {
       const sec = h('<div class="sec"><div class="sh"><span class="t">' + U.esc(g.section) + '</span><span class="c num">' + g.items.length + '</span></div><div class="card"></div></div>');
       g.items.forEach(it => {
-        const on = checked.includes(it.item);
-        const r = h('<div class="row tap gi' + (on ? ' done' : '') + '" role="checkbox" aria-checked="' + on + '"><span class="ck sq">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.item) + '</b>' + (it.meals.length > 1 ? '<small>' + U.esc([...new Set(it.meals)].join(' · ')) + '</small>' : '') + '</span><span class="q">' + U.esc(it.qtys.join(' + ')) + '</span></div>');
+        const on = checked.includes(it.item), lp = Opus.receipts && Opus.receipts.lastPrice(it.item);
+        const sub = [it.meals.length > 1 ? [...new Set(it.meals)].join(' · ') : null, lp ? U.money(lp.amount, { cents: true }) + ' last time' + (lp.store ? ' at ' + lp.store : '') : null].filter(Boolean).join(' · ');
+        const r = h('<div class="row tap gi' + (on ? ' done' : '') + '" role="checkbox" aria-checked="' + on + '"><span class="ck sq">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.item) + '</b>' + (sub ? '<small>' + U.esc(sub) + '</small>' : '') + '</span><span class="q">' + U.esc(it.qtys.join(' + ')) + '</span></div>');
         r.onclick = () => { const i = checked.indexOf(it.item); if (i >= 0) checked.splice(i, 1); else checked.push(it.item); r.classList.toggle('done'); r.setAttribute('aria-checked', i < 0); Store.save(); ui.buzz(8); upd(); };
         sec.querySelector('.card').appendChild(r);
       });
@@ -295,7 +296,19 @@
     b.children[1].onclick = () => { checked.length = 0; Store.save(); wrap.replaceWith(groceryCard(d, onChange)); };
     wrap.appendChild(b);
     const bud = (Plan.p.food || {}).budgetPerWeek || {};
-    if (bud.low != null || bud.high != null) wrap.appendChild(h('<p class="small">Grocery budget: ' + U.money(bud.low) + (bud.high != null ? '–' + U.money(bud.high) : '') + ' a week.</p>'));
+    const R = Opus.receipts, rs = R ? R.weekReceipts(d) : [];
+    if (rs.length) {
+      const rc = h('<div class="card"></div>');
+      rs.forEach(x => { const r = h('<button type="button" class="row tap"><span class="tx"><b></b><small></small></span><span class="num"></span></button>'); r.querySelector('b').textContent = x.store + ' receipt'; r.querySelector('small').textContent = U.fmtDateShort(x.date) + ' · ' + x.items.length + ' items' + (x.items.some(i => i.for) ? '' : ' · tap to tick what it bought'); r.querySelector('.num').textContent = U.money(x.total, { cents: true }); r.onclick = () => R.open(x.id, () => wrap.replaceWith(groceryCard(d, onChange))); rc.appendChild(r); });
+      wrap.appendChild(rc);
+    }
+    if (bud.low != null || bud.high != null || R) {
+      const spent = U.sum(rs.map(x => x.total || 0));
+      const p = h('<div class="gi-bud"><p class="small"></p></div>');
+      p.querySelector('p').textContent = (bud.low != null || bud.high != null ? 'Grocery budget: ' + U.money(bud.low) + (bud.high != null ? '–' + U.money(bud.high) : '') + ' a week.' : '') + (rs.length ? ' ' + U.money(spent, { cents: true }) + ' on receipts since Sunday.' : '');
+      if (R) { const ab = h('<button class="link" type="button">Add a receipt</button>'); ab.onclick = () => R.add(() => wrap.replaceWith(groceryCard(d, onChange))); p.appendChild(ab); }
+      wrap.appendChild(p);
+    }
     upd();
     return wrap;
   }

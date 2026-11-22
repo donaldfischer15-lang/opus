@@ -466,16 +466,20 @@
     const m = M(), c = latestCash(), free = freeOf(c);
     const pay = nextPayday(), d0 = U.daysBetween(new Date(), pay), days = d0 > 0 ? d0 : 7;
     const fb = (Plan.p.food || {}).budgetPerWeek || {}, foodW = fb.high != null ? fb.high : fb.low;
-    const food = foodW == null ? null : Math.round(foodW * days / 7);
-    const we = U.key(pay), cur = (Store.data.money.weeks || []).find(w => w.weekEnding === we);
+    const R = Opus.receipts, we = U.key(pay);
+    // groceries already bought this pay week come out of the week's food budget, and receipts after the cash reading come out of free cash
+    const groc = R ? R.weekGroceries(we).spent : 0, since = R ? R.sinceCash(c) : [], sinceAmt = U.sum(since.map(R ? R.fromAccounts : () => 0));
+    const pro = foodW == null ? null : Math.round(foodW * days / 7);
+    const food = pro == null ? null : groc > 0 ? Math.min(pro, Math.max(0, Math.round(foodW - groc))) : pro;
+    const cur = (Store.data.money.weeks || []).find(w => w.weekEnding === we);
     const paid = cur ? U.sum((cur.debtPayments || []).map(x => x.amount)) : 0;
     const inHeld = heldOf(c).some(x => /\bdebt\b/i.test(x.name || '')); // Grok already held this week's debt payment back
     const debt = m.plannedDebtPerWeek == null || inHeld ? null : Math.max(0, m.plannedDebtPerWeek - paid);
     const ck = (m.checkins || {})[we] || {}, paidExtra = Math.max(0, paid - (m.plannedDebtPerWeek || 0));
     const extra = ck.extra > 0 ? Math.max(0, ck.extra - paidExtra) : 0;
-    const yours = free == null ? null : free - (food || 0) - (debt || 0) - extra;
+    const yours = free == null ? null : free - sinceAmt - (food || 0) - (debt || 0) - extra;
     const cash = c ? cashOf(c) : null;
-    return { c, free, cash, pay, days, payToday: d0 === 0, foodW, food, debt, paid, extra, extraTo: ck.to || null, yours };
+    return { c, free, cash, pay, days, payToday: d0 === 0, foodW, food, groc, since, sinceAmt, debt, paid, extra, extraTo: ck.to || null, yours };
   }
   function weekCard() {
     const t = thisWeek(), m = M();
@@ -492,11 +496,12 @@
     const rows = h('<div style="margin-top:8px"></div>');
     const kv = (k, val, cls) => rows.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + val + '</span></div>'));
     kv('Free cash <span class="muted">· ' + U.esc(whenAt(t.c)) + '</span>', U.money(t.free, { cents: true }));
-    if (t.food != null) kv('Food ' + (t.days === 1 ? 'for 1 day' : 'for ' + t.days + ' days'), '− ' + U.money(t.food));
+    t.since.forEach(r => kv(U.esc(r.store) + ' <span class="muted">· after that reading</span>', '− ' + U.money(Opus.receipts.fromAccounts(r), { cents: true })));
+    if (t.food != null) kv(t.groc > 0 ? 'Rest of this week’s food <span class="muted">· ' + U.money(t.groc) + ' bought</span>' : 'Food ' + (t.days === 1 ? 'for 1 day' : 'for ' + t.days + ' days'), t.food ? '− ' + U.money(t.food) : '<span class="muted">covered</span>');
     if (t.debt != null) kv(t.paid ? 'Rest of this week’s debt payment' : 'This week’s debt payment', t.debt ? '− ' + U.money(t.debt) : '<span class="muted">sent</span>');
     if (t.extra) kv('Extra to ' + U.esc(t.extraTo || 'debt') + ' <span class="muted">· your check-in</span>', '− ' + U.money(t.extra));
     kv('Yours this week', short ? '−' + U.money(-v) : U.money(v), 'total');
-    rows.appendChild(h('<div class="small" style="margin-top:6px">Bills due before payday are already out of free cash.' + (t.foodW != null ? ' Food uses the top of your ' + U.money(t.foodW) + ' weekly budget.' : '') + '</div>'));
+    rows.appendChild(h('<div class="small" style="margin-top:6px">Bills due before payday are already out of free cash.' + (t.foodW != null ? ' Food uses the top of your ' + U.money(t.foodW) + ' weekly budget' + (t.groc > 0 ? ', less the groceries already bought.' : '.') : '') + '</div>'));
     card.appendChild(rows);
     // your rule: extra debt payments wait for the cushion
     if (m.cushion != null && t.cash != null && !short) {
@@ -850,7 +855,8 @@
       const spent = weekSpent(w), every = weekEveryday(w);
       b.appendChild(h('<div class="figure"><div class="v num">' + U.money(spent) + '</div><div class="k">Spent</div><div class="sub">' + (spent - every > .005 ? U.money(every) + ' everyday · ' + U.money(spent - every) + ' one-off' : 'Tap a store to sort it or mark it one-off') + '</div></div>'));
       const groups = new Map();
-      spentOf(w).forEach(x => { const g = groupOf(x.cat) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
+      const R = Opus.receipts, rOf = x => R ? R.receiptFor(we, x) : null;
+      spentOf(w).forEach(x => { const rc = rOf(x), g = groupOf(x.cat) || (rc && rc.group) || 'Not sorted yet'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
       const order = [...groups.keys()].sort((a, b) => (a === 'Not sorted yet') - (b === 'Not sorted yet') || U.sum(groups.get(b).map(x => x.amount)) - U.sum(groups.get(a).map(x => x.amount)));
       const card = h('<div class="card"></div>');
       order.forEach(g => {
@@ -861,9 +867,16 @@
           const r = h('<div class="row tap wg-i"><span class="tx"><b>' + U.esc(x.cat) + '</b>' + (one ? '<small style="color:var(--gold-2)">one-off</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>');
           r.onclick = () => itemSheet(we, x, () => api.rerender());
           card.appendChild(r);
+          const rc = rOf(x);
+          if (rc) { const l = h('<button type="button" class="row tap wg-i rc-under"><span class="tx"><small></small></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'); l.querySelector('small').textContent = 'Receipt · ' + rc.items.slice(0, 3).map(i => i.name).join(', ') + (rc.items.length > 3 ? ' and ' + (rc.items.length - 3) + ' more' : ''); l.onclick = () => R.open(rc.id, () => api.rerender()); card.appendChild(l); }
         });
       });
       if (!spentOf(w).length) card.appendChild(h('<p class="empty">No spending logged this week.</p>'));
+      const un = R ? R.unmatchedIn(we) : [];
+      if (un.length) {
+        card.appendChild(h('<div class="wg"><div class="kv" style="border:0;padding:0"><span>Receipts not in the bank log yet</span><span class="num">' + U.money(U.sum(un.map(R.fromAccounts)), { cents: true }) + '</span></div></div>'));
+        un.forEach(rc => { const l = h('<button type="button" class="row tap wg-i"><span class="tx"><b></b><small></small></span><span class="num"></span></button>'); l.querySelector('b').textContent = rc.store; l.querySelector('small').textContent = U.fmtDateShort(rc.date) + ' · ' + rc.items.length + ' items'; l.querySelector('.num').textContent = U.money(R.fromAccounts(rc), { cents: true }); l.onclick = () => R.open(rc.id, () => api.rerender()); card.appendChild(l); });
+      }
     movedCard(w, card);
       b.appendChild(card);
       const more = h('<div class="card" style="margin-top:12px"></div>');
@@ -1005,7 +1018,9 @@
 
     const wk = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Your week</span><button class="c" type="button">Edit numbers</button></div></div>');
     wk.querySelector('button').onclick = () => editNumbers(() => Opus.refresh());
-    wk.appendChild(weekCard()); v.appendChild(wk);
+    wk.appendChild(weekCard());
+    if (Opus.receipts) { const gc = Opus.receipts.groceriesCard(); gc.style.marginTop = '12px'; wk.appendChild(gc); }
+    v.appendChild(wk);
 
     const isDay = m.checkInDay === U.dayKey(new Date());
     const ck = h('<div class="next"><div class="body"><div class="k">' + (c.cur ? (c.cur.by === 'grok' ? 'Logged by Grok' : 'Check-in done') : isDay ? 'Today' : U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')]) + '</div><div class="h">' + U.DAY_NAMES[U.DAYS.indexOf(m.checkInDay || 'fri')] + ' check-in</div><div class="s">' + (c.cur ? U.money(weekSpent(c.cur), { cents: true }) + ' spent this week' : 'Grok logs the week, you look it over') + '</div></div><button class="btn' + (c.cur ? ' ghost sm' : '') + '" type="button">' + (c.cur ? 'Open' : 'Start') + '</button></div>');

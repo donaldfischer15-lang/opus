@@ -1161,3 +1161,25 @@ button.g-pline:active { color: var(--gold-2); }
 .snap-wx { position: absolute; right: 6px; top: 6px; width: 28px; height: 28px; display: grid; place-items: center; color: var(--faint); }
 .snap-wx svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.6; }
 @media (prefers-reduced-motion: reduce) { .snap-cam.live .snap-line, .snap-spin { animation: none; } }
+
+/* ---------- receipts (1.29.0) ---------- */
+.rc-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.rc-head .k { font-family: var(--display); font-size: 10.5px; letter-spacing: .24em; color: var(--dim); text-transform: uppercase; }
+.rc-head .v { font-family: var(--display); font-size: 28px; margin-top: 4px; }
+.rc-head .small { line-height: 1.45; }
+.rc-bar { position: relative; margin: 12px 0 4px; overflow: visible; }
+.rc-bar i { max-width: 100%; }
+.rc-bar b { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--line-strong); }
+.rc-lines2 .row:first-child { margin-top: 6px; }
+.rc-under { min-height: 0; padding-top: 0; margin-top: -6px; }
+.rc-under small { color: var(--gold-2); }
+.rc-form { display: flex; flex-direction: column; gap: 2px; }
+.rc-lines { padding: 6px 12px; }
+.rc-line { display: grid; grid-template-columns: minmax(0, 1fr) 84px 32px; gap: 8px; align-items: center; padding: 5px 0; }
+.rc-line + .rc-line { border-top: 1px solid var(--line); }
+.rc-line .input { min-width: 0; padding: 9px 10px; }
+.rc-line .num { text-align: right; }
+.rc-line .icon-btn { width: 32px; height: 32px; color: var(--faint); }
+.rc-items small:empty { display: none; }
+.gi-bud { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gi-bud .small { margin: 0; flex: 1; min-width: 0; }

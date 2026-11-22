@@ -222,6 +222,17 @@ The outbox rules are in section 4; these are the money ones.
   - **Update one account at a time** when that's all you read: send that day's `date` with just `accounts` (each `{ "name", "amount", "at" }`, `at` being when you read that account) and no `cash`, `free` or `held`. The helper folds it into that day's reading and keeps the other accounts with their own times; Opus works out the totals. On a new day, an entry with only `accounts` keeps the last `held` list (minus anything past due). Use the same account names every time, as in earlier readings. Give `at` on each account only when you actually read that account then: Money shows each balance with its time, and marks one older than a day and a half.
 - A money week's `balances` also update the matching debts' `balance` in the plan (names match `money.debts[].name`, case does not matter), just like a pasted money block.
 
+### Receipts (`receipts`)
+
+A receipt is a store receipt with its line items, kept in `logs.json` `receipts`. The owner adds one in Opus (a photo the helper reads, or typed in) from Money › Groceries this week or under the grocery list; you can add one through the outbox when they send you a receipt.
+
+- `id` (required): `"date-HHMM-store"`, like `"2026-11-22-1037-sams-club"`. `date` (required) and `time` (24-hour, optional) are when it was rung up.
+- `store` (required), `items` (required): `[{ "name": "Gala apples", "text": "GALA", "amount": 6.77 }]` — `name` in plain words, `text` as printed, `amount` the line's price, `qty` only if printed. A discount is its own line with a negative amount.
+- `subtotal`, `tax`, `total` (required) as printed. `paid`: `[{ "how": "debit", "amount": 65.09 }]`. Store rewards or gift cards spent go here too (`"how": "Sam's Cash"`); Opus counts only the rest as money from the accounts. `earned`: rewards earned, if printed. `group`: a Money group, `"Groceries"` unless it's clearly something else.
+- **Never** copy a card number or its last digits, or a reference, approval, terminal, transaction, TC, AID, account or member number. Anything with six or more digits in a row is refused.
+- **No double counting.** A receipt explains a bank line; it isn't a second purchase. Keep logging spending from the bank in `money.weeks` as always. Opus matches a receipt to the bank line with the same store and the same amount from the accounts (the total less rewards spent), in the receipt's pay week or the one after, and counts it once. Until the bank line shows up, the receipt counts on its own: in Groceries this week, and in Yours this week when it is newer than the latest cash reading.
+- Items can be linked to grocery-list lines (`for`, set on the phone); the grocery list then shows what each cost last time.
+
 ### The weekly money block (paste route, every Friday)
 
 With sync, put the week in `grok.json` instead (section 4). Without it, Grok replies with this block and the owner pastes it.
@@ -310,13 +321,14 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | marked a night clean or with a dot in The Ledger | `logs.json` `ledger` |
 | did the weekly review | `logs.json` `reviews` |
 | kept a note, a plan or a birthday in Memory (the pull-down at the top of every screen) | `logs.json` `remember` |
+| added a store receipt (Money › Groceries this week, or under the grocery list) | `logs.json` `receipts` |
 | changed rest timers, tabs or sound | `logs.json` `prefs` |
 
 ---
 
 ## 4. Your outbox (`grok.json`, `"format": "opus-grok"`)
 
-The outbox has exactly ten sections: **`money.cash`, `money.weeks`, `money.balances`, `weights`, `workouts`, `eaten`, `labs`, `pets`, `supps`, `remember`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
+The outbox has exactly eleven sections: **`money.cash`, `money.weeks`, `money.balances`, `receipts`, `weights`, `workouts`, `eaten`, `labs`, `pets`, `supps`, `remember`**. Anything else is refused by name, and every refused entry is listed with the field that was wrong.
 
 Put only new or corrected entries here. You may replace the whole file each time; Opus copies each entry into the logs once and keeps it, even after you take it out of this file.
 
@@ -361,7 +373,7 @@ Put only new or corrected entries here. You may replace the whole file each time
 }
 ```
 
-Each section's own rules are in its tab's part: `money.*` in 2, `eaten` in 9, `pets` in 11, `labs` and `supps` in 12, `remember` just below. These hold for all of them:
+Each section's own rules are in its tab's part: `money.*` and `receipts` in 2, `eaten` in 9, `pets` in 11, `labs` and `supps` in 12, `remember` just below. These hold for all of them:
 
 - Keys match each entry: a money week by `weekEnding`, a weigh-in, balance or cash reading by `date`, a blood test by `date`, a workout by `id`, a food by `id` (make one up, e.g. `"grok-2026-11-27"`, with `date` and `sets` as in section 3).
 - Send the same key again to correct an entry you added. To take one back, send `{ "weekEnding": "2026-11-27", "delete": true }`.

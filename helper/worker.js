@@ -2,7 +2,7 @@
   Opus helper for Grok: a tiny MCP server that runs free on Cloudflare Workers.
   It lets Grok read the owner's private opus-data repo and save these files there:
     - plan.json  (checked with the same rules Opus uses before it is saved)
-    - grok.json  (Grok's outbox: free cash, money weeks, balances, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
+    - grok.json  (Grok's outbox: free cash, money weeks, balances, receipts, weigh-ins, workouts, food eaten, blood tests, pet care, supplements)
   - desk.json  (the shared desk: notes for Claude, who builds the app, and Claude's replies)
   - memory.md  (the shared memory: what Grok, Cassius and Claude know about the owner)
   Grok can read growth.json but never change it: since 1.11.0 the Growth page belongs to Cassius alone (the owner's
@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.21.0';
+const VERSION = '1.22.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -213,6 +213,7 @@ const OUT = [
   ['labs', 'date', l => dateErr(l, 'date') || (Array.isArray(l.markers) && l.markers.length ? null : 'markers must be a list of results like [{ "name": "Ferritin", "value": 85, "unit": "ng/mL", "range": "30-400", "low": 30, "high": 400 }]') || l.markers.map((m, n) => !isObj(m) ? 'markers[' + n + '] must be an object' : !(typeof m.name === 'string' && m.name.trim()) ? 'markers[' + n + '].name must be the marker as the report prints it' : !num(m.value) ? 'markers[' + n + '].value must be a number (got ' + JSON.stringify(m.value) + ')' : (m.low != null && !num(m.low)) ? 'markers[' + n + '].low must be a number or left out' : (m.high != null && !num(m.high)) ? 'markers[' + n + '].high must be a number or left out' : null).find(Boolean) || null],
   ['pets', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be "date:pet:care", like "2026-11-27:the-pet-id:flea"') || dateErr(e, 'date') || (typeof e.pet === 'string' && e.pet ? null : 'pet must be the pet\'s id from plan home.pets') || (typeof e.care === 'string' && e.care ? null : 'care must be a care id from that pet\'s care list, or "weight" or "vet"') || (e.id === e.date + ':' + e.pet + ':' + e.care ? null : 'id must be exactly date:pet:care ("' + e.date + ':' + e.pet + ':' + e.care + '")') || (e.lb == null || num(e.lb) ? null : 'lb must be a number') || (e.care === 'weight' && !num(e.lb) ? 'a weight entry needs lb' : null) || (e.note == null || typeof e.note === 'string' ? null : 'note must be text')],
   ['supps', 'id', e => dateErr(e, 'date') || (typeof e.supp === 'string' && e.supp ? null : 'supp must be the supplement\'s id from plan health.supplements') || (e.id === e.date + ':' + e.supp ? null : 'id must be exactly date:supp ("' + e.date + ':' + e.supp + '")')],
+  ['receipts', 'id', r => (typeof r.id === 'string' && r.id ? null : 'id must be a text id like "2026-11-22-1037-sams-club"') || dateErr(r, 'date') || (r.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(r.time) ? null : 'time must be 24-hour like "10:37" or left out') || (typeof r.store === 'string' && r.store.trim() ? null : 'store must be the store\'s name, like "Sam\'s Club"') || (num(r.total) ? null : 'total must be a number') || (Array.isArray(r.items) && r.items.length ? null : 'items must be a list like [{ "name": "Bananas", "text": "BANANAS", "amount": 1.56 }]') || r.items.map((x, n) => !isObj(x) ? 'items[' + n + '] must be an object' : !(typeof x.name === 'string' && x.name.trim()) ? 'items[' + n + '].name must be the item' : !num(x.amount) ? 'items[' + n + '].amount must be a number (got ' + JSON.stringify(x.amount) + ')' : null).find(Boolean) || listErr(r, 'paid') || (r.subtotal == null || num(r.subtotal) ? null : 'subtotal must be a number') || (r.tax == null || num(r.tax) ? null : 'tax must be a number') || (/\d(?:[\s-]?\d){5,}/.test(JSON.stringify(r).replace(/"(id|date|time|at)":"[^"]*"/g, '')) ? 'a receipt never carries long numbers (card, reference, approval, terminal or transaction numbers); leave them out' : null)],
   ['remember', 'id', e => (typeof e.id === 'string' && e.id ? null : 'id must be a text id like "grok-2026-11-27-dentist"') || (typeof e.text === 'string' && e.text.trim() ? null : 'text must be what to remember, like "Dentist" or "Sam\'s birthday"') || (e.text.length <= 500 ? null : 'text must be 500 characters or fewer') || (e.date == null || isDate(e.date) ? null : 'date must be a date like "2026-11-27" or left out (for a yearly date, the first one; a birth date when born is true)') || (e.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time) ? null : 'time must be 24-hour like "15:00" or left out') || (e.time && !e.date ? 'a time needs a date' : null) || (e.yearly && !e.date ? 'yearly needs a date' : null) || ['yearly', 'born', 'pinned'].map(k => e[k] == null || typeof e[k] === 'boolean' ? null : k + ' must be true or false').find(Boolean) || (e.tag == null || MEM_TAGS.includes(e.tag) ? null : 'tag must be one of ' + MEM_TAGS.join(', ') + ', or left out so Opus picks')]
 ];
 const OUT_PATHS = OUT.map(o => o[0]);
@@ -403,7 +404,7 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { section: { type: 'string', description: 'The heading, like "Training" or "People".' }, add: { type: 'array', items: { type: 'string' }, description: 'New facts, one per item (up to 400 characters each).' }, replace: { type: 'array', items: { type: 'string' }, description: 'The whole section, one fact per item. Use instead of add to rewrite it.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Facts to delete, by their text.' }, change: { type: 'string', description: 'One short line for the history.' } }, required: ['section'] } },
   { name: 'save_plan', description: 'Save the whole updated plan.json. Prefer update_plan_section for a change to one part. Read the whole plan first (all its parts) and send it back complete, with your change made: "format": "opus-plan", "version": 1, every id kept, "updated" set to today. Change only what the owner asked for. Never invent numbers; use null when unknown. Opus checks the plan the same way the app does and refuses a broken one.',
     inputSchema: { type: 'object', properties: { plan: { type: 'object', description: 'The complete plan object.' }, change: { type: 'string', description: 'One short line saying what changed, for the history.' } }, required: ['plan', 'change'] } },
-  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember; one thing per entry, text without the date, dates worked out in the owner\'s time zone; a dated one gets its reminder right away). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
+  { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember; one thing per entry, text without the date, dates worked out in the owner\'s time zone; a dated one gets its reminder right away), and store receipts with their line items (receipts; never card, reference, approval, terminal or transaction numbers). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
 const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a' };
@@ -779,7 +780,7 @@ async function phoneKey(env) {
 // Scout looks closest at a plate; Mistral reads printed labels and typed meals as well and in a fifth of the time (food/vision.json, Nov 22).
 // Gemma is not open to this account, so it is left out.
 const FOOD_MODELS = ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct'];
-const FOOD_FIRST = { photo: FOOD_MODELS[0], label: FOOD_MODELS[1], words: FOOD_MODELS[1] };
+const FOOD_FIRST = { photo: FOOD_MODELS[0], label: FOOD_MODELS[1], words: FOOD_MODELS[1], receipt: FOOD_MODELS[1] };
 // neurons per million tokens (developers.cloudflare.com/workers-ai/platform/pricing, Nov 2026), for the phone's rough daily count
 const NEURONS = { '@cf/meta/llama-4-scout-17b-16e-instruct': [24545, 77273], '@cf/mistralai/mistral-small-3.1-24b-instruct': [31876, 50488], '@cf/google/gemma-3-12b-it': [31371, 50560] };
 const FOOD_PROMPT = `You are the eye of a food-logging phone app. The owner photographs what they eat, or types it, and you say what it is and how much.
@@ -802,6 +803,13 @@ const LABEL_PROMPT = `Read the Nutrition Facts panel in this photo exactly as pr
 Answer with JSON only, no other words, in exactly this shape (numbers without units; grams unless named):
 {"name":null,"brand":null,"serving_text":"","serving_g":null,"servings_per_container":null,"kcal":null,"fat_g":null,"carbs_g":null,"fiber_g":null,"sugar_g":null,"protein_g":null,"sodium_mg":null}
 "name" and "brand" only if printed on what you can see.`;
+const RECEIPT_PROMPT = `Read this store receipt exactly as printed. Never guess a number you can't read clearly: use null for it.
+List every item line that has a price, in order. For each: "text" is the item as printed, "name" is a plain name a person would say (expand store abbreviations only when sure, like "MM" for Member's Mark), "amount" is the line's price, "qty" the count if printed (like 3 @ 3.98), else null.
+A discount or coupon line is its own item with a negative amount.
+"paid" lists how it was paid: "how" is a plain word like "debit", "credit", "cash", "gift card" or "store rewards", with the amount. "earned" is rewards earned, if printed.
+Never copy any card number, last four digits, reference, approval, authorization, terminal, transaction, TC, AID or account number, or a member number. Leave them out entirely.
+Answer with JSON only, no other words, in exactly this shape:
+{"store":"","date":"YYYY-MM-DD","time":"HH:MM","items":[{"text":"","name":"","amount":0,"qty":null}],"subtotal":null,"tax":null,"total":null,"paid":[{"how":"","amount":0}],"earned":null}`;
 const corsFor = req => { const o = req.headers.get('Origin') || ''; return /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(o) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o) ? o : 'null'; };
 function parseLoose(t) {
   if (isObj(t)) return t;
@@ -826,11 +834,21 @@ function cleanLabel(o) {
   return { name: str(o.name, 80), brand: str(o.brand, 60), serving: str(o.serving_text, 60), servingG: numOr(o.serving_g, 0, 2000), servings: numOr(o.servings_per_container, 0, 200),
     kcal: numOr(o.kcal, 0, 5000), fat: numOr(o.fat_g, 0, 500), carbs: numOr(o.carbs_g, 0, 800), fiber: numOr(o.fiber_g, 0, 200), sugar: numOr(o.sugar_g, 0, 500), protein: numOr(o.protein_g, 0, 400), sodium: numOr(o.sodium_mg, 0, 20000) };
 }
+// a receipt never keeps long numbers: card, reference, approval, terminal and transaction numbers are cut out here too
+const noIds = v => v == null ? null : String(v).replace(/[#*xX]*\d[\d\s-]{5,}\d/g, '').replace(/[*xX#•]{2,}\s*\d+/g, '').replace(/\b(ref|appr(oval)?|auth|term(inal)?|tc|aid|trans|acct)\b\s*[#:.]+\s*\S+/gi, '').replace(/\s+/g, ' ').trim() || null;
+function cleanReceipt(o) {
+  if (!isObj(o)) return null;
+  const money = v => { const n = typeof v === 'string' ? Number(v.replace(/[^\d.-]/g, '')) : Number(v); return v === null || v === '' || !isFinite(n) || Math.abs(n) > 100000 ? null : Math.round(n * 100) / 100; };
+  const items = (Array.isArray(o.items) ? o.items : []).filter(isObj).slice(0, 80).map(x => ({ text: str(noIds(x.text), 60), name: str(noIds(x.name || x.text), 80), amount: money(x.amount), qty: numOr(x.qty, 0, 500) })).filter(x => x.name && x.amount != null);
+  const paid = (Array.isArray(o.paid) ? o.paid : []).filter(isObj).slice(0, 6).map(x => ({ how: str(noIds(x.how), 30), amount: money(x.amount) })).filter(x => x.how && x.amount != null);
+  const date = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date) ? o.date : null, time = typeof o.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(o.time) ? o.time : null;
+  return { store: str(String(noIds(o.store) || '').replace(/\s*(store\s*)?#\s*\d+\s*$/i, ''), 60), date, time, items, subtotal: money(o.subtotal), tax: money(o.tax), total: money(o.total), paid, earned: money(o.earned) };
+}
 const isLimit = m => /4006|daily free allocation|neurons|exceeded|quota|rate.?limit|too many requests|capacity/i.test(m);
-async function askModel(env, model, sys, text, image) {
+async function askModel(env, model, sys, text, image, max) {
   const content = image ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: image } }] : text;
   const t0 = Date.now();
-  const r = await env.AI.run(model, { messages: [{ role: 'system', content: sys }, { role: 'user', content }], max_tokens: 900, temperature: 0.2 });
+  const r = await env.AI.run(model, { messages: [{ role: 'system', content: sys }, { role: 'user', content }], max_tokens: max || 900, temperature: 0.2 });
   const u = (r && r.usage) || {}, rate = NEURONS[model] || [30000, 80000];
   const neurons = u.prompt_tokens != null ? Math.round(((u.prompt_tokens || 0) * rate[0] + (u.completion_tokens || 0) * rate[1]) / 1e6) : null;
   return { out: r && (r.response != null ? r.response : r.result != null ? r.result : r), ms: Date.now() - t0, neurons, usage: u };
@@ -838,17 +856,17 @@ async function askModel(env, model, sys, text, image) {
 /* one read: the models in order until one answers with usable JSON; stops at once when today's free amount is used up */
 async function readFood(env, mode, text, image) {
   if (!env.AI) return { ok: false, code: 'setup', error: 'The helper has no AI binding yet. It comes with the next deploy.' };
-  const sys = mode === 'label' ? LABEL_PROMPT : FOOD_PROMPT;
-  const prompt = mode === 'label' ? 'Read this label.' : (text ? 'The owner\'s note: ' + text + (image ? '' : '\nThere is no photo; go by the note alone.') : 'No note from the owner; go by the photo.');
-  const first = FOOD_FIRST[mode === 'label' ? 'label' : image ? 'photo' : 'words'];
+  const sys = mode === 'label' ? LABEL_PROMPT : mode === 'receipt' ? RECEIPT_PROMPT : FOOD_PROMPT;
+  const prompt = mode === 'label' ? 'Read this label.' : mode === 'receipt' ? 'Read this receipt.' : (text ? 'The owner\'s note: ' + text + (image ? '' : '\nThere is no photo; go by the note alone.') : 'No note from the owner; go by the photo.');
+  const first = FOOD_FIRST[mode === 'label' || mode === 'receipt' ? mode : image ? 'photo' : 'words'];
   const order = [first].concat(FOOD_MODELS.filter(m => m !== first));
   const tried = [];
   for (const model of order) {
     try {
-      const a = await askModel(env, model, sys, prompt, image);
-      const o = parseLoose(a.out), res = mode === 'label' ? cleanLabel(o) : cleanFood(o);
-      if (!res) { tried.push(model.split('/').pop() + ': no JSON'); continue; }
-      return Object.assign({ ok: true, model: model.split('/').pop(), ms: a.ms, neurons: a.neurons }, mode === 'label' ? { label: res } : res);
+      const a = await askModel(env, model, sys, prompt, image, mode === 'receipt' ? 2000 : 900);
+      const o = parseLoose(a.out), res = mode === 'label' ? cleanLabel(o) : mode === 'receipt' ? cleanReceipt(o) : cleanFood(o);
+      if (!res || (mode === 'receipt' && !res.items.length)) { tried.push(model.split('/').pop() + ': no JSON'); continue; }
+      return Object.assign({ ok: true, model: model.split('/').pop(), ms: a.ms, neurons: a.neurons }, mode === 'label' ? { label: res } : mode === 'receipt' ? { receipt: res } : res);
     } catch (e) {
       const m = String(e && e.message || e);
       if (isLimit(m)) return { ok: false, code: 'limit', error: 'Today\'s free photo reads are used up. They come back at midnight UTC.' };
@@ -865,10 +883,10 @@ async function foodRoute(request, env) {
   if (!same(request.headers.get('X-Opus-Key') || '', await phoneKey(env))) return J({ ok: false, code: 'key', error: 'This phone\'s helper key is out of date. Sync Opus and try again.' }, 401);
   if (Number(request.headers.get('Content-Length') || 0) > 4e6) return J({ ok: false, code: 'bad', error: 'That photo is too big.' }, 413);
   let b; try { b = await request.json(); } catch (e) { return J({ ok: false, code: 'bad', error: 'Bad request' }, 400); }
-  const mode = b.mode === 'label' ? 'label' : 'food';
+  const mode = b.mode === 'label' || b.mode === 'receipt' ? b.mode : 'food';
   const text = str(b.text, 400), image = typeof b.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(b.image) && b.image.length < 4e6 ? b.image : null;
   if (!image && !text) return J({ ok: false, code: 'bad', error: 'Send a photo or a few words.' }, 400);
-  if (mode === 'label' && !image) return J({ ok: false, code: 'bad', error: 'A label needs a photo.' }, 400);
+  if ((mode === 'label' || mode === 'receipt') && !image) return J({ ok: false, code: 'bad', error: 'A ' + mode + ' needs a photo.' }, 400);
   return J(await readFood(env, mode, text, image));
 }
 /* once per helper version: read a test label with each model and save what happened to food/vision.json in the data
