@@ -21,6 +21,7 @@ This first part (the core) is the rules every helper needs. Each tab has its own
 | 11. Home and pets | `"home"` | home jobs, pets and pet care |
 | 12. Health | `"health"` | supplements, blood tests, daily amounts |
 | 13. Good requests | `"requests"` | examples of what the owner asks and what to do |
+| 14. When Claude is away | `"away"` | what you can run on your own, what you can't, and how to keep Opus safe |
 
 `section` `"all"` gives the whole guide, in parts.
 
@@ -656,6 +657,30 @@ Each pet gets its own section on Home and a profile. Everything except `id` and 
 
   `nutrients` (optional) is what **one dose** adds, in the same keys and units as food `micros` (section 9), e.g. `{ "magnesium": 200 }` or `{ "vitD": 125 }`. Fill it only from the bottle's Supplement Facts as the owner gives it (the line for the nutrient itself, e.g. "Magnesium (as magnesium glycinate) 200 mg"), never from a guess. When it is `null`, Opus reads it from `dose` only when the name and unit leave no doubt (a magnesium supplement's "200 mg" counts as 200 mg magnesium; vitamin D "5,000 IU" counts as 125 µg); otherwise the supplement shows as "amount not known yet" and isn't counted. Supplements that aren't one of the tracked nutrients (medications, L-theanine, taurine and the like) are never counted.
 
+### Hair (`health.hair`)
+
+A hair routine, shown on Body › Hair (Opus 1.34 and later) with its ticks on Today's evening. Everything personal lives here in the plan, never in the app's code.
+
+```json
+"hair": {
+  "start": "YYYY-MM-DD",               // the routine's start; checkpoints count from it
+  "core": ["supplement-id"],           // ids in health.supplements taken for it; they tick as supplements, and their names stay off lock-screen reminders
+  "routine": [ { "id": "x", "name": "…", "days": ["sun"] | "all", "part": "evening", "time": "19:30" | null, "minutes": "20-30" | null,
+                 "rule": "a line such as Nothing on the scalp for 24 hours after" | null, "depth": null, "brand": null } ],
+  "extras": [ { "id": "y", "name": "…", "days": ["mon", …], "untilEmpty": true, "emptied": "YYYY-MM-DD" | null } ],
+  "effects": ["a short line for each thing to watch for"],
+  "notes": { "effects": "…", "shedding": "…", "rhr": "…", "expectations": "…", "restAfter": "…" },
+  "photoDay": 4, "photoTime": "18:00",  // the monthly photo set (moved a day if that day has an item with a rule)
+  "checkpoints": ["YYYY-MM-DD", …]      // blind side-by-side comparisons of the starting set and the first set on or after each date
+}
+```
+
+- An item with a `rule` (for example a weekly needling night) hides that night's extras once it's ticked. `depth`, `brand` and any `dose: null` show as quiet blanks for the owner; fill them only from the owner's own words.
+- An extra that runs out gets `emptied` set to that date, by the owner on Body or by you on their word. Extras are never scored or credited as progress.
+- The logs keep `hair.effects` ([{ date, items, note, weekly, at }], one a day), `hair.photos` ([{ date, angle, file, length, baseline, at }], five angles a set: front, top, crown, left, right) and `hair.compares` ([{ id, checkpoint, angle, pickedLater, rating -3..3, at }]). Read them; never edit them.
+- Photos are files in this repo under `hair/YYYY-MM-DD-<angle>.jpg`, private. Never copy them anywhere else.
+- **Never change a dose** in `health.supplements`. Doses come from the owner's prescriber; record only what the owner says, and leave `confirm: true` on until they confirm it.
+
 ### How Opus counts vitamins and minerals: food and supplements, kept apart
 - **From food:** `micros` of what was eaten (planned meals ticked, scaled by `eaten` parts, plus extras in `eaten`). Stored on the meals in the plan and on `eaten` entries in `logs.json`.
 - **From supplements:** each supplement's amount per dose (`nutrients`, `label`, or read from `dose` as above) on each day it was ticked (`logs.json` `supps`, one entry per supplement per day). Nothing about supplements is ever written into `eaten` or `micros`.
@@ -689,3 +714,29 @@ Each pet gets its own section on Home and a profile. Everything except `id` and 
 - "Update my free cash." Read the accounts, then add today's `money.cash` entry with `cash`, `held` and `free`.
 - "Log my money for this week." Read the week from the owner's accounts and add it to `grok.json` under `money.weeks`.
 - "What's still blank in my plan?" List every `null` in `plan.json` by where it is, in plain words.
+
+## 14. When Claude is away
+
+Claude builds the app. When Claude can't be reached for a while, you (Grok, or Cassius) keep Opus running for the owner. Here is exactly where the line sits.
+
+**You can, through the opus connector:**
+
+- Read everything: the plan, the logs, the outbox, Growth, the desk, the shared memory, WHOOP.
+- Change any part of the plan with `update_plan_section`: money, food, training, home and pets, health (supplements, labs reference, `health.hair`), the schedule and Today's checklist. The phone picks it up the next time it opens, and shows the owner what changed.
+- Log for the owner in the outbox: cash, money weeks, balances, weigh-ins, workouts, food eaten, labs, pet care, supplements taken, Memory notes and dates, receipts.
+- Keep the shared memory current, and leave notes on the desk (Claude reads them on return).
+- Cassius alone: the Growth page, with `save_growth`.
+
+**You can't, and shouldn't try:**
+
+- Change how the app looks or works. The app's code is in a separate public repo, and no connector tool writes to it. Put the idea on the desk as a note for Claude instead, with what the owner asked for in their words.
+- Edit `logs.json`, `push.json`, `whoop.json` or any sealed file, tick Today's items for the owner, or set the nightly nose strips. Those are the phone's.
+- Upload or move photos.
+- Fix a sync or token problem yourself. If Opus shows a sync warning, tell the owner what it says; a new GitHub token goes in Settings › Sync.
+
+**Keeping it safe while you run it:**
+
+- Change one part at a time and read it back. A broken plan is refused by the phone (nothing is lost), but the owner then waits.
+- If a change could undo something the owner built with Claude (a whole section, many ids), ask the owner first.
+- Never invent numbers and never change a dose. Leave `null` and ask.
+- Read the desk first: open items from Claude say what's half-built and what not to touch.
