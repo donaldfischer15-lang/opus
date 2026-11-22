@@ -16,6 +16,7 @@
     ['supps', 'Supplements', 'When they’re due'],
     ['weigh', 'Weigh-ins', 'At the weigh-in time'],
     ['home', 'Home and chores', 'Chores and jobs on your day'],
+    ['calendar', 'Plans and birthdays', 'An hour before a plan, and birthdays a week ahead and on the day'],
     ['pets', 'Pets', 'Care that comes due, at 6 PM, and birthdays'],
     ['bills', 'Bills and payday', 'The evening before a bill comes out, and payday morning'],
     ['money', 'Money check-in', 'At check-in time'],
@@ -25,7 +26,7 @@
     ['changes', 'Changes from Grok and Cassius', 'Right when they save one']
   ];
   const KIND_OF = { meal: 'meals', prep: 'meals', workout: 'workouts', supp: 'supps', weigh: 'weigh', home: 'home', pet: 'pets', money: 'money', review: 'review', writing: 'growth', lesson: 'growth' };
-  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'food', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today' };
+  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'food', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
 
   const st = () => { const s = Store.data.settings; s.notify = s.notify || { on: false, kinds: {} }; s.notify.kinds = s.notify.kinds || {}; return s.notify; };
   const kindOn = k => st().kinds[k] !== false; // every kind is on until switched off
@@ -71,6 +72,19 @@
         if (wk.payday) bits.push('payday ' + U.DAY_NAMES[wk.payday.getDay()]);
         if (wk.pets.length) bits.push(wk.pets.length + ' pet job' + (wk.pets.length === 1 ? '' : 's'));
         add(at(d, '08:00'), 'review', 'The week ahead', bits.length ? lower1(bits.join(', ')).replace(/^./, c => c.toUpperCase()) + '.' : 'A quiet week.');
+      }
+    }
+    // Memory: plans an hour before (or 7 AM when there's no time), birthdays a week ahead and on the day
+    if (Opus.memory) {
+      for (const x of Opus.memory.upcoming(now, DAYS + 8)) {
+        if (x.pet) continue; // pets' birthdays come with Pets
+        if (x.yearly) {
+          const t = x.turns ? 'Turns ' + x.turns + ' today' : 'Today';
+          add(at(x.on, '08:00'), 'calendar', x.title, t);
+          add(at(U.addDays(x.on, -7), '08:00'), 'calendar', x.title, 'A week from today, ' + U.DAY_NAMES[x.on.getDay()] + (x.turns ? '. Turns ' + x.turns : '') + '.');
+        } else if (x.time) {
+          const w = at(x.on, x.time); add(w && new Date(w.getTime() - 36e5), 'calendar', x.title, 'At ' + U.fmtTimeAP(x.time).replace('\u00a0', ' ') + ', in an hour');
+        } else add(at(x.on, '07:00'), 'calendar', x.title, 'Today');
       }
     }
     // this phone's GitHub token: a week and a day before it runs out (the helper warns about its own token itself)

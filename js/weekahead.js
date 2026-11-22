@@ -12,7 +12,7 @@
     const end = U.addDays(start, 6), k0 = U.key(start), k1 = U.key(end), days = [];
     for (let i = 0; i < 7; i++) days.push(U.addDays(start, i));
     const inRange = k => k >= k0 && k <= k1;
-    const out = { start, end, training: [], bills: [], pets: [], home: [], payday: null, blanks: [] };
+    const out = { start, end, training: [], bills: [], pets: [], home: [], cal: [], payday: null, blanks: [] };
 
     // training days
     days.forEach(d => { const w = Plan.workoutFor(d); if (w) out.training.push({ date: d, name: w.name || w.id, focus: w.focus || '' }); });
@@ -58,6 +58,8 @@
       const d = days.find(x => x.getDate() === Number(it.monthDay));
       if (d) out.home.push({ date: d, name: it.title });
     });
+    // plans and yearly dates kept in Memory (the pets' birthdays are already under Pets)
+    if (Opus.memory) out.cal = Opus.memory.upcoming(start, 7).filter(x => !x.pet).map(x => ({ date: x.on, name: x.title, time: x.time, turns: x.turns }));
     return out;
   }
 
@@ -84,9 +86,10 @@
       if (w.payday) items.push({ d: w.payday, el: row(w.payday, 'Payday', when(w.payday, today), '', 'wa-pay') });
       items.sort((a, b) => a.d - b.d).forEach(x => c.appendChild(x.el));
     }
+    if (w.cal.length) { group('Calendar'); w.cal.forEach(x => c.appendChild(row(x.date, x.name, when(x.date, today) + (x.time ? ' · ' + U.fmtTimeAP(x.time) : '') + (x.turns ? ' · turns ' + x.turns : '')))); }
     if (w.pets.length) { group('Pets'); w.pets.forEach(p => c.appendChild(row(p.date, p.name, p.late ? 'Already due' : p.turns ? 'Turns ' + p.turns : when(p.date, today), '', p.late ? 'wa-late' : ''))); }
     if (w.home.length) { group('Home'); w.home.forEach(x => c.appendChild(row(x.date, x.name, when(x.date, today)))); }
-    if (!c.children.length) c.appendChild(h('<p class="empty">A quiet week: no training, bills or pet care on the calendar.</p>'));
+    if (!c.children.length) c.appendChild(h('<p class="empty">A quiet week: no training, bills, plans or pet care on the calendar.</p>'));
     if (w.blanks.length) c.appendChild(h('<p class="small wa-note">Not in your plan yet: ' + U.esc(w.blanks.join(' and ')) + '. Grok can add them, and they’ll show here.</p>'));
     return c;
   }

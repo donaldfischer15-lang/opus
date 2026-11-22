@@ -67,9 +67,10 @@
     ['labs', l => l.date],
     ['pets', e => e.id],
     ['supps', e => e.id],
-    ['ledger', e => e.date]
+    ['ledger', e => e.date],
+    ['remember', e => e.id]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));
@@ -175,7 +176,8 @@
     ['eaten', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.name === 'string' && !!e.name.trim() && (e.amount == null || num(e.amount)) && (e.macros == null || (isObj(e.macros) && ['kcal', 'protein', 'carbs', 'fat'].every(k => e.macros[k] == null || num(e.macros[k])))) && (e.micros == null || (isObj(e.micros) && Object.keys(e.micros).every(k => k === 'estimate' || e.micros[k] == null || num(e.micros[k]))))],
     ['labs', l => l.date, l => isDate(l.date) && Array.isArray(l.markers) && l.markers.length > 0 && l.markers.every(m => isObj(m) && typeof m.name === 'string' && !!m.name.trim() && num(m.value) && (m.low == null || num(m.low)) && (m.high == null || num(m.high)))],
     ['pets', e => e.id, e => typeof e.id === 'string' && !!e.id && isDate(e.date) && typeof e.pet === 'string' && !!e.pet && typeof e.care === 'string' && !!e.care && (e.lb == null || num(e.lb)) && (e.note == null || typeof e.note === 'string')],
-    ['supps', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.supp === 'string' && !!e.supp && e.id === e.date + ':' + e.supp]
+    ['supps', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.supp === 'string' && !!e.supp && e.id === e.date + ':' + e.supp],
+    ['remember', e => e.id, e => typeof e.id === 'string' && !!e.id && typeof e.text === 'string' && !!e.text.trim() && e.text.length <= 500 && (e.date == null || isDate(e.date)) && (e.time == null || /^([01]\d|2[0-3]):[0-5]\d$/.test(e.time)) && (e.yearly == null || typeof e.yearly === 'boolean') && (e.born == null || typeof e.born === 'boolean') && (e.pinned == null || typeof e.pinned === 'boolean') && (e.tag == null || typeof e.tag === 'string') && !(e.yearly && !e.date) && !(e.time && !e.date)]
   ];
   /* a money week from Grok does what a pasted one does: fills in debt balances and keeps a balance snapshot */
   function moneyWeekSideEffects(d, w) {
@@ -195,7 +197,7 @@
       const list = getp(d, p) || []; setp(d, p, list);
       for (const x of getp(g, p) || []) {
         const k = isObj(x) ? key(x) : null;
-        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' || p === 'eaten' ? 'id' : 'date')); continue; }
+        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' || p === 'eaten' || p === 'remember' ? 'id' : 'date')); continue; }
         const i = list.findIndex(y => key(y) === k);
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }

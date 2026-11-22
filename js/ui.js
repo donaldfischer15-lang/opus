@@ -15,6 +15,7 @@
     minus: '<path d="M5 12h14"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
     chev: '<path d="M9 5l7 7-7 7"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
     up: '<path d="M6 15l6-6 6 6"/>',
     down: '<path d="M6 9l6 6 6-6"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>',
@@ -76,15 +77,15 @@
   const stack = [];
   function sheet(opts) {
     const scrim = h('<div class="scrim"></div>');
-    const el = h('<section class="sheet' + (opts.full ? ' full' : '') + '" role="dialog" aria-modal="true">' +
+    const el = h('<section class="sheet' + (opts.full ? ' full' : '') + (opts.top ? ' top' : '') + '" role="dialog" aria-modal="true">' +
       '<div class="frame"><div class="head"><div class="ht">' + (opts.kicker ? '<div class="eyebrow">' + U.esc(opts.kicker) + '</div>' : '') +
       '<div class="title">' + U.esc(opts.title || '') + '</div></div>' +
       (opts.headExtra || '') +
       '<button class="icon-btn" type="button" aria-label="Close" data-close>' + icon('close') + '</button></div>' +
-      '<div class="scroll"></div>' + (opts.foot ? '<div class="foot"></div>' : '') + '</div></section>');
+      '<div class="scroll"></div>' + (opts.foot ? '<div class="foot"></div>' : '') + (opts.top ? '<div class="grip" role="button" aria-label="Close"><i></i></div>' : '') + '</div></section>');
     document.body.appendChild(scrim); document.body.appendChild(el);
     const api = {
-      el, body: $('.scroll', el), foot: $('.foot', el), head: $('.head', el),
+      el, body: $('.scroll', el), foot: $('.foot', el), head: $('.head', el), grip: $('.grip', el),
       close(silent) {
         el.classList.remove('show'); scrim.classList.remove('show');
         setTimeout(() => { el.remove(); scrim.remove(); }, 450);

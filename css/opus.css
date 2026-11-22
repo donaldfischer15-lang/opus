@@ -1018,3 +1018,71 @@ button.g-pline:active { color: var(--gold-2); }
 .left-din .ld-k { font-family: var(--display); font-size: 10px; letter-spacing: .24em; color: var(--gold); text-transform: uppercase; }
 .left-din .ld-v { font-family: var(--serif); font-size: 24px; font-weight: 600; color: var(--gold-2); }
 .left-din small { font-size: 12.5px; color: var(--dim); }
+
+/* ---------- Memory: the copper handle at the top and the sheet that drops from it ---------- */
+.mem-pull { position: fixed; z-index: 30; top: calc(env(safe-area-inset-top, 0px) + 2px); left: 50%; transform: translateX(-50%);
+  width: 96px; height: 22px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 5px; gap: 6px; touch-action: none; }
+.mem-pull i { display: block; width: 38px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--bronze, #9a6b3a), var(--gold), var(--gold-2)); opacity: .75; box-shadow: 0 0 12px rgba(214, 163, 94, .35); transition: width .3s var(--ease), opacity .3s; }
+.mem-pull:active i { width: 52px; opacity: 1; }
+.mem-pull span { display: none; }
+.mem-pull.hint { width: auto; height: auto; }
+.mem-pull.hint span { display: block; white-space: nowrap; font-size: 11.5px; color: var(--gold-2); padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: rgba(16, 12, 10, .85); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: memhint 7s var(--ease) .8s both; pointer-events: none; }
+@keyframes memhint { 0% { opacity: 0; transform: translateY(-4px); } 8%, 86% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); } } /* says what the handle is for a few seconds, until Memory is opened once */
+
+.sheet.top { top: 0; bottom: auto; transform: translateY(-100%); max-height: calc(100dvh - 72px); }
+.sheet.top.show { transform: none; }
+.sheet.top .frame { border-radius: 0 0 28px 28px; border: 1px solid var(--line); border-top: 0; padding-top: env(safe-area-inset-top, 0px);
+  background: radial-gradient(80% 26% at 50% 100%, rgba(214, 163, 94, .10), transparent 70%), linear-gradient(180deg, var(--bg-1), var(--bg-2));
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, .85); }
+.sheet.top .head [data-close] { display: none; }
+.sheet.top .head .ht .title { font-size: 19px; letter-spacing: .22em; }
+.sheet.top .scroll { padding-bottom: 6px; gap: 14px; }
+.sheet.top .grip { flex-shrink: 0; display: flex; justify-content: center; padding: 10px 0 14px; cursor: pointer; touch-action: none; }
+.sheet.top .grip i { display: block; width: 44px; height: 4px; border-radius: 4px; background: var(--gold); opacity: .7; }
+.mem-up { font-size: 12px; color: var(--dim); padding: 6px 2px; }
+
+.mem-search { display: flex; align-items: center; gap: 10px; border-radius: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); padding: 0 14px; color: var(--dim); }
+.mem-search svg { width: 17px; height: 17px; flex-shrink: 0; }
+.mem-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; padding: 12px 0; font-size: 16px; color: var(--ink); }
+.mem-search:focus-within { border-color: var(--line-strong); }
+.mem-keep { display: flex; gap: 10px; }
+.mem-in { flex: 1; min-width: 0; border-radius: 14px; border: 1px solid var(--line-strong); background: rgba(214, 163, 94, .06); padding: 12px 14px; font-size: 16px; color: var(--ink); outline: none; }
+.mem-in::placeholder { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--dim); }
+.mem-in:focus { border-color: var(--gold); }
+.mem-keep .btn { padding-inline: 18px; border-radius: 14px; }
+.mem-read { margin-top: -6px; font-size: 12.5px; color: var(--gold-2); padding-left: 4px; }
+.mem-read::before { content: '↳ '; color: var(--gold); }
+.mem-body { display: flex; flex-direction: column; gap: 10px; }
+.mem-sh { display: flex; align-items: baseline; justify-content: space-between; margin-top: 6px; }
+.mem-sh span { font-family: var(--display); font-size: 10.5px; letter-spacing: .26em; text-transform: uppercase; color: var(--gold); }
+.mem-sh i { font-style: normal; font-size: 11.5px; color: var(--faint); }
+.mem-list { padding-block: 2px; }
+.mem-row { width: 100%; text-align: left; align-items: center; }
+.mem-row .tx { flex: 1; min-width: 0; }
+.mem-row .tx b { font-weight: 500; overflow-wrap: anywhere; }
+.mem-tag { flex-shrink: 0; align-self: center; font-family: var(--display); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+.mem-day { flex-shrink: 0; width: 44px; display: flex; flex-direction: column; align-items: center; border-right: 1px solid var(--line-soft); padding-right: 12px; margin-right: -2px; }
+.mem-day b { font-family: var(--serif); font-size: 24px; line-height: 1; font-weight: 600; color: var(--ink); }
+.mem-day i { font-style: normal; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
+.mem-day.now b, .mem-day.now i { color: var(--gold-2); }
+.mem-more { align-self: center; }
+.mem-empty { border: 1px dashed var(--line-strong); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+.mem-empty p { margin: 0; color: var(--ink-2); }
+.mem-when { display: flex; gap: 10px; }
+.mem-when .field { flex: 1; min-width: 0; }
+.mem-when[hidden], .mem-when .field[hidden], .mem-check[hidden] { display: none; }
+.sheet .field > span, .mem-lab { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.mem-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink-2); }
+.mem-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--gold); flex-shrink: 0; }
+
+/* Today: what's on the calendar today, tomorrow, and birthdays this week */
+.mem-today { display: flex; flex-direction: column; gap: 10px; text-align: left; width: 100%; }
+.mem-th { display: flex; align-items: center; justify-content: space-between; font-family: var(--display); font-size: 10.5px; letter-spacing: .26em; text-transform: uppercase; color: var(--gold); }
+.mem-th svg { width: 16px; height: 16px; color: var(--dim); }
+.mem-tr { display: flex; align-items: center; gap: 14px; }
+.mem-tr .tx { flex: 1; min-width: 0; }
+.mem-tr .tx { display: flex; flex-direction: column; gap: 2px; }
+.mem-tr .tx b { font-weight: 500; font-size: 15px; }
+.mem-tr .tx small { font-size: 12.5px; color: var(--dim); }
+.mem-today { padding: 14px 16px; }

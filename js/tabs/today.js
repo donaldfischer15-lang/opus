@@ -70,6 +70,7 @@
     const hero = h('<div class="hero">' + ui.arch(items.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + items.length + ' DONE</div></div><div class="lede"></div></div>');
     v.appendChild(hero);
     const whc = Opus.whoop && Opus.whoop.todayCard(d); if (whc) v.appendChild(whc);
+    const mc = Opus.memory && Opus.memory.todayCard(d); if (mc) v.appendChild(mc);
 
     const rv = (Store.data.reviews || []).slice().sort((a, b) => b.weekOf.localeCompare(a.weekOf))[0];
     if (rv && rv.change && U.daysBetween(U.parseKey(rv.weekOf), d) < 8) v.appendChild(h('<div class="change-line">This week’s change: <b>' + U.esc(rv.change) + '</b></div>'));
