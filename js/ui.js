@@ -141,7 +141,7 @@
       const on = lit.has(i);
       paths += '<path class="st" d="M' + A + ' A' + R1 + ' ' + R1 + ' 0 0 1 ' + B + ' L' + C + ' A' + R2 + ' ' + R2 + ' 0 0 0 ' + D + 'Z" fill="url(#' + (i === key ? 'kg' : 'sg') + ')" stroke="rgba(214,163,94,.35)" stroke-width=".8" style="opacity:' + (on ? 1 : .13) + (on ? ';filter:drop-shadow(0 0 3px rgba(242,211,160,.5))' : '') + '"/>';
     }
-    return '<svg class="arch" viewBox="0 0 240 156" role="img" aria-label="' + filled + ' of ' + n + ' done">' +
+    return '<svg class="arch" viewBox="0 30 240 126" role="img" aria-label="' + filled + ' of ' + n + ' done">' +
       '<defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2d3a0"/><stop offset="1" stop-color="#9a6a3e"/></linearGradient>' +
       '<linearGradient id="kg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0d2"/><stop offset="1" stop-color="#d6a35e"/></linearGradient></defs>' +
       '<line x1="6" y1="147" x2="234" y2="147" stroke="rgba(214,163,94,.4)"/>' + paths + '</svg>';

@@ -243,6 +243,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.26.2': [['today', 'Today looks tidier. The empty bar under the date is gone, the arch sits right under the date, and times stay on one line.']],
     '1.26.1': [['growth', 'Listen is off. The read-aloud button and the voice samples are gone.']],
     '1.26.0': [['growth', 'Settings › Sync has Natural voice samples: the opening of a Cassius sitting in three natural voices, made free on your Cloudflare. They play as audio, so silent mode doesn’t mute them.']],
     '1.25.0': [['growth', 'Tap Listen on Cassius’s sitting and your phone reads it aloud for the drive. The screen stays on while it reads.'], ['train', 'On a low-recovery morning, one tap in your workout takes the last set off each lift, and one tap puts them back.']],

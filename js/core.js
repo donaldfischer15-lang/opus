@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.26.1';
+  Opus.VERSION = '1.26.2';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -20,7 +20,7 @@
     mins(t) { if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; },
     nowMins(d) { d = d || new Date(); return d.getHours() * 60 + d.getMinutes(); },
     fmtTime(t) { const m = U.mins(t); if (m == null) return ''; let h = Math.floor(m / 60), mm = m % 60; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + U.pad(mm); },
-    fmtTimeAP(t) { const m = U.mins(t); if (m == null) return ''; let h = Math.floor(m / 60); const ap = h >= 12 ? ' PM' : ' AM'; return U.fmtTime(t) + ap; },
+    fmtTimeAP(t) { const m = U.mins(t); if (m == null) return ''; let h = Math.floor(m / 60); const ap = h >= 12 ? '\u00a0PM' : '\u00a0AM'; return U.fmtTime(t) + ap; }, // no break between the time and AM or PM
     roman(n) {
       const r = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
       let s = ''; for (const [v, c] of r) while (n >= v) { s += c; n -= v; } return s;

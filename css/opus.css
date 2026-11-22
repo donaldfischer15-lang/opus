@@ -106,10 +106,11 @@ input, textarea, select { font-size: max(16px, 1em); }
 .hero { position: relative; text-align: center; padding-top: 4px; }
 .arch { display: block; margin: 6px auto 0; width: 240px; max-width: 100%; height: auto; }
 .arch .st { transition: opacity .7s var(--ease), filter .7s; }
-.hero .big { position: absolute; left: 0; right: 0; top: 104px; }
+.hero .big { position: absolute; left: 0; right: 0; top: 54px; }
 .hero .n { font-family: var(--display); font-size: 42px; font-weight: 500; line-height: 1;
   background: linear-gradient(180deg, var(--gold-2), var(--gold) 65%, var(--bronze)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero .l { font-family: var(--display); font-size: 11px; letter-spacing: .24em; color: var(--dim); margin-top: 6px; }
+.hero .lede { margin-top: 12px; }
 .hero.complete .arch { filter: drop-shadow(0 0 14px rgba(242, 211, 160, .35)); }
 .change-line { text-align: center; font-size: 12.5px; color: var(--dim); }
 .change-line b { color: var(--gold-2); font-weight: 500; }
@@ -983,6 +984,7 @@ button.g-pline:active { color: var(--gold-2); }
 
 /* 1.17.1: a phone that has stopped syncing says so at the top of Today and Food */
 .sync-warn { display: flex; align-items: flex-start; gap: 12px; width: 100%; margin: 0 0 14px; padding: 13px 15px; border: 1px solid rgba(227, 154, 107, .42); border-radius: var(--r-sm); background: rgba(227, 154, 107, .07); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.sync-warn[hidden] { display: none; } /* nothing to warn about: no empty box */
 .sync-warn i { flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px rgba(227, 154, 107, .16); }
 .sync-warn span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .sync-warn b { font-weight: 600; font-size: 14.5px; }
