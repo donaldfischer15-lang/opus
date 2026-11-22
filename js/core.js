@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.32.0';
+  Opus.VERSION = '1.33.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -78,6 +78,7 @@
       labs: [],            // blood test results: [{ date, lab, markers: [{ name, value, unit, low, high, range }], note, at }]
       pets: [],            // pet care done, weigh-ins and vet visits: [{ id, date, pet, care, lb, note, at }]
       supps: [],           // supplements taken: [{ id: 'date:supp', date, supp, at }]
+      strips: [],          // nose strips, one a night, filed under the morning you woke: [{ date, on, at }] (see js/breath.js)
       changes: [],         // what Grok, Cassius or an update changed, per tab (this phone only, never synced)
       ledger: [],          // the Growth ledger, one mark a day: [{ week, virtue, date, mark: 'clean' | 'dot', at }]
       glimpses: [],        // Growth's night sky, one line when a moment comes together: [{ id, date, line, who: [names], at }]

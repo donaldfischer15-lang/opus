@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
-  const HELPER = '1.24.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.25.0'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -69,7 +69,8 @@
     ['supps', e => e.id],
     ['ledger', e => e.date],
     ['remember', e => e.id],
-    ['receipts', r => r.id]
+    ['receipts', r => r.id],
+    ['strips', e => e.date]
   ];
   const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
@@ -88,7 +89,7 @@
   /* choices made in Opus that aren't part of the plan, so Grok can see them too (the phone's copy wins) */
   function prefsOf(d) {
     const s = d.settings || {};
-    return { restSeconds: s.rest || {}, tabs: s.tabs || [], hiddenTabs: s.hidden || [], sound: s.sound !== false };
+    return { restSeconds: s.rest || {}, tabs: s.tabs || [], hiddenTabs: s.hidden || [], sound: s.sound !== false, stripsUsual: s.stripsUsual !== false };
   }
   function logsSame(a, b) { if (!a || !b) return false; const x = Object.assign({}, a), y = Object.assign({}, b); for (const k of ['updated', 'app', 'sync']) { delete x[k]; delete y[k]; } return eq(x, y); }
   function validLogs(o) { return isObj(o) && o.format === 'opus-logs' && Array.isArray(o.workouts) && isObj(o.checks); }

@@ -1,6 +1,6 @@
 /* WHOOP: the owner's recovery, sleep, strain and workouts, pulled by the Opus helper into whoop.json (read only here).
-   Today shows last night; Train turns low recovery into a lighter-day suggestion; Food shows calories burned so far;
-   the weekly review shows the week's averages. Nothing shows until WHOOP data exists. */
+   Today shows last night; Body shows 14 days and turns low recovery into a lighter-day suggestion; Food shows calories
+   burned so far; the weekly review shows the week's averages. Opus asks the helper for a fresh pull each time it opens. Nothing shows until WHOOP data exists. */
 (function () {
   const Opus = window.Opus, U = Opus.util, Store = Opus.store;
   const h = s => Opus.ui.h(s);
@@ -24,7 +24,7 @@
     el.onclick = () => weekSheet();
     return el;
   }
-  /* one line for Train: what today's recovery means for the session.
+  /* one line for Body's session card: what today's recovery means for the session.
      With the session open (s) on a red day, one tap takes the last set off each lift that has 3 or more still ahead, and one tap puts them back. */
   function lighten(s) {
     const sets = ex => s.logged.filter(x => x.ex === ex).length;
@@ -88,5 +88,27 @@
     if (w.problem && w.problem.text) return (w.connected === false ? 'Disconnected: ' : 'Problem: ') + w.problem.text;
     return w.connected === false ? 'Disconnected. Connect WHOOP again on your helper’s WHOOP page.' : 'Connected' + (w.pulled ? ' · last pulled ' + U.fmtDateShort(new Date(w.pulled)) + ', ' + new Date(w.pulled).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + ' · ' + Object.keys(w.days).length + ' days kept';
   }
-  Opus.whoop = { data: W, day, band, rec, todayCard, trainLine, lighten, unlighten, burned, week, weekBlock, weekSheet, status, hm };
+  /* pull on open: ask the helper for a fresh WHOOP pull when Opus opens or comes back to the screen (the helper pulls at
+     most once every 10 minutes), then sync so the new whoop.json lands here */
+  let asked = 0, asking = false;
+  async function refresh(force) {
+    const ph = Opus.sync && Opus.sync.phone && Opus.sync.phone(), hv = Opus.sync && Opus.sync.helper && Opus.sync.helper();
+    if (!ph || !W() || W().connected === false || (hv && hv.behind) || asking || navigator.onLine === false) return null;
+    if (!force && Date.now() - asked < 10 * 60e3) return null;
+    asking = true; asked = Date.now();
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null, t = setTimeout(() => ac && ac.abort(), 30000);
+    try {
+      const r = await fetch(ph.url + '/whoop/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Opus-Key': ph.key }, body: '{}', signal: ac ? ac.signal : undefined });
+      const j = await r.json().catch(() => null);
+      const have = W() && W().updated;
+      if (j && j.ok && j.updated && j.updated !== have && Opus.sync.sync) Opus.sync.sync({ quiet: true });
+      return j;
+    } catch (e) { return null; }
+    finally { clearTimeout(t); asking = false; }
+  }
+  Opus.onBoot(() => {
+    setTimeout(() => refresh(), 1500);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+  });
+  Opus.whoop = { refresh, data: W, day, band, rec, todayCard, trainLine, lighten, unlighten, burned, week, weekBlock, weekSheet, status, hm };
 })();

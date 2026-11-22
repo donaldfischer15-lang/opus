@@ -1201,6 +1201,48 @@ button.g-pline:active { color: var(--gold-2); }
 .nkey i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; margin: 0 4px 1px 6px; vertical-align: middle; background: linear-gradient(90deg, var(--bronze), var(--gold)); }
 .nkey i.sp { background: repeating-linear-gradient(135deg, var(--gold-2) 0 3px, rgba(242, 211, 160, .55) 3px 6px); }
 .nsupp { margin-top: 4px; }
+/* Body */
+.bd-row { gap: 12px; }
+.bd-spark { width: 132px; height: 34px; flex: none; }
+.bd-spark path { fill: none; stroke: var(--gold); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.bd-spark circle { fill: var(--gold-2); stroke: var(--panel); stroke-width: 2; }
+.bd-v { min-width: 62px; text-align: right; font-family: var(--display); font-size: 20px; color: var(--gold-2); }
+.bd-v small { font-family: var(--sans); font-size: 11px; color: var(--dim); }
+.bd-sleep { flex-direction: column; align-items: stretch; gap: 10px; }
+.bd-bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; height: 56px; align-items: end; }
+.bd-b { position: relative; height: 100%; border-radius: 4px; background: rgba(214, 163, 94, .08); }
+.bd-b i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px; background: linear-gradient(180deg, var(--bronze), #6b4a2c); }
+.bd-b.ok i { background: linear-gradient(180deg, var(--gold-2), var(--gold)); }
+.bd-b em { position: absolute; left: -2px; right: -2px; height: 2px; border-radius: 1px; background: var(--ink-2); opacity: .7; }
+.bd-wt { display: flex; flex-direction: column; gap: 10px; }
+.bd-wh { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.bd-big { font-family: var(--display); font-size: 30px; color: var(--gold-2); }
+.bd-wchart { width: 100%; height: auto; }
+.bd-wchart path { fill: none; stroke: var(--gold); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.bd-wchart circle { fill: var(--gold-2); }
+.bd-wx { display: flex; justify-content: space-between; }
+.bd-wo { display: flex; align-items: center; gap: 6px; color: var(--gold) !important; }
+.bd-wo i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+/* Breathing on Body */
+.bd-v.sm { font-size: 17px; }
+.bd-b.none { background: rgba(214, 163, 94, .04); }
+.br-tick { gap: 12px; }
+.br-seg { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.br-seg button { font: inherit; font-size: 13px; min-width: 52px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: none; color: var(--dim); cursor: pointer; }
+.br-seg button.on { background: var(--gold); color: var(--btn-ink); font-weight: 600; }
+.br-nights { flex-direction: column; align-items: stretch; gap: 8px; }
+.br-dots { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; }
+.br-dot { position: relative; height: 26px; padding: 0; border: 0; background: none; cursor: pointer; }
+.br-dot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 1px dashed var(--faint); box-sizing: border-box; }
+.br-dot.on::after { background: var(--gold); border: 0; }
+.br-dot.off::after { border: 1.5px solid var(--bronze); }
+.br-dot.now::before { content: ""; position: absolute; left: 50%; bottom: 0; width: 4px; height: 2px; margin-left: -2px; border-radius: 1px; background: var(--ink-2); }
+.br-cmp { display: flex; flex-direction: column; padding: 12px 0 4px; border-top: 1px solid var(--line-soft); }
+.br-ch, .br-cr { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; align-items: baseline; }
+.br-ch { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); padding-bottom: 6px; }
+.br-ch span small { display: block; letter-spacing: 0; text-transform: none; color: var(--faint); font-size: 11px; }
+.br-cr { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.br-cr b { font-family: var(--display); font-weight: 400; font-size: 17px; color: var(--gold-2); }
 .chips[hidden], .field[hidden] { display: none; } /* a hidden chip row or field stays hidden whatever its display */
 .snap-wt { align-items: center; }
 .sp-facts { padding: 0 14px; }

@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.24.0';
+const VERSION = '1.25.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -75,6 +75,7 @@ Plan.validate = function (p) {
       if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["mon","thu"].');
       if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
       if (x.nutrients != null) { if (typeof x.nutrients !== 'object' || Array.isArray(x.nutrients)) errors.push('supplement "' + x.id + '": nutrients should be an object like { "magnesium": 200 } (per dose), or null.'); else for (const k of Object.keys(x.nutrients)) { if (!MICROS.includes(k)) errors.push('supplement "' + x.id + '": nutrients has "' + k + '"; use ' + MICROS.join(', ') + '.'); else if (x.nutrients[k] != null && !(Number(x.nutrients[k]) >= 0)) errors.push('supplement "' + x.id + '": nutrients.' + k + ' should be a number (or null).'); } }
+      if (x.label != null && !(x.label && typeof x.label === 'object' && Array.isArray(x.label.facts) && x.label.facts.every(q => q && typeof q.name === 'string' && q.name.trim() && Number(q.amount) >= 0 && /^(mg|mcg|g|IU)$/.test(q.unit || '')))) errors.push('supplement "' + x.id + '": label should be { "serving": "1 capsule", "servings": 240, "facts": [{ "name": "Magnesium", "amount": 200, "unit": "mg" }] } with unit mg, mcg, g or IU (or null).');
       if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
     });
   }
@@ -1157,6 +1158,11 @@ async function whoopPull(env, why) {
       const [rec, slp, cyc, wo] = await Promise.all([whoopGet(env, access, '/v2/recovery', q), whoopGet(env, access, '/v2/activity/sleep', q), whoopGet(env, access, '/v2/cycle', q), whoopGet(env, access, '/v2/activity/workout', q)]);
       const fresh = whoopDays(rec, slp, cyc, wo);
       for (const k of Object.keys(fresh)) out.days[k] = fresh[k];
+      // the body numbers WHOOP keeps (height, weight and the max heart rate it uses for zones); a miss here never stops the pull
+      try {
+        const r = await fetch(whoopApi(env) + '/v2/user/measurement/body', { headers: { Authorization: 'Bearer ' + access } });
+        if (r.ok) { const b = await r.json(); out.body = { heightM: num(b.height_meter) ? Math.round(b.height_meter * 100) / 100 : null, weightKg: r1(b.weight_kilogram), maxHr: num(b.max_heart_rate) ? Math.round(b.max_heart_rate) : null }; }
+      } catch (e) {}
       out.connected = true; out.problem = null; out.pulled = now.toISOString();
     }
   } catch (e) { out.problem = { at: now.toISOString(), text: String(e.message || e).slice(0, 200) }; if (e.status === 401) out.connected = false; }
@@ -1186,6 +1192,24 @@ async function whoopScheduled(env, t) {
     if (!cur.missing) { try { const j = JSON.parse(cur.text); if (j.pulled && t - Date.parse(j.pulled) < 50 * 60e3) return; } catch (e) {} }
     await whoopPull(env, 'morning and daily pull');
   } catch (e) { /* next time */ }
+}
+/* the phone asks for a fresh pull when Opus opens (same phone key as the food camera); at most one pull every 10 minutes */
+async function whoopRefresh(request, env) {
+  const H = { 'Access-Control-Allow-Origin': corsFor(request), 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Opus-Key', 'Access-Control-Max-Age': '86400', 'Cache-Control': 'no-store', Vary: 'Origin' };
+  const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: Object.assign({ 'Content-Type': 'application/json' }, H) });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: H });
+  if (request.method !== 'POST') return J({ ok: false, code: 'bad', error: 'POST only' }, 405);
+  if (!same(request.headers.get('X-Opus-Key') || '', await phoneKey(env))) return J({ ok: false, code: 'key', error: 'This phone\'s helper key is out of date. Sync Opus and try again.' }, 401);
+  if (!whoopReady(env)) return J({ ok: false, code: 'off', error: 'WHOOP is not set up on the helper.' });
+  const t = Date.now();
+  try {
+    const cur = await gh(env, 'Helper').get(WHOOP_FILES.data);
+    if (!cur.missing) { try { const j = JSON.parse(cur.text); if (j.pulled && t - Date.parse(j.pulled) < 10 * 60e3) return J({ ok: true, fresh: false, pulled: j.pulled, updated: j.updated || null }); } catch (e) {} }
+    if (t - whoopLast < 2 * 60e3) return J({ ok: true, fresh: false });
+    whoopLast = t;
+    const out = await whoopPull(env, 'pull when Opus opened');
+    return J({ ok: !out.problem, fresh: true, pulled: out.pulled || null, updated: out.updated || null, connected: out.connected !== false, problem: out.problem ? out.problem.text : null });
+  } catch (e) { return J({ ok: false, code: 'fail', error: String(e.message || e).slice(0, 200) }); }
 }
 /* WHOOP's notice that something changed (optional; set its Webhook URL to https://<worker>/whoop/webhook, model v2) */
 async function whoopWebhook(request, env, ctx) {
@@ -1370,6 +1394,7 @@ export default {
     if (parts[0] === 'whoop' && parts.length === 2) {
       if (parts[1] === 'callback' && request.method === 'GET') return whoopCallback(url, env);
       if (parts[1] === 'webhook' && request.method === 'POST' && whoopReady(env)) return whoopWebhook(request, env, ctx);
+      if (parts[1] === 'refresh' && (request.method === 'POST' || request.method === 'OPTIONS')) return whoopRefresh(request, env);
       return notFound();
     }
     if (as === GROK && parts[1] === 'whoop' && parts.length === 2 && (request.method === 'GET' || request.method === 'POST')) return whoopStart(url, env, request);

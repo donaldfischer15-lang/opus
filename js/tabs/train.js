@@ -1,4 +1,4 @@
-/* Train tab: today's session, the set logger with auto rest timer, progressive overload, plate math, history. */
+/* Body tab (its id stays 'train'): WHOOP's recovery, sleep and strain, breathing, weigh-ins, and training: today's session, the set logger with auto rest timer, progressive overload, plate math, history. */
 (function () {
   'use strict';
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, T = Opus.training, h = ui.h;
@@ -408,7 +408,7 @@
       api.body.appendChild(sessionDetail(rec));
       api.body.appendChild(savedLine());
       const nx = Plan.nextWorkoutAfter(new Date());
-      if (nx) api.body.appendChild(h('<p class="note">Next: ' + U.esc(nx.workout.name) + ' on ' + U.DAY_NAMES[nx.date.getDay()] + '. Your next targets are ready in Train.</p>'));
+      if (nx) api.body.appendChild(h('<p class="note">Next: ' + U.esc(nx.workout.name) + ' on ' + U.DAY_NAMES[nx.date.getDay()] + '. Your next targets are ready in Body.</p>'));
     } });
   }
   /* where the session is: saved on the phone, on its way to Grok, or with Grok. Opus syncs a few seconds after a save. */
@@ -465,7 +465,9 @@
   /* ---------- the tab ---------- */
   function render(v) {
     const d = new Date(), t = Plan.p.training || {};
-    v.appendChild(h('<div class="top"><div><div class="eyebrow">Week of ' + U.fmtDateShort(U.weekStart(d)) + '</div><div class="title">Train</div></div></div>'));
+    v.appendChild(h('<div class="top"><div><div class="eyebrow">Week of ' + U.fmtDateShort(U.weekStart(d)) + '</div><div class="title">Body</div></div></div>'));
+    let n = 0; const R = () => U.roman(++n);
+    { const wc = Opus.whoop && Opus.whoop.todayCard(d); if (wc) v.appendChild(wc); }
 
     if (A()) {
       const s = A();
@@ -498,10 +500,69 @@
     }
     v.appendChild(strip);
 
+    // recovery and sleep, 14 days (WHOOP)
+    const W = Opus.whoop && Opus.whoop.data();
+    if (W) {
+      const ks = []; for (let i = 13; i >= 0; i--) ks.push(U.key(U.addDays(d, -i)));
+      const xs = ks.map(k => W.days[k] || {});
+      const spark = vals => {
+        const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null); if (pts.length < 2) return '<span class="bd-spark"></span>';
+        const lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1])), sp = hi - lo || 1, W2 = 132, H = 34;
+        const X = i => (i / (vals.length - 1) * (W2 - 6) + 3).toFixed(1), Y = v => (H - 4 - (v - lo) / sp * (H - 8)).toFixed(1);
+        const path = pts.map((p, j) => (j ? 'L' : 'M') + X(p[0]) + ' ' + Y(p[1])).join(' '), last = pts[pts.length - 1];
+        return '<svg class="bd-spark" viewBox="0 0 ' + W2 + ' ' + H + '" aria-hidden="true"><path d="' + path + '"/><circle cx="' + X(last[0]) + '" cy="' + Y(last[1]) + '" r="3"/></svg>';
+      };
+      const avg = a => { const b = a.filter(v => v != null); return b.length ? b.reduce((m, v) => m + v, 0) / b.length : null; };
+      const hrv = xs.map(x => x.recovery && x.recovery.scored ? x.recovery.hrv : null), rhr = xs.map(x => x.recovery && x.recovery.scored ? x.recovery.rhr : null), strain = xs.map(x => x.day && x.day.strain != null ? x.day.strain : null);
+      const lastOf = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
+      const trend = (a, dec) => { const f = avg(a.slice(0, 7)), l = avg(a.slice(7)); if (f == null || l == null) return ''; const dlt = l - f, r = dec ? Math.round(Math.abs(dlt) * 10) / 10 : Math.round(Math.abs(dlt)); return r < (dec ? .5 : 1) ? ' · steady' : ' · ' + (dlt > 0 ? 'up ' : 'down ') + r + ' vs last week'; };
+      const sec = h('<div class="sec"><div class="sh"><span class="r">' + R() + '</span><span class="t">Recovery & sleep</span><span class="c">14 days</span></div><div class="card"></div></div>');
+      const c = sec.querySelector('.card');
+      const row = (name, a, unit, dec) => { const m = avg(a), l = lastOf(a); return h('<div class="row bd-row"><span class="tx"><b>' + name + '</b><small>' + (m == null ? 'Not in yet' : 'avg ' + (dec ? Math.round(m * 10) / 10 : Math.round(m)) + trend(a, dec)) + '</small></span>' + spark(a) + '<span class="bd-v num">' + (l == null ? '—' : l) + '<small>' + unit + '</small></span></div>'); };
+      c.appendChild(row('HRV', hrv, ' ms'));
+      c.appendChild(row('Resting HR', rhr, ' bpm'));
+      c.appendChild(row('Day strain', strain, '', true));
+      // sleep against need: a bar a night, from 4 hours up
+      const sl = xs.map(x => x.sleep && x.sleep.asleep != null ? x.sleep : null), got = sl.filter(Boolean);
+      if (got.length) {
+        const FL = 240, mx = Math.max(FL + 60, ...got.map(s => Math.max(s.asleep || 0, s.need || 0))), sc = m => Math.max(4, Math.min(100, (m - FL) / (mx - FL) * 100)).toFixed(0);
+        const bars = sl.map(s2 => !s2 ? '<span class="bd-b none"></span>' : '<span class="bd-b' + (s2.need && s2.asleep >= s2.need ? ' ok' : '') + '" title="' + Opus.whoop.hm(s2.asleep) + '"><i style="height:' + sc(s2.asleep) + '%"></i>' + (s2.need ? '<em style="bottom:' + sc(s2.need) + '%"></em>' : '') + '</span>').join('');
+        const withNeed = got.filter(s2 => s2.need), met = withNeed.filter(s2 => s2.asleep >= s2.need).length, short = avg(withNeed.map(s2 => s2.need - s2.asleep));
+        c.appendChild(h('<div class="row bd-sleep"><span class="tx"><b>Sleep vs need</b><small>' + (withNeed.length ? met + ' of ' + withNeed.length + ' nights met · ' + (short > 0 ? 'short ' + Math.round(short) + ' min a night' : 'on target') : got.length + ' nights') + '</small></span><div class="bd-bars">' + bars + '</div></div>'));
+      }
+      sec.appendChild(h('<p class="small" style="padding:0 4px">Each bar is a night asleep, from 4 hours up; the line is what WHOOP said you needed. Tap the recovery card for the day by day.</p>'));
+      v.appendChild(sec);
+    }
+
+    // breathing: blood oxygen, breaths a minute and the nose strips tick
+    if (Opus.breath) Opus.breath.section(v, R(), d);
+
+    // weigh-ins (moved here from Food)
+    {
+      const wts = (Store.data.weights || []).filter(w => w && w.date && w.lb != null).slice().sort((a, b) => a.date.localeCompare(b.date));
+      const g = ((Plan.p.food || {}).goal) || {};
+      const sec = h('<div class="sec"><div class="sh"><span class="r">' + R() + '</span><span class="t">Weigh-ins</span><span class="c">' + (g.target ? 'goal ' + g.target + ' lb' : wts.length + ' logged') + '</span></div><div class="card pad bd-wt"></div></div>');
+      const c = sec.querySelector('.card');
+      if (wts.length) {
+        const last = wts[wts.length - 1], first = wts[0], ch = Math.round((last.lb - first.lb) * 10) / 10;
+        const days = Math.round((U.parseKey(last.date) - U.parseKey(first.date)) / 864e5);
+        c.appendChild(h('<div class="bd-wh"><div><span class="bd-big num">' + U.wt(last.lb) + '</span><span class="small"> lb · ' + U.fmtDateShort(last.date) + '</span></div>' + (wts.length > 1 && days > 0 ? '<span class="tag">' + (ch <= 0 ? '−' : '+') + Math.abs(ch) + ' lb in ' + days + ' days</span>' : '') + '</div>'));
+        const recent = wts.filter(w => U.daysBetween(U.parseKey(w.date), d) < 7), avg7 = recent.length ? U.avg(recent.map(w => w.lb)) : null, now = avg7 || last.lb;
+        if (g.target) c.appendChild(h('<div class="stats"><div class="stat"><span class="v">' + (avg7 ? U.wt(avg7) : '—') + '</span><span class="k">7-day avg</span></div><div class="stat"><span class="v">' + U.wt(now - g.target) + '</span><span class="k">To go</span></div><div class="stat"><span class="v">' + g.target + '</span><span class="k">Goal</span></div></div>'));
+        if (g.start && g.target && g.start !== g.target) {
+          const pct = U.clamp((g.start - now) / (g.start - g.target), 0, 1);
+          c.appendChild(h('<div style="display:flex;flex-direction:column;gap:6px"><div class="bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div><div class="small num" style="display:flex;justify-content:space-between"><span>' + g.start + ' start</span><span>' + Math.round(pct * 100) + '%</span><span>' + g.target + ' goal</span></div></div>'));
+        }
+        if (wts.length > 1) c.appendChild(ui.chart(wts.slice(-60).map(w => ({ date: w.date, v: w.lb })), { h: 100, target: g.target, fmt: x => U.wt(x) }));
+      } else c.appendChild(h('<p class="small" style="margin:0">Weigh in in the morning, before food, and the trend builds here.</p>'));
+      const b = h('<button class="btn ghost" type="button">Weigh in</button>'); b.onclick = () => Opus.food && Opus.food.weighIn(); c.appendChild(b);
+      v.appendChild(sec);
+    }
+
     // next targets: progressive overload
     const target = Plan.workoutFor(d) || (Plan.nextWorkoutAfter(d) || {}).workout;
     if (target) {
-      const sec = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Next targets</span><span class="c">' + U.esc(target.name) + '</span></div><div class="card"></div></div>');
+      const sec = h('<div class="sec"><div class="sh"><span class="r">' + R() + '</span><span class="t">Next targets</span><span class="c">' + U.esc(target.name) + '</span></div><div class="card"></div></div>');
       (target.blocks || []).forEach(b => {
         const sg = T.suggest(b), last = T.lastFor(b.ex), ex = Plan.exercise(b.ex);
         const lastTxt = last ? U.wt(Math.max(...last.sets.map(x => x.weight || 0))) + ' × ' + last.sets.map(x => x.reps).join(',') : 'No history';
@@ -514,7 +575,7 @@
     }
 
     // plate math
-    const pm = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">Plate math</span><span class="c">' + (t.bar || 45) + ' lb bar</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"></div></div>');
+    const pm = h('<div class="sec"><div class="sh"><span class="r">' + R() + '</span><span class="t">Plate math</span><span class="c">' + (t.bar || 45) + ' lb bar</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"></div></div>');
     const sq = (target && (target.blocks || []).find(b => T.isBarbell(b.ex))) || null;
     const startW = sq ? (T.suggest(sq).weight || 135) : 135;
     const out = h('<div></div>');
@@ -525,18 +586,24 @@
 
     // history
     const hist = Store.data.workouts.slice().sort((a, b) => b.finished.localeCompare(a.finished)).slice(0, 8);
-    const hs = h('<div class="sec"><div class="sh"><span class="r">III</span><span class="t">Recent sessions</span><span class="c">' + Store.data.workouts.length + ' total</span></div><div class="card"></div></div>');
+    const hs = h('<div class="sec"><div class="sh"><span class="r">' + R() + '</span><span class="t">Recent sessions</span><span class="c">' + Store.data.workouts.length + ' total</span></div><div class="card"></div></div>');
     if (!hist.length) hs.querySelector('.card').appendChild(h('<p class="empty">Your sessions show up here once you finish one.</p>'));
     hist.forEach(w => {
       const mins = Math.round((new Date(w.finished) - new Date(w.started)) / 60000), prs = w.sets.filter(x => x.pr).length;
       const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(w.name) + '</b><small class="num">' + U.DAY_NAMES[U.parseKey(w.date).getDay()].slice(0, 3) + ' ' + U.fmtDateShort(w.date) + ' · ' + (mins ? mins + ' min · ' : '') + w.sets.length + (w.sets.length === 1 ? ' set' : ' sets') + '</small></span>' + (prs ? '<span class="best">' + ui.icon('laurel', '') + prs + '</span>' : '') + ui.icon('chev', 'chev ico') + '</div>');
+      { // the WHOOP workout that matches: started within 90 minutes of this one (a session logged afterwards: the day's only one)
+        const wd = Opus.whoop && Opus.whoop.day(w.date), all = (wd && wd.workouts) || [];
+        const wo = w.catchUp ? (all.length === 1 ? all[0] : null) : all.find(o => o.start && w.started && Math.abs(Date.parse(o.start) - Date.parse(w.started)) < 90 * 60e3);
+        const bits = wo ? [wo.strain != null && 'strain ' + wo.strain, wo.avgHr != null && wo.avgHr + (wo.maxHr != null ? '/' + wo.maxHr : '') + ' bpm', wo.kcal != null && wo.kcal.toLocaleString() + ' cal'].filter(Boolean) : [];
+        if (bits.length) r.querySelector('.tx').appendChild(h('<small class="num bd-wo"><i></i>WHOOP ' + bits.join(' · ') + '</small>'));
+      }
       r.onclick = () => historySheet(w);
       hs.querySelector('.card').appendChild(r);
     });
     v.appendChild(hs);
 
     // program overview
-    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">IV</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
+    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">' + R() + '</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
     const sched = t.schedule || {};
     Object.entries(t.workouts || {}).forEach(([id, w]) => {
       const days = Object.keys(sched).filter(k => sched[k] === id).map(k => U.DAY_NAMES[U.DAYS.indexOf(k)].slice(0, 3)).join(', ');
@@ -572,5 +639,5 @@
 
   Opus.train = { start, openLogger, plateView, logText, savedLine };
   Opus.onBoot(() => { if (A()) ui.toast(A().name + ' is still open', { label: 'Resume', run: () => openLogger() }); });
-  Opus.tab({ id: 'train', title: 'Train', icon: 'train', render });
+  Opus.tab({ id: 'train', title: 'Body', icon: 'train', render });
 })();

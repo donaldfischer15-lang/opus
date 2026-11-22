@@ -139,12 +139,13 @@
     ['money.cash', 'money', e => 'Free cash for ' + U.fmtDateShort(e.date) + ': ' + U.money(e.free != null ? e.free : e.cash, { cents: true }), e => e.date],
     ['money.weeks', 'money', e => 'Money week ending ' + U.fmtDateShort(e.weekEnding) + (e.paycheck != null ? ', paycheck ' + U.money(e.paycheck, { cents: true }) : ''), e => e.weekEnding],
     ['money.balances', 'money', e => 'Debt balances as of ' + U.fmtDateShort(e.date), e => e.date],
-    ['weights', 'today', e => 'Weigh-in ' + U.fmtDateShort(e.date) + ': ' + e.lb + ' lb', e => e.date],
+    ['weights', 'train', e => 'Weigh-in ' + U.fmtDateShort(e.date) + ': ' + e.lb + ' lb', e => e.date],
     ['workouts', 'train', e => 'Workout ' + (e.name || e.workout || '') + ' on ' + U.fmtDateShort(e.date), e => e.id],
     ['eaten', 'food', e => (e.name || 'Food') + ' on ' + U.fmtDateShort(e.date) + (e.skipped ? ' (skipped)' : ''), e => e.id],
     ['labs', 'food', e => 'Blood test from ' + U.fmtDateShort(e.date), e => e.date],
     ['pets', 'home', e => cap(String(e.care || 'care')) + ' for ' + (e.pet || 'a pet') + ' on ' + U.fmtDateShort(e.date), e => e.id],
     ['supps', 'today', e => 'Supplement ' + (e.supp || '') + ' on ' + U.fmtDateShort(e.date), e => e.id],
+    ['strips', 'train', e => 'Nose strips ' + (e.on ? 'on' : 'off') + ' the night before ' + U.fmtDateShort(e.date), e => e.date],
     ['receipts', 'money', e => (e.store || 'Store') + ' receipt from ' + U.fmtDateShort(e.date) + ': ' + arr(e.items).length + ' items, ' + U.money(e.total, { cents: true }), e => e.id]
   ];
   const getp = (o, p) => p.split('.').reduce((x, k) => x && x[k], o);
@@ -244,6 +245,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.33.0': [['train', 'Train is now Body. WHOOP’s recovery sits on top, then 14 days of HRV, resting heart rate, strain and sleep against need, and your sessions show WHOOP’s strain and heart rate.'], ['train', 'Breathing on Body: blood oxygen while you sleep, breaths a minute, and a nose strips tick for last night. It starts at your usual, and after 3 nights with strips and 3 without, Opus sets them side by side.'], ['train', 'Weigh-ins moved from Food to Body, with the trend and your goal.'], ['today', 'Opus asks for fresh WHOOP numbers each time you open it, so this morning’s recovery is there sooner.']],
     '1.32.0': [['food', 'Supplements keep their Supplement Facts label: each line is counted in Vitamins & minerals, still kept apart from food. To add a new one, open Edit on a supplement and tap Read the Supplement Facts label, then take a photo of the back of the bottle.'], ['food', 'Last 7 days leaves out today, so when you’ve ticked supplements today it says so, with a tap to see today so far. Small supplement amounts show striped too.']],
     '1.31.0': [['food', 'Vitamins & minerals now count the supplements you tick on Today, kept apart from food: each bar shows food and supplements in two parts, with the amounts under it. A supplement whose amount per dose isn’t known yet is named, not guessed. Vitamin K is tracked too.']],
     '1.30.0': [['food', 'A scanned food is weighed now: pick oz, lb, g or kg to match your scale, type what it reads, and Opus works out the servings. A photo of food takes a weight in the same units. Opus keeps the unit you last picked.'], ['money', 'A receipt that Grok or Claude adds now ticks its items off this week’s grocery list by itself. Untick one and it stays unticked.']],

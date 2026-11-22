@@ -481,28 +481,14 @@
     gSec.querySelectorAll('.chip').forEach(c => c.onclick = () => { which = c.dataset.w; draw(); });
     draw(); v.appendChild(gSec);
 
-    // weight
-    const ws = (Store.data.weights || []).slice().sort((a, b) => a.date.localeCompare(b.date));
-    const g = f.goal || {};
-    const wSec = h('<div class="sec"><div class="sh"><span class="r">V</span><span class="t">Body weight</span><span class="c">' + (g.target ? 'goal ' + g.target + ' lb' : '') + '</span></div><div class="card pad" style="display:flex;flex-direction:column;gap:12px"></div></div>');
-    const wc = wSec.querySelector('.card');
-    const last = ws[ws.length - 1];
-    const recent = ws.filter(w => U.daysBetween(U.parseKey(w.date), d) < 7);
-    const avg7 = recent.length ? U.avg(recent.map(w => w.lb)) : null;
-    wc.appendChild(h('<div class="stats"><div class="stat"><span class="v">' + (last ? U.wt(last.lb) : '—') + '</span><span class="k">Last</span></div><div class="stat"><span class="v">' + (avg7 ? U.wt(avg7) : '—') + '</span><span class="k">7-day avg</span></div><div class="stat"><span class="v">' + (g.target && (avg7 || last) ? U.wt((avg7 || last.lb) - g.target) : '—') + '</span><span class="k">To go</span></div></div>'));
-    if (g.start && g.target && (avg7 || last)) {
-      const pct = U.clamp((g.start - (avg7 || last.lb)) / (g.start - g.target), 0, 1);
-      wc.appendChild(h('<div style="display:flex;flex-direction:column;gap:6px"><div class="bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div><div class="small num" style="display:flex;justify-content:space-between"><span>' + g.start + ' start</span><span>' + Math.round(pct * 100) + '%</span><span>' + g.target + ' goal</span></div></div>'));
-    }
-    if (ws.length > 1) wc.appendChild(ui.chart(ws.slice(-60).map(w => ({ date: w.date, v: w.lb })), { h: 100, target: g.target, fmt: x => U.wt(x) }));
-    const lb = h('<button class="btn ghost" type="button">Log weight</button>'); lb.onclick = weighIn; wc.appendChild(lb);
-    v.appendChild(wSec);
+    // weigh-ins live on Body now
+    { const r = h('<div class="row tap bd-moved"><span class="tx"><b>Weigh-ins</b><small>On Body now, with your trend and goal</small></span>' + ui.icon('chev', 'chev ico') + '</div>'); r.onclick = () => Opus.go('train'); const c = h('<div class="sec"><div class="card"></div></div>'); c.querySelector('.card').appendChild(r); v.appendChild(c); }
 
-    if (Opus.body) Opus.body.section(v, 'VI');
-    if (Opus.supps) Opus.supps.section(v, 'VII');
+    if (Opus.body) Opus.body.section(v, 'V');
+    if (Opus.supps) Opus.supps.section(v, 'VI');
 
     if ((f.rules || []).length) {
-      const r = h('<div class="sec"><div class="sh"><span class="r">VIII</span><span class="t">House rules</span></div><div class="card"></div></div>');
+      const r = h('<div class="sec"><div class="sh"><span class="r">VII</span><span class="t">House rules</span></div><div class="card"></div></div>');
       f.rules.forEach(x => r.querySelector('.card').appendChild(h('<div class="row"><span class="tx"><small style="font-size:13.5px;color:var(--ink-2)">' + U.esc(x) + '</small></span></div>')));
       v.appendChild(r);
     }

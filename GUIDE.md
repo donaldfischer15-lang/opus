@@ -277,7 +277,7 @@ The app previews the block and lists any problems before saving.
 | `money.balances` | `[{ "date", "debts": { "Credit card": 1840 } }]` balance history |
 | `money.cash` | `[{ "date", "at", "cash", "accounts": [{ "name", "amount", "at" }], "transfers": [{ "from", "to", "amount", "pending" }], "held": [{ "name", "amount", "due" }], "free", "note" }]` Free cash readings, one per day: cash on hand, money on its way between the owner's own accounts, what is held back before payday, and what is left (`free`). The newest `at` wins, whoever made it. Entries with no `by` were entered by the owner. |
 | `sync` | `{ "at", "app", "outbox": { "updated", "added", "changed", "removed", "kept": [...], "skipped": [...] } }` when Opus last synced (it writes this at least once on each day it's opened) and what it took from `grok.json` the last time that file changed. If `outbox.updated` matches the `updated` time in `grok.json`, Opus has picked up your latest entries. `kept` = entries where the owner's own entry won; `skipped` = entries Opus refused, with the reason. |
-| `prefs` | `{ "restSeconds": { "<exercise id>": 150 }, "tabs": [...], "hiddenTabs": [...], "sound": true }` the owner's settings, for reference only |
+| `prefs` | `{ "restSeconds": { "<exercise id>": 150 }, "tabs": [...], "hiddenTabs": [...], "sound": true, "stripsUsual": true }` the owner's settings, for reference only (`stripsUsual`: nose strips are the owner's usual, see `strips`) |
 | `groceries` | `{ "<week-start date>": ["Eggs", ...] }` items checked while shopping |
 | `prep` | prep steps done per week |
 | `reviews` | `[{ "weekOf", "worked", "slipped", "change", "saved" }]` |
@@ -290,6 +290,7 @@ The app previews the block and lists any problems before saving.
 | `labs` | blood test results: `{ "date", "lab", "markers": [{ "name", "value", "unit", "range", "low", "high" }], "note", "at" }`, one entry per test date. `range` is the lab's reference range as printed; `low` and `high` are its numbers. A value below `low` or above `high` shows as outside the lab's range. |
 | `pets` | pet care done, weigh-ins and vet visits: `{ "id": "<date>:<pet id>:<care id>", "date", "pet", "care", "lb", "note", "at" }`. `care` is a care id from the pet, or `"weight"` (with `lb`) or `"vet"` (with `note`). |
 | `supps` | supplements taken: `{ "id": "<date>:<supplement id>", "date", "supp", "at" }`, one per supplement per day. A row on Today counts as done when every supplement in it was taken. |
+| `strips` | nose strips, one entry a night the owner set on Body › Breathing: `{ "date", "on", "at" }`. `date` is the morning they woke up (the same day WHOOP files that sleep under). From the earliest entry on, a night with no entry counts as `prefs.stripsUsual`. Phone only: not in your outbox. |
 | `deleted` | `{ "workouts": { "<id>": "<when>" }, "eaten": { "<id>": "<when>" }, "labs": { "<date>": "<when>" }, "pets": { "<id>": "<when>" }, "supps": { "<id>": "<when>" }, "ledger": { "<date>": "<when>" } }` entries the owner removed (a cleared ledger box is in `ledger`), so they stay removed |
 | `settings` | tab order, hidden tabs, rest timer overrides, sound, last backup (backup only) |
 
@@ -311,7 +312,8 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | changed a pet's details or how often a care job is due | `plan.json` `home.pets` |
 | picked which daily amounts to compare against | `plan.json` `health.reference` |
 | logged a workout or a set | `logs.json` `workouts` |
-| weighed in | `logs.json` `weights` |
+| weighed in (Body › Weigh-ins, or the weigh-in on Today) | `logs.json` `weights` |
+| set nose strips on or off for a night (Body › Breathing) | `logs.json` `strips` |
 | entered cash on hand (Money › Free cash › Update it myself) | `logs.json` `money.cash` |
 | did the weekly money check-in | `logs.json` `money.weeks` |
 | updated a debt balance | `logs.json` `money.balances`, and the debt's `balance` in `plan.json` |
@@ -322,7 +324,7 @@ You never need the owner to repeat something they entered in Opus. It is all her
 | did the weekly review | `logs.json` `reviews` |
 | kept a note, a plan or a birthday in Memory (the pull-down at the top of every screen) | `logs.json` `remember` |
 | added a store receipt (Money › Groceries this week, or under the grocery list) | `logs.json` `receipts` |
-| changed rest timers, tabs or sound | `logs.json` `prefs` |
+| changed rest timers, tabs, sound or their usual for nose strips | `logs.json` `prefs` |
 
 ---
 
@@ -489,7 +491,7 @@ The owner wants you and Claude to know the same things about them. Everything yo
 
 ## 8. WHOOP (`whoop.json`, `"format": "opus-whoop"`)
 
-The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hourly from 4 AM to noon and every three hours after, and right away when WHOOP says something changed. Nobody else writes this file. Read it with `read_opus_file` file `whoop` when the owner's sleep, recovery or training load matters.
+The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hourly from 4 AM to noon and every three hours after, right away when WHOOP says something changed, and when Opus opens on the phone (at most once every 10 minutes). Nobody else writes this file. Read it with `read_opus_file` file `whoop` when the owner's sleep, recovery or training load matters.
 
 ```json
 { "format": "opus-whoop", "version": 1, "connected": true, "pulled": "2026-11-23T10:05:00Z", "problem": null,
@@ -501,7 +503,9 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
 ```
 - A day is the owner's local date. Sleep and recovery belong to the day the owner woke up; the day's strain and calories to that same day (`open: true` while WHOOP's day is still running, so `kcal` is so far); a workout to the day it started. Sleep figures are minutes. Naps are left out.
 - Recovery bands, WHOOP's own: green 67 and up, yellow 34 to 66, red 33 and under. On a red day Opus suggests a lighter session (drop the last set of each lift, stop 2 to 3 reps short) or moving it a day. In the workout, one tap (Make today lighter) takes the last set off each lift with 3 or more still ahead, and one tap puts them back.
-- Opus shows it on Today (last night), Train (what today's recovery means), Food (calories burned so far) and the weekly review (the week's averages). It keeps 60 days.
+- `body` (beside `days`, once WHOOP sends it): `{ "heightM", "weightKg", "maxHr" }`, what the owner entered in WHOOP and the max heart rate WHOOP uses for zones. The owner's own weigh-ins in `logs.json` `weights` are the ones Opus charts.
+- Opus shows it on Today (last night), Body (the Train tab, renamed in 1.33.0: today's recovery and what it means for the session, 14 days of HRV, resting heart rate, strain and sleep against need, breathing, and WHOOP's strain and heart rate beside each logged session), Food (calories burned so far) and the weekly review (the week's averages). It keeps 60 days.
+- Breathing (Body): blood oxygen while asleep (`recovery.spo2`) is the main line; breaths a minute (`sleep.respiratory`) shows the owner's usual and nights a breath or more off it. With `logs.json` `strips`, Opus averages blood oxygen, breaths a minute, sleep performance and recovery for nights with strips and without, once there are 3 of each. Talk about these numbers plainly and neutrally, as the owner's own numbers over time; never a diagnosis.
 - Nothing here is a diagnosis. Never draw health conclusions from it; say what the numbers are and suggest the owner ask a doctor about anything that worries them.
 
 ---
@@ -558,6 +562,8 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
 ---
 
 ## 10. Training
+
+Training shows on the Body tab (its id is still `train`), under WHOOP's recovery, breathing and weigh-ins.
 
 ### The plan's `training`
 ```json

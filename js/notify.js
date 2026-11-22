@@ -26,7 +26,7 @@
     ['changes', 'Changes from Grok and Cassius', 'Right when they save one']
   ];
   const KIND_OF = { meal: 'meals', prep: 'meals', workout: 'workouts', supp: 'supps', weigh: 'weigh', home: 'home', pet: 'pets', money: 'money', review: 'review', writing: 'growth', lesson: 'growth' };
-  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'food', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
+  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'train', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
 
   const st = () => { const s = Store.data.settings; s.notify = s.notify || { on: false, kinds: {} }; s.notify.kinds = s.notify.kinds || {}; return s.notify; };
   const kindOn = k => st().kinds[k] !== false; // every kind is on until switched off
