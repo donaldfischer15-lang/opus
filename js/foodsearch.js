@@ -17,8 +17,8 @@
 
   // USDA nutrient numbers → Opus fields (macros per 100 g; micros in Opus's units: g fiber, mg, µg for A, D, B12, folate)
   const NUM = { '203': 'protein', '205': 'carbs', '204': 'fat', '291': 'fiber', '307': 'sodium', '306': 'potassium', '301': 'calcium', '303': 'iron',
-    '304': 'magnesium', '309': 'zinc', '320': 'vitA', '401': 'vitC', '328': 'vitD', '418': 'b12', '435': 'folate' };
-  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'b12', 'folate'];
+    '304': 'magnesium', '309': 'zinc', '320': 'vitA', '401': 'vitC', '328': 'vitD', '430': 'vitK', '418': 'b12', '435': 'folate' };
+  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'vitK', 'b12', 'folate'];
   const r2 = v => Math.round(v * 100) / 100;
 
   // "GREEK NONFAT YOGURT" → "Greek nonfat yogurt"; mixed case stays as written
@@ -63,7 +63,7 @@
     const per = { kcal: num('energy-kcal'), protein: num('proteins'), carbs: num('carbohydrates'), fat: num('fat') };
     if (per.kcal == null) { const kj = num('energy-kj') != null ? num('energy-kj') : num('energy'); if (kj != null) per.kcal = kj / 4.184; }
     if (per.kcal == null && per.protein == null) return null;
-    const mi = {}, g2 = { fiber: ['fiber', 1], sodium: ['sodium', 1000], potassium: ['potassium', 1000], calcium: ['calcium', 1000], iron: ['iron', 1000], magnesium: ['magnesium', 1000], zinc: ['zinc', 1000], vitA: ['vitamin-a', 1e6], vitC: ['vitamin-c', 1000], vitD: ['vitamin-d', 1e6], b12: ['vitamin-b12', 1e6], folate: ['vitamin-b9', 1e6] };
+    const mi = {}, g2 = { fiber: ['fiber', 1], sodium: ['sodium', 1000], potassium: ['potassium', 1000], calcium: ['calcium', 1000], iron: ['iron', 1000], magnesium: ['magnesium', 1000], zinc: ['zinc', 1000], vitA: ['vitamin-a', 1e6], vitC: ['vitamin-c', 1000], vitD: ['vitamin-d', 1e6], vitK: ['vitamin-k', 1e6], b12: ['vitamin-b12', 1e6], folate: ['vitamin-b9', 1e6] };
     for (const [k, [f, x]] of Object.entries(g2)) { const v = num(f); if (v != null) mi[k] = r2(v * x); }
     const portions = [], sq = Number(p.serving_quantity);
     if (sq > 0) portions.push({ label: (tidy(p.serving_size) || '1 serving') + (/\d\s*(g|ml)\b/i.test(p.serving_size || '') ? '' : ' · ' + U.wt(sq) + ' g'), g: sq });

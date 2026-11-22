@@ -1,6 +1,6 @@
 /* Opus service worker: opens Opus from this phone first, so it opens at once even with no signal.
    Bump VERSION when files change: the new version downloads in the background and Opus switches to it. */
-const VERSION = 'opus-1.30.0';
+const VERSION = 'opus-1.31.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js', 'js/changes.js', 'js/weekahead.js', 'js/notify.js', 'js/desk.js',

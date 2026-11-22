@@ -13,7 +13,7 @@
   const Opus = window.Opus, U = Opus.util, Plan = Opus.plan, Store = Opus.store, ui = Opus.ui, h = ui.h;
   const SLOTS = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' }, SLOT_KEYS = Object.keys(SLOTS);
   const slotNow = () => { const t = new Date(), m = t.getHours() * 60 + t.getMinutes(); return m < 630 ? 'breakfast' : m < 870 ? 'lunch' : m < 1050 ? 'snack' : 'dinner'; };
-  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'b12', 'folate'];
+  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'vitK', 'b12', 'folate'];
   const PEND_LS = 'opus.snapPending', USE_LS = 'opus.snapUse';
   const ls = {
     get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },

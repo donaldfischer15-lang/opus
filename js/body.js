@@ -10,15 +10,15 @@
   const NUT = [
     ['fiber', 'Fiber', 'g'], ['sodium', 'Sodium', 'mg', true], ['potassium', 'Potassium', 'mg'], ['calcium', 'Calcium', 'mg'],
     ['iron', 'Iron', 'mg'], ['magnesium', 'Magnesium', 'mg'], ['zinc', 'Zinc', 'mg'], ['vitA', 'Vitamin A', 'µg'],
-    ['vitC', 'Vitamin C', 'mg'], ['vitD', 'Vitamin D', 'µg'], ['b12', 'Vitamin B12', 'µg'], ['folate', 'Folate', 'µg']
+    ['vitC', 'Vitamin C', 'mg'], ['vitD', 'Vitamin D', 'µg'], ['vitK', 'Vitamin K', 'µg'], ['b12', 'Vitamin B12', 'µg'], ['folate', 'Folate', 'µg']
   ];
   /* daily amounts from the US Dietary Reference Intakes (RDA or AI; sodium is the upper limit to stay under) */
   const base = { sodium: 2300, calcium: 1000, vitD: 15, b12: 2.4, folate: 400 };
   const REF = {
-    'men-19-30': Object.assign({ label: 'Men 19–30', fiber: 38, potassium: 3400, iron: 8, magnesium: 400, zinc: 11, vitA: 900, vitC: 90 }, base),
-    'men-31-50': Object.assign({ label: 'Men 31–50', fiber: 38, potassium: 3400, iron: 8, magnesium: 420, zinc: 11, vitA: 900, vitC: 90 }, base),
-    'women-19-30': Object.assign({ label: 'Women 19–30', fiber: 25, potassium: 2600, iron: 18, magnesium: 310, zinc: 8, vitA: 700, vitC: 75 }, base),
-    'women-31-50': Object.assign({ label: 'Women 31–50', fiber: 25, potassium: 2600, iron: 18, magnesium: 320, zinc: 8, vitA: 700, vitC: 75 }, base)
+    'men-19-30': Object.assign({ label: 'Men 19–30', vitK: 120, fiber: 38, potassium: 3400, iron: 8, magnesium: 400, zinc: 11, vitA: 900, vitC: 90 }, base),
+    'men-31-50': Object.assign({ label: 'Men 31–50', vitK: 120, fiber: 38, potassium: 3400, iron: 8, magnesium: 420, zinc: 11, vitA: 900, vitC: 90 }, base),
+    'women-19-30': Object.assign({ label: 'Women 19–30', vitK: 90, fiber: 25, potassium: 2600, iron: 18, magnesium: 310, zinc: 8, vitA: 700, vitC: 75 }, base),
+    'women-31-50': Object.assign({ label: 'Women 31–50', vitK: 90, fiber: 25, potassium: 2600, iron: 18, magnesium: 320, zinc: 8, vitA: 700, vitC: 75 }, base)
   };
   /* blood markers that speak to a nutrient (shown beside the estimate; different measures, never converted) */
   const LINK = { vitD: /vitamin d|25-?oh|calcidiol/i, b12: /b-?12|cobalamin/i, folate: /folate|folic/i, iron: /^iron\b|ferritin|serum iron/i,
@@ -33,10 +33,23 @@
   const ref = () => REF[refKey()] || null;
   const micros = o => (o && o.micros) || null;
 
-  /* ---------- estimates ---------- */
+  /* ---------- estimates ----------
+     Food and supplements are counted apart and shown apart: food from the micros of what was eaten,
+     supplements from each one's amount per dose (Opus.supps.nutrientsOf) on the days it was ticked. */
+  const zero = () => { const o = {}; for (const [k] of NUT) o[k] = 0; return o; };
+  function daySupps(d) {
+    const s = zero(), counted = [], unknown = []; let n = 0;
+    const S = Opus.supps; if (!S) return { s, counted, unknown, n };
+    for (const sp of S.list()) {
+      if (!S.taken(d, sp.id)) continue;
+      const r = S.nutrientsOf(sp);
+      if (r.amounts) { n++; counted.push(sp); for (const k in r.amounts) if (k in s && r.amounts[k] != null) s[k] += Number(r.amounts[k]); }
+      else if (r.why === 'nodose') unknown.push(sp);
+    }
+    return { s, counted, unknown, n };
+  }
   function dayMicros(d) {
-    const v = {}, missing = new Set(); let foods = 0;
-    for (const [k] of NUT) v[k] = 0;
+    const v = zero(), missing = new Set(); let foods = 0;
     const add = (m, f) => { for (const [k] of NUT) if (m[k] != null && m[k] !== '') v[k] += Number(m[k]) * f; };
     for (const it of Plan.itemsFor(d)) {
       if (it.kind !== 'meal' || !it.meal || !Plan.isChecked(d, it.id)) continue;
@@ -52,21 +65,27 @@
       }
     }
     for (const e of Plan.eatenOn(d)) if (e.extra) { foods++; if (e.micros) add(e.micros, 1); else missing.add(e.name); }
-    return { v, missing: [...missing], foods };
+    const sp = daySupps(d), tot = {};
+    for (const [k] of NUT) tot[k] = v[k] + sp.s[k];
+    return { v: tot, food: v, supp: sp.s, missing: [...missing], foods, supps: sp.n, counted: sp.counted, unknown: sp.unknown };
   }
-  /* the days before today that have anything logged (up to 7); today alone when none */
+  /* the days before today that have anything logged (up to 7); today alone when none.
+     Food averages over the days with food logged, supplements over the days any was ticked; the total is the two added. */
   function estimate(which) {
     const today = new Date();
-    if (which === 'today') { const r = dayMicros(today); return Object.assign(r, { days: r.foods ? 1 : 0, today: true }); }
-    const sum = {}, missing = new Set(); let days = 0;
-    for (const [k] of NUT) sum[k] = 0;
+    const one = d => { const r = dayMicros(d); return Object.assign(r, { days: r.foods || r.supps ? 1 : 0, foodDays: r.foods ? 1 : 0, suppDays: r.supps ? 1 : 0, today: true }); };
+    if (which === 'today') return one(today);
+    const fs = zero(), ss = zero(), missing = new Set(), counted = new Map(), unknown = new Map(); let fd = 0, sd = 0;
     for (let i = 1; i <= 7; i++) {
-      const r = dayMicros(U.addDays(today, -i)); if (!r.foods) continue;
-      days++; for (const [k] of NUT) sum[k] += r.v[k]; r.missing.forEach(m => missing.add(m));
+      const r = dayMicros(U.addDays(today, -i));
+      if (r.foods) { fd++; for (const [k] of NUT) fs[k] += r.food[k]; r.missing.forEach(m => missing.add(m)); }
+      if (r.supps) { sd++; for (const [k] of NUT) ss[k] += r.supp[k]; }
+      r.counted.forEach(x => counted.set(x.id, x)); r.unknown.forEach(x => unknown.set(x.id, x));
     }
-    if (!days) { const r = dayMicros(today); return Object.assign(r, { days: r.foods ? 1 : 0, today: true }); }
-    const v = {}; for (const [k] of NUT) v[k] = sum[k] / days;
-    return { v, missing: [...missing], days, today: false };
+    if (!fd && !sd) return one(today);
+    const food = zero(), supp = zero(), v = zero();
+    for (const [k] of NUT) { food[k] = fd ? fs[k] / fd : 0; supp[k] = sd ? ss[k] / sd : 0; v[k] = food[k] + supp[k]; }
+    return { v, food, supp, missing: [...missing], days: Math.max(fd, sd), foodDays: fd, suppDays: sd, counted: [...counted.values()], unknown: [...unknown.values()], today: false };
   }
   const pctOf = (k, val) => { const r = ref(); return r && r[k] ? val / r[k] : null; };
 
@@ -101,15 +120,25 @@
     Object.entries(REF).forEach(([k, r]) => { const c = h('<button class="chip' + (refKey() === k ? ' on' : '') + '" type="button">' + r.label + '</button>'); c.onclick = () => { health().reference = k; Plan.p.updated = U.key(); Store.save(); ui.buzz(8); after && after(); }; w.querySelector('.chips').appendChild(c); });
     return w;
   }
-  function nutRow(k, name, unit, limit, val, withLab) {
+  function nutRow(k, name, unit, limit, val, withLab, split) {
     const p = pctOf(k, val), r = ref();
     const pc = p == null ? 0 : Math.min(p, 1.5);
+    const fv = split ? split.food[k] || 0 : val, sv = split ? split.supp[k] || 0 : 0;
+    const fw = val > 0 ? pc * fv / val : 0, sw = val > 0 ? pc * sv / val : 0;
     const cls = limit ? (p > 1 ? ' over' : '') : (p != null && p < .5 ? ' low' : '');
     const row = h('<div class="nrow' + cls + '"><div class="nt"><span class="nn">' + name + '</span><span class="nv num">' + fmt(val, unit) + (r ? '<small> of ' + fmt(r[k], unit) + (limit ? ' limit' : '') + '</small>' : '') + '</span></div>' +
-      '<div class="nbar"><i style="width:' + (pc / 1.5 * 100).toFixed(1) + '%"></i><b style="left:' + (100 / 1.5).toFixed(1) + '%"></b></div>' +
-      (p != null ? '<div class="np small num">' + Math.round(p * 100) + '%' + (limit ? ' of the limit' : ' of the daily amount') + '</div>' : '') + '</div>');
+      '<div class="nbar"><i style="width:' + (fw / 1.5 * 100).toFixed(1) + '%"></i>' + (sw > 0 ? '<i class="sp" style="left:' + (fw / 1.5 * 100).toFixed(1) + '%;width:' + (sw / 1.5 * 100).toFixed(1) + '%"></i>' : '') + '<b style="left:' + (100 / 1.5).toFixed(1) + '%"></b></div>' +
+      '<div class="np small num">' + (p != null ? Math.round(p * 100) + '%' + (limit ? ' of the limit' : ' of the daily amount') : '') + (sv > 0 ? '<span class="nsplit">' + fmt(fv, unit) + ' food · <em>' + fmt(sv, unit) + ' supplements</em></span>' : '') + '</div></div>');
     if (withLab) labFor(k).forEach(m => row.appendChild(h('<div class="nlab small"><span class="lab-dot' + (flagOf(m) ? ' out' : '') + '"></span>Blood test ' + U.fmtDateShort(U.parseKey(m.date)) + ': <b class="num">' + U.esc(fmt(Number(m.value), m.unit)) + '</b> ' + U.esc(m.name) + ', ' + flagTxt(flagOf(m)) + '</div>')));
     return row;
+  }
+  // which supplements went into the numbers, and which were taken but have no amount to count
+  function suppNote(est) {
+    const S = Opus.supps; if (!S || !(est.counted || []).length && !(est.unknown || []).length) return null;
+    const bits = [];
+    if (est.counted.length) bits.push('Supplements counted: ' + est.counted.map(x => U.esc(x.name) + ' (' + U.esc(S.nutrientText(x)) + ')').join(', ') + '.');
+    if (est.unknown.length) bits.push('Taken but not counted, no amount per dose yet: ' + est.unknown.map(x => U.esc(x.name)).join(', ') + '. Add it from the bottle under Supplements.');
+    return h('<p class="small nsupp">' + bits.join(' ') + '</p>');
   }
 
   /* the section on the Food tab */
@@ -120,12 +149,13 @@
       c.innerHTML = '';
       if (!ref()) { c.appendChild(pickRef(draw)); return; }
       const est = estimate();
-      if (!est.days) c.appendChild(h('<p class="small">Tick off meals in Today and Opus estimates your vitamins and minerals from them.</p>'));
+      if (!est.days) c.appendChild(h('<p class="small">Tick off meals and supplements in Today and Opus estimates your vitamins and minerals from them.</p>'));
       else {
-        c.appendChild(h('<p class="small">' + (est.today ? 'Today so far' : 'Average of the last ' + (est.days === 1 ? 'day' : est.days + ' days') + ' you logged') + ', from standard food values.</p>'));
+        c.appendChild(h('<p class="small">' + (est.today ? 'Today so far' : 'Average of the last ' + (est.days === 1 ? 'day' : est.days + ' days') + ' you logged') + ', from standard food values' + (est.counted && est.counted.length ? ' plus the supplements you ticked' : '') + '. <span class="nkey"><i></i>food <i class="sp"></i>supplements</span></p>'));
         const ranked = NUT.filter(n => !n[3]).map(n => [n, pctOf(n[0], est.v[n[0]])]).sort((a, b) => a[1] - b[1]).slice(0, 3).map(x => x[0]);
         const sod = NUT.find(n => n[0] === 'sodium'); if (pctOf('sodium', est.v.sodium) > 1) ranked.push(sod);
-        ranked.forEach(([k, name, unit, limit]) => c.appendChild(nutRow(k, name, unit, limit, est.v[k], true)));
+        ranked.forEach(([k, name, unit, limit]) => c.appendChild(nutRow(k, name, unit, limit, est.v[k], true, est)));
+        const sn = suppNote(est); if (sn && est.unknown.length) { sn.textContent = 'Taken but not counted, no amount per dose yet: ' + est.unknown.map(x => x.name).join(', ') + '.'; c.appendChild(sn); }
       }
       const n = labs().length, out = latest().filter(flagOf).length;
       const b = h('<div class="btns"><button class="btn quiet sm" type="button">All nutrients</button><button class="btn quiet sm" type="button">Blood tests' + (n ? ' · ' + n : '') + '</button></div>');
@@ -148,10 +178,11 @@
         sw.querySelectorAll('.chip').forEach(c => { c.classList.toggle('on', c.dataset.w === which); c.onclick = () => { which = c.dataset.w; draw(); }; });
         b.appendChild(sw);
         const est = estimate(which);
-        b.appendChild(h('<p class="small">' + (!est.days ? 'Nothing logged yet.' : est.today ? 'Today so far.' : 'Average of ' + est.days + (est.days === 1 ? ' day' : ' days') + ' you logged, not counting today.') + '</p>'));
+        b.appendChild(h('<p class="small">' + (!est.days ? 'Nothing logged yet.' : est.today ? 'Today so far.' : 'Average of ' + est.days + (est.days === 1 ? ' day' : ' days') + ' you logged, not counting today.') + ' <span class="nkey"><i></i>food <i class="sp"></i>supplements</span></p>'));
         const card = h('<div class="card pad body-card"></div>');
-        NUT.forEach(([k, name, unit, limit]) => card.appendChild(nutRow(k, name, unit, limit, est.v[k], true)));
+        NUT.forEach(([k, name, unit, limit]) => card.appendChild(nutRow(k, name, unit, limit, est.v[k], true, est)));
         b.appendChild(card);
+        const sn = suppNote(est); if (sn) b.appendChild(sn);
         if (est.missing.length) b.appendChild(h('<p class="small">Not counted, no nutrient numbers yet: ' + U.esc(est.missing.join(', ')) + '. Grok can add them.</p>'));
         b.appendChild(h('<p class="small">Estimates from standard food values. Sodium leaves out salt and seasoning you add, so the real number is higher. Vitamin D also comes from sun, which food can’t show. Your blood tests are the real picture.</p>'));
         const rr = h('<p class="small">Compared with daily amounts for ' + ref().label + ' (US Dietary Reference Intakes). <button class="link" type="button">Change</button></p>');
@@ -213,7 +244,7 @@
       b.appendChild(card);
       if (k && ref()) {
         const n = NUT.find(x => x[0] === k), est = estimate();
-        if (est.days) { b.appendChild(h('<div class="sh"><span class="t">From your food</span><span class="c">estimate</span></div>')); b.appendChild(h('<div class="card pad body-card"></div>')).appendChild(nutRow(n[0], n[1], n[2], n[3], est.v[k], false)); }
+        if (est.days) { b.appendChild(h('<div class="sh"><span class="t">' + (est.supp && est.supp[k] > 0 ? 'From food and supplements' : 'From your food') + '</span><span class="c">estimate</span></div>')); b.appendChild(h('<div class="card pad body-card"></div>')).appendChild(nutRow(n[0], n[1], n[2], n[3], est.v[k], false, est)); }
         b.appendChild(h('<p class="small">Food estimates and blood levels measure different things, so they won’t match number for number. Together they show the direction.</p>'));
       }
       if (hist.some(flagOf)) b.appendChild(h('<p class="small lab-note"><span class="lab-dot out"></span>Outside the lab’s range is worth raising with your doctor. Opus doesn’t diagnose anything.</p>'));
@@ -273,5 +304,5 @@
     } });
   }
 
-  Opus.body = { NUT, REF, LINK, dayMicros, estimate, parseRange, flagOf, history, latest, section, nutrientsSheet, labsSheet, markerSheet, editSheet };
+  Opus.body = { NUT, REF, LINK, dayMicros, daySupps, estimate, parseRange, flagOf, history, latest, section, nutrientsSheet, labsSheet, markerSheet, editSheet };
 })();

@@ -1191,3 +1191,15 @@ button.g-pline:active { color: var(--gold-2); }
 .snap-step + .snap-qty { margin-top: 10px; }
 .snap-wt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .snap-wt select { width: auto; padding-left: 10px; padding-right: 10px; }
+
+/* vitamins & minerals: food and supplements, one bar, two parts */
+.nbar i.sp { inset: 0 auto 0 auto; background: repeating-linear-gradient(135deg, var(--gold-2) 0 3px, rgba(242, 211, 160, .55) 3px 6px); border-radius: 0 6px 6px 0; }
+.nrow .np { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.nsplit { color: var(--dim); }
+.nsplit em { font-style: normal; color: var(--gold-2); }
+.nkey { white-space: nowrap; margin-left: 4px; }
+.nkey i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; margin: 0 4px 1px 6px; vertical-align: middle; background: linear-gradient(90deg, var(--bronze), var(--gold)); }
+.nkey i.sp { background: repeating-linear-gradient(135deg, var(--gold-2) 0 3px, rgba(242, 211, 160, .55) 3px 6px); }
+.nsupp { margin-top: 4px; }
+.chips[hidden], .field[hidden] { display: none; } /* a hidden chip row or field stays hidden whatever its display */
+.snap-wt { align-items: center; }

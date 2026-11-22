@@ -20,6 +20,36 @@
   function dueOn(d) { const dk = U.dayKey(d), isW = Plan.isWorkday(d); return list().filter(s => s.active !== false && U.matchDays(s.days, dk, isW)); }
   function label(s) { return s.name + (s.dose ? ' (' + s.dose + ')' : ''); }
 
+  /* what one dose adds to the vitamins and minerals on Food. `nutrients` on the supplement ({ magnesium: 200 }, in the
+     units Food uses) wins; otherwise Opus reads it from the dose when the name and unit leave no doubt
+     (“Vitamin D3, 5,000 IU” → 125 µg vitamin D). Anything else is named as not counted, never guessed. */
+  const NUTS = [['vitD', /vitamin\s*d\b|\bd3\b|cholecalciferol/i, 'µg', 'vitamin D'], ['vitK', /vitamin\s*k\b|\bk2\b|menaquinone|phylloquinone/i, 'µg', 'vitamin K'],
+    ['b12', /\bb-?12\b|cobalamin/i, 'µg', 'vitamin B12'], ['folate', /folate|folic/i, 'µg', 'folate'], ['vitC', /vitamin\s*c\b|ascorbic/i, 'mg', 'vitamin C'],
+    ['vitA', /vitamin\s*a\b|retinol/i, 'µg', 'vitamin A'], ['magnesium', /magnesium/i, 'mg', 'magnesium'], ['zinc', /\bzinc\b/i, 'mg', 'zinc'],
+    ['iron', /\biron\b|ferrous/i, 'mg', 'iron'], ['calcium', /calcium/i, 'mg', 'calcium'], ['potassium', /potassium/i, 'mg', 'potassium'], ['fiber', /fiber|fibre|psyllium/i, 'g', 'fiber']];
+  const NUTK = {}; NUTS.forEach(n => { NUTK[n[0]] = n; });
+  const MULTI = /multi-?vitamin|\bmulti\b|prenatal|b-?complex/i;
+  function nutrientKey(s) { if (MULTI.test(s.name || '')) return null; const n = NUTS.find(x => x[1].test(s.name || '')); return n ? n[0] : null; }
+  function fromDose(key, dose) {
+    const m = /(\d[\d,]*(?:\.\d+)?)\s*(mcg|µg|ug|mg|g|iu)\b/i.exec(String(dose || '')); if (!m) return null;
+    const v = Number(m[1].replace(/,/g, '')), u = m[2].toLowerCase(), want = NUTK[key][2];
+    if (!(v >= 0)) return null;
+    if (u === 'iu') return key === 'vitD' ? v / 40 : null; // vitamin A's IU depends on the form, so it isn't converted
+    const toMg = { g: 1000, mg: 1, mcg: .001, 'µg': .001, ug: .001 }[u];
+    return want === 'mg' ? v * toMg : want === 'µg' ? v * toMg * 1000 : v * toMg / 1000;
+  }
+  function nutrientsOf(s) {
+    if (s.nutrients && typeof s.nutrients === 'object') {
+      const a = {}; let any = false; for (const k in s.nutrients) if (s.nutrients[k] != null && Number(s.nutrients[k]) >= 0) { a[k] = Number(s.nutrients[k]); any = true; }
+      if (any) return { amounts: a, why: 'set' };
+    }
+    const key = nutrientKey(s); if (!key) return { amounts: null, why: 'notnut' };
+    const v = fromDose(key, s.dose); if (v == null) return { amounts: null, why: 'nodose', key };
+    return { amounts: { [key]: Math.round(v * 100) / 100 }, why: 'dose', key };
+  }
+  const nfmt = (v, k) => { const u = (NUTK[k] || [0, 0, ''])[2], r = v >= 100 ? Math.round(v) : Math.round(v * 100) / 100; return r.toLocaleString('en-US') + ' ' + u + ' ' + ((NUTK[k] || [])[3] || k); };
+  function nutrientText(s) { const r = nutrientsOf(s); return r.amounts ? Object.keys(r.amounts).map(k => nfmt(r.amounts[k], k)).join(', ') + ' a dose' : ''; }
+
   /* how long the supply lasts: supply { left, asOf, perDose } counts down by what you log after asOf */
   function supply(s, today) {
     const sp = s.supply; if (!sp || sp.left == null) return null;
@@ -79,6 +109,22 @@
       const b = api.body;
       const f = (id, lbl, val, ph, type) => { const x = h('<div class="field"><label for="sp-' + id + '">' + lbl + '</label><input class="input" id="sp-' + id + '"' + (type ? ' type="' + type + '"' : '') + ' placeholder="' + U.esc(ph || '') + '"></div>'); x.querySelector('input').value = val == null ? '' : val; b.appendChild(x); return x.querySelector('input'); };
       const name = f('name', 'What', s.name, 'e.g. Fish oil'), dose = f('dose', 'Dose', s.dose, 'e.g. 2 capsules');
+      // what a dose adds on Food › Vitamins & minerals
+      const nf = h('<div class="field"><label for="sp-nut"></label><div class="snap-wt"><input class="input num" id="sp-nut" inputmode="decimal" placeholder="from the label"><span class="sp-nu small"></span></div><p class="small sp-nh" style="margin-top:6px"></p></div>');
+      const nIn = nf.querySelector('input'); let nKey = null;
+      const nDraw = () => {
+        const tmp = { name: name.value, dose: dose.value, nutrients: null }, key = (s.nutrients && Object.keys(s.nutrients)[0]) && name.value === s.name ? Object.keys(s.nutrients)[0] : nutrientKey(tmp);
+        nKey = key; nf.hidden = !key; if (!key) return;
+        const n = NUTK[key];
+        nf.querySelector('label').textContent = n[3].charAt(0).toUpperCase() + n[3].slice(1) + ' per dose';
+        nf.querySelector('.sp-nu').textContent = n[2];
+        const set = s.nutrients && s.nutrients[key] != null && name.value === s.name ? Number(s.nutrients[key]) : null, auto = fromDose(key, dose.value);
+        nIn.placeholder = auto != null ? String(Math.round(auto * 100) / 100) : 'from the label';
+        if (document.activeElement !== nIn && set != null) nIn.value = String(set);
+        nf.querySelector('.sp-nh').textContent = nIn.value.trim() ? 'Counted on Food as you typed it.' : auto != null ? 'Read from the dose. If the label’s ' + n[3] + ' line says a different amount, type it here.' : 'Not counted on Food until you type the amount from the label.';
+      };
+      name.addEventListener('input', nDraw); dose.addEventListener('input', nDraw); nIn.addEventListener('input', nDraw);
+      b.appendChild(nf); nDraw();
       let part = PART(s), mode = Array.isArray(s.days) ? 'days' : (s.days || 'all'), days = Array.isArray(s.days) ? s.days.slice() : [], wf = !!s.withFood;
       const pc = h('<div class="field"><label>When</label><div class="chips">' + Plan.PARTS.map(p => '<button class="chip" type="button" data-p="' + p + '">' + Plan.partLabel(p, new Date(2026, 10, 23)) + '</button>').join('') + '</div></div>');
       const mc = h('<div class="field"><label>Which days</label><div class="chips"><button class="chip" type="button" data-m="all">Every day</button><button class="chip" type="button" data-m="workdays">Workdays</button><button class="chip" type="button" data-m="daysoff">Days off</button><button class="chip" type="button" data-m="days">Some days</button></div></div>');
@@ -114,6 +160,8 @@
         if (left == null) out.supply = null;
         else if (!sp || left !== sp.left || (per.get() || 1) !== ((s.supply || {}).perDose || 1)) out.supply = { left, asOf: U.key(), perDose: per.get() || 1 };
         if (s.active === false) out.active = false;
+        const nv = Number(nIn.value.replace(',', '.')); if (nKey && nIn.value.trim() && nv >= 0) out.nutrients = { [nKey]: nv };
+        else if (s.nutrients && nm === s.name && !nKey) out.nutrients = s.nutrients;
         const L = list();
         if (isNew) { while (L.some(x => x.id === out.id)) out.id += '-2'; L.push(out); } else L[idx] = out;
         Plan.p.updated = U.key(); Store.save(); api.close(); ui.toast('Saved'); after && after();
@@ -135,7 +183,8 @@
       for (let k = 0; k < 7; k++) { const dd = U.addDays(d, -k); if (s.since && U.key(dd) < s.since) break; if (U.matchDays(s.days, U.dayKey(dd), Plan.isWorkday(dd))) { due++; if (taken(dd, s.id)) n++; } }
       const when = (s.days === 'workdays' ? 'Workdays' : s.days === 'daysoff' ? 'Days off' : Array.isArray(s.days) ? s.days.map(x => U.DAY_NAMES[U.DAYS.indexOf(x)].slice(0, 3)).join(' ') : 'Daily') + ', ' + Plan.partLabel(PART(s), d).toLowerCase() + (s.time ? ' ' + U.fmtTime(s.time) : '');
       const low = lowLine(s);
-      const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(label(s)) + '</b><small>' + U.esc(when + (s.withFood ? ' · with food' : '')) + (low ? ' · <span class="warn">' + U.esc(low) + '</span>' : '') + '</small></span><span class="tm num" title="last 7 days">' + (due ? n + '/' + due : '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
+      const nr = nutrientsOf(s), nt = nr.amounts ? nutrientText(s) : nr.why === 'nodose' ? 'amount not known yet' : '';
+      const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(label(s)) + '</b><small>' + U.esc(when + (s.withFood ? ' · with food' : '') + (nt ? ' · ' + nt : '')) + (low ? ' · <span class="warn">' + U.esc(low) + '</span>' : '') + '</small></span><span class="tm num" title="last 7 days">' + (due ? n + '/' + due : '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
       r.onclick = () => editSheet(i, () => Opus.refresh());
       c.appendChild(r);
     });
@@ -151,5 +200,5 @@
     return groups;
   };
 
-  Opus.supps = { list, supply, taken, takeSheet, editSheet, section };
+  Opus.supps = { list, supply, taken, takeSheet, editSheet, section, nutrientsOf, nutrientText, nutrientKey };
 })();
