@@ -1193,7 +1193,7 @@ button.g-pline:active { color: var(--gold-2); }
 .snap-wt select { width: auto; padding-left: 10px; padding-right: 10px; }
 
 /* vitamins & minerals: food and supplements, one bar, two parts */
-.nbar i.sp { inset: 0 auto 0 auto; background: repeating-linear-gradient(135deg, var(--gold-2) 0 3px, rgba(242, 211, 160, .55) 3px 6px); border-radius: 0 6px 6px 0; }
+.nbar i.sp, .nrow.low .nbar i.sp, .nrow.over .nbar i.sp { inset: 0 auto 0 auto; background: repeating-linear-gradient(135deg, var(--gold-2) 0 3px, rgba(242, 211, 160, .55) 3px 6px); border-radius: 0 6px 6px 0; }
 .nrow .np { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .nsplit { color: var(--dim); }
 .nsplit em { font-style: normal; color: var(--gold-2); }
@@ -1203,3 +1203,7 @@ button.g-pline:active { color: var(--gold-2); }
 .nsupp { margin-top: 4px; }
 .chips[hidden], .field[hidden] { display: none; } /* a hidden chip row or field stays hidden whatever its display */
 .snap-wt { align-items: center; }
+.sp-facts { padding: 0 14px; }
+.sp-fact .q { font-size: 13.5px; color: var(--gold-2); white-space: nowrap; }
+.sp-fact .link { padding: 6px 2px 6px 8px; color: var(--dim); }
+.nbar i.sp.solo { border-radius: 6px; }

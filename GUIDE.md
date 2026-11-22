@@ -548,7 +548,7 @@ The Opus helper pulls the owner's WHOOP data itself (WHOOP's official API), hour
 - Every meal id used in `rotation.weeks` must exist in `meals`.
 - **`macros` are per serving** (one serving as eaten, described in `serving`): `kcal`, then `protein`, `carbs`, `fat` in grams. Set `"estimate": true` when the numbers come from standard nutrition values, `false` when they come from the owner's labels. Use `null` for anything unknown. The app adds up the meals on Today and shows how much has been eaten so far. When you change a meal's ingredients or portion, update its `serving` and `macros` too.
 - **`parts`** are the pieces of one serving, so the owner can tick off only what was eaten (just the banana) or change an amount (150 g of chicken, not 200). Each part has `name`, `amount` (a number), `unit` (`"g"`, `"cup"`, `"tbsp"`, or `""` for a count like 4 eggs) and `macros` **for that amount**. When every part has macros, the meal's macros are their sum, so keep `macros` equal to that sum. Keep part names stable: what was eaten is logged by part name. When you change a meal, change its `parts`, `serving`, `macros`, `ingredients` and `prep` together, and save the whole `food` section (or `food.meals`) with `update_plan_section`.
-- **`micros`** (optional, on a part or a saved food) are the vitamins and minerals **for that amount**, from standard nutrition values (USDA FoodData Central), with `"estimate": true`. The keys and units are fixed: `fiber` g, `sodium` mg, `potassium` mg, `calcium` mg, `iron` mg, `magnesium` mg, `zinc` mg, `vitA` µg RAE, `vitC` mg, `vitD` µg, `b12` µg, `folate` µg DFE. Any other key is refused. Use `null` for a nutrient you don't know. Sodium leaves out salt and seasoning added while cooking. Opus adds them up on Food › Vitamins & minerals and names every food that has no `micros`, so when you add or change a meal or a saved food, give each part its `micros` too.
+- **`micros`** (optional, on a part or a saved food) are the vitamins and minerals **for that amount**, from standard nutrition values (USDA FoodData Central), with `"estimate": true`. The keys and units are fixed: `fiber` g, `sodium` mg, `potassium` mg, `calcium` mg, `iron` mg, `magnesium` mg, `zinc` mg, `vitA` µg RAE, `vitC` mg, `vitD` µg, `vitK` µg, `b12` µg, `folate` µg DFE. Any other key is refused. Use `null` for a nutrient you don't know. Sodium leaves out salt and seasoning added while cooking. Opus adds them up on Food › Vitamins & minerals and names every food that has no `micros`, so when you add or change a meal or a saved food, give each part its `micros` too.
 - **`library`** is the owner's saved foods: things the owner eats outside the plan (a yogurt cup, a protein bar). Each has `name`, `amount`, `unit` and `macros` for that amount. They show as one-tap choices in Food › Add food, and Opus scales the macros when the amount changes. Add to it when the owner mentions a food they eat often; they can add to it on the phone too.
 
 ### Food in your outbox (`eaten`)
@@ -633,9 +633,28 @@ Each pet gets its own section on Home and a profile. Everything except `id` and 
 - `supplements` is what the owner takes, ticked on Today and kept on Food › Supplements:
 ```json
 "supplements": [ { "id": "fish-oil", "name": "Fish oil", "dose": "2 capsules", "part": "morning", "time": null,
-                   "days": "all", "withFood": true, "note": null, "since": "2026-11-18", "supply": { "left": 90, "asOf": "2026-11-18", "perDose": 2 } } ]
+                   "days": "all", "withFood": true, "note": null, "since": "2026-11-18", "supply": { "left": 90, "asOf": "2026-11-18", "perDose": 2 },
+                   "label": null, "nutrients": null } ]
 ```
   `part` is `morning`, `workday` or `evening` (all of one part share one row on Today). `days` follows the routine rules. `supply` is optional: how many were on hand on `asOf` and how many one dose uses; Opus counts down from the days taken after `asOf`, warns about ten days before it runs out and adds it to the grocery list. `since` is the day they started it (Opus counts how often it was taken from then). Set `"active": false` to pause one without losing its history. Keep each `id` the same forever. Add only what the owner says they take; never suggest one, and never set a dose they didn't give.
+
+  `label` (optional) is the bottle's Supplement Facts for **one serving**, copied line by line exactly as printed, and it is the best source:
+```json
+"label": { "serving": "1 softgel", "servings": null,
+           "facts": [ { "name": "Vitamin C (as ascorbyl palmitate)", "amount": 10, "unit": "mg", "dv": 11 },
+                      { "name": "Vitamin K (as phytonadione)", "amount": 2000, "unit": "mcg", "dv": 1667 } ] }
+```
+  `unit` is `mg`, `mcg`, `g` or `IU` as printed (write µg as `mcg`); `dv` is the % Daily Value, left out when the label shows none; `servings` is servings per container, `null` when the label doesn't show it. Keep every line, even ones Opus doesn't track. Opus counts each dose as one serving and adds up every line that is a tracked nutrient, converting units (several vitamin K lines add up to one vitamin K amount; IU counts only for vitamin D). The owner can also fill it on the phone: Food › Supplements › Edit › Read the Supplement Facts label, from a photo. Fill it only from the label itself, never from memory of a brand.
+
+  Which amount Opus counts: `nutrients` if set, else `label`, else `dose` as below.
+
+  `nutrients` (optional) is what **one dose** adds, in the same keys and units as food `micros` (section 9), e.g. `{ "magnesium": 200 }` or `{ "vitD": 125 }`. Fill it only from the bottle's Supplement Facts as the owner gives it (the line for the nutrient itself, e.g. "Magnesium (as magnesium glycinate) 200 mg"), never from a guess. When it is `null`, Opus reads it from `dose` only when the name and unit leave no doubt (a magnesium supplement's "200 mg" counts as 200 mg magnesium; vitamin D "5,000 IU" counts as 125 µg); otherwise the supplement shows as "amount not known yet" and isn't counted. Supplements that aren't one of the tracked nutrients (medications, L-theanine, taurine and the like) are never counted.
+
+### How Opus counts vitamins and minerals: food and supplements, kept apart
+- **From food:** `micros` of what was eaten (planned meals ticked, scaled by `eaten` parts, plus extras in `eaten`). Stored on the meals in the plan and on `eaten` entries in `logs.json`.
+- **From supplements:** each supplement's amount per dose (`nutrients`, `label`, or read from `dose` as above) on each day it was ticked (`logs.json` `supps`, one entry per supplement per day). Nothing about supplements is ever written into `eaten` or `micros`.
+- Food › Vitamins & minerals shows the total with the two parts side by side (food, then supplements) and names supplements taken without a known amount. The 7-day view averages food over the days food was logged and supplements over the days any was ticked, then adds them.
+- When you check nutrients or watch for a shortfall, read both and **keep them apart** in what you tell the owner: "magnesium about 260 mg from food plus 400 mg from supplements". A low food number with supplements covering it is a different story from a low total. Name any supplement taken without a known amount instead of guessing it. Vitamin D also comes from sun, and sodium leaves out salt added while cooking.
 
 ### Blood tests and supplements in your outbox (`labs`, `supps`)
 
@@ -651,7 +670,7 @@ Each pet gets its own section on Home and a profile. Everything except `id` and 
 - "Breakfast is 3 eggs now, not 4." Change that meal's egg part (`amount` and its `macros`), then its `serving` and `macros` sum, and the weekly egg `qty` in `ingredients`.
 - "I had a protein shake after the gym." Add it to the outbox `eaten`. If they have it often, also add it to `food.library`.
 - "Add my blood test to Opus" (with a photo or PDF of the report). Copy every result into the outbox `labs` as described in section 12, then list what you saved and anything you couldn't read.
-- "How are my vitamins looking?" Add up `micros` for what they ate (planned meals ticked, scaled by `eaten` parts, plus extras) and compare with the daily amounts for `health.reference`; name the foods without `micros`. Put any blood results beside them. No diagnosis; anything outside the lab's range is for their doctor.
+- "How are my vitamins looking?" Add up `micros` for what they ate (planned meals ticked, scaled by `eaten` parts, plus extras), add the supplements ticked in `supps` (each one's amount per dose from `nutrients` or `label`) as a separate line, and compare the total with the daily amounts for `health.reference`; name the foods without `micros` and the supplements without an amount. Put any blood results beside them. No diagnosis; anything outside the lab's range is for their doctor.
 - "I gave the dog the flea pill." Add a `pets` entry for today with that care id. If its `every` is `null`, ask how often it's due and save that to the pet's `care`.
 - "The cat weighs 11 pounds now." Add a `pets` entry with care `"weight"` and `lb`.
 - "I started taking magnesium at night." Add it to `health.supplements` with the details they gave (`null` for the rest) and ask for the dose if they didn't say.

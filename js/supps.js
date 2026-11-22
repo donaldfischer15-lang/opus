@@ -30,19 +30,35 @@
   const NUTK = {}; NUTS.forEach(n => { NUTK[n[0]] = n; });
   const MULTI = /multi-?vitamin|\bmulti\b|prenatal|b-?complex/i;
   function nutrientKey(s) { if (MULTI.test(s.name || '')) return null; const n = NUTS.find(x => x[1].test(s.name || '')); return n ? n[0] : null; }
+  // an amount in mg, mcg, g or IU, in the unit Food uses for that nutrient; IU only for vitamin D (vitamin A's depends on the form)
+  function convert(key, v, unit) {
+    const u = String(unit || '').toLowerCase().trim(), want = NUTK[key][2];
+    if (!(Number(v) >= 0)) return null; v = Number(v);
+    if (u === 'iu') return key === 'vitD' ? v / 40 : null;
+    const toMg = { g: 1000, mg: 1, mcg: .001, 'µg': .001, ug: .001 }[u]; if (toMg == null) return null;
+    return want === 'mg' ? v * toMg : want === 'µg' ? v * toMg * 1000 : v * toMg / 1000;
+  }
   function fromDose(key, dose) {
     const m = /(\d[\d,]*(?:\.\d+)?)\s*(mcg|µg|ug|mg|g|iu)\b/i.exec(String(dose || '')); if (!m) return null;
-    const v = Number(m[1].replace(/,/g, '')), u = m[2].toLowerCase(), want = NUTK[key][2];
-    if (!(v >= 0)) return null;
-    if (u === 'iu') return key === 'vitD' ? v / 40 : null; // vitamin A's IU depends on the form, so it isn't converted
-    const toMg = { g: 1000, mg: 1, mcg: .001, 'µg': .001, ug: .001 }[u];
-    return want === 'mg' ? v * toMg : want === 'µg' ? v * toMg * 1000 : v * toMg / 1000;
+    return convert(key, m[1].replace(/,/g, ''), m[2]);
+  }
+  // each line of a Supplement Facts label that is a nutrient Food tracks; several lines of one nutrient add up (vitamin K1 + K2)
+  function fromFacts(facts) {
+    const a = {}; let any = false;
+    for (const f of facts || []) {
+      const n = NUTS.find(x => x[1].test(f.name || '')); if (!n) continue;
+      const v = convert(n[0], f.amount, f.unit); if (v == null) continue;
+      a[n[0]] = Math.round(((a[n[0]] || 0) + v) * 100) / 100; any = true;
+    }
+    return any ? a : null;
   }
   function nutrientsOf(s) {
     if (s.nutrients && typeof s.nutrients === 'object') {
       const a = {}; let any = false; for (const k in s.nutrients) if (s.nutrients[k] != null && Number(s.nutrients[k]) >= 0) { a[k] = Number(s.nutrients[k]); any = true; }
       if (any) return { amounts: a, why: 'set' };
     }
+    const lab = s.label && Array.isArray(s.label.facts) ? fromFacts(s.label.facts) : null;
+    if (lab) return { amounts: lab, why: 'label' };
     const key = nutrientKey(s); if (!key) return { amounts: null, why: 'notnut' };
     const v = fromDose(key, s.dose); if (v == null) return { amounts: null, why: 'nodose', key };
     return { amounts: { [key]: Math.round(v * 100) / 100 }, why: 'dose', key };
@@ -108,13 +124,46 @@
     ui.sheet({ title: isNew ? 'Add a supplement' : s.name, kicker: isNew ? '' : 'Supplement', render(api) {
       const b = api.body;
       const f = (id, lbl, val, ph, type) => { const x = h('<div class="field"><label for="sp-' + id + '">' + lbl + '</label><input class="input" id="sp-' + id + '"' + (type ? ' type="' + type + '"' : '') + ' placeholder="' + U.esc(ph || '') + '"></div>'); x.querySelector('input').value = val == null ? '' : val; b.appendChild(x); return x.querySelector('input'); };
+      // a photo of the Supplement Facts fills in the name, the dose and every line, as printed
+      let lab = s.label && Array.isArray(s.label.facts) ? U.clone(s.label) : null;
+      const rd = h('<button class="btn ghost" type="button" style="width:100%"></button>');
+      rd.innerHTML = ui.icon('camera', 'ico') + ' ' + (lab ? 'Read the label again' : 'Read the Supplement Facts label');
+      rd.onclick = () => { const S = Opus.snap; if (!S || !S.pickPhoto) { ui.toast('The photo reader isn’t loaded'); return; } S.pickPhoto(async file => {
+        rd.disabled = true; rd.textContent = 'Reading the label…';
+        try {
+          const img = await S.shrink(file, 1600), r = await S.ask({ mode: 'supplement', image: img });
+          if (!r || !r.ok || !r.supplement) { ui.toast((r && r.error) || 'Couldn’t read that label. Try a closer, straighter photo.'); return; }
+          const x = r.supplement;
+          lab = { serving: x.serving || null, servings: x.servings != null ? x.servings : null, facts: x.facts.map(q => Object.assign({ name: q.name, amount: q.amount, unit: q.unit }, q.dv != null ? { dv: q.dv } : {})) };
+          if (!name.value.trim() && x.name) name.value = x.name;
+          if (x.serving) dose.value = x.serving;
+          nIn.value = ''; labDraw(); nDraw(); ui.buzz(10); ui.toast('Read ' + x.facts.length + ' line' + (x.facts.length === 1 ? '' : 's') + '. Check them against the bottle.');
+        } catch (e) { ui.toast(e.message || 'Couldn’t read that photo'); }
+        finally { rd.disabled = false; rd.innerHTML = ui.icon('camera', 'ico') + ' ' + (lab ? 'Read the label again' : 'Read the Supplement Facts label'); }
+      }); };
+      b.appendChild(rd);
       const name = f('name', 'What', s.name, 'e.g. Fish oil'), dose = f('dose', 'Dose', s.dose, 'e.g. 2 capsules');
+      const lc = h('<div class="field sp-lab"><label>Supplement Facts, one serving</label><div class="card sp-facts"></div><p class="small sp-lh" style="margin-top:6px"></p></div>');
+      const labDraw = () => {
+        lc.hidden = !lab; if (!lab) return;
+        const c = lc.querySelector('.sp-facts'); c.innerHTML = '';
+        lab.facts.forEach((q, i) => {
+          const n = NUTS.find(x => x[1].test(q.name || '')), v = n ? convert(n[0], q.amount, q.unit) : null;
+          const r = h('<div class="row sp-fact"><span class="tx"><b></b><small></small></span><span class="q num"></span><button class="link" type="button" aria-label="Remove this line">✕</button></div>');
+          r.querySelector('b').textContent = q.name; r.querySelector('.q').textContent = Number(q.amount).toLocaleString('en-US') + ' ' + q.unit;
+          r.querySelector('small').textContent = v != null ? 'Counts as ' + nfmt(v, n[0]) : n ? 'Not counted: Opus can’t convert ' + q.unit + ' for this one' : 'Not one of the nutrients Food tracks';
+          r.querySelector('button').onclick = () => { lab.facts.splice(i, 1); if (!lab.facts.length) lab = null; labDraw(); nDraw(); };
+          c.appendChild(r);
+        });
+        lc.querySelector('.sp-lh').textContent = (lab.serving ? 'One serving is ' + lab.serving + '. ' : '') + 'Each dose counts as one serving.' + (lab.servings ? ' ' + lab.servings + ' servings a bottle.' : '');
+      };
+      b.appendChild(lc);
       // what a dose adds on Food › Vitamins & minerals
       const nf = h('<div class="field"><label for="sp-nut"></label><div class="snap-wt"><input class="input num" id="sp-nut" inputmode="decimal" placeholder="from the label"><span class="sp-nu small"></span></div><p class="small sp-nh" style="margin-top:6px"></p></div>');
       const nIn = nf.querySelector('input'); let nKey = null;
       const nDraw = () => {
         const tmp = { name: name.value, dose: dose.value, nutrients: null }, key = (s.nutrients && Object.keys(s.nutrients)[0]) && name.value === s.name ? Object.keys(s.nutrients)[0] : nutrientKey(tmp);
-        nKey = key; nf.hidden = !key; if (!key) return;
+        nKey = key; nf.hidden = !key || !!(lab && fromFacts(lab.facts)); if (nf.hidden) return;
         const n = NUTK[key];
         nf.querySelector('label').textContent = n[3].charAt(0).toUpperCase() + n[3].slice(1) + ' per dose';
         nf.querySelector('.sp-nu').textContent = n[2];
@@ -124,7 +173,7 @@
         nf.querySelector('.sp-nh').textContent = nIn.value.trim() ? 'Counted on Food as you typed it.' : auto != null ? 'Read from the dose. If the label’s ' + n[3] + ' line says a different amount, type it here.' : 'Not counted on Food until you type the amount from the label.';
       };
       name.addEventListener('input', nDraw); dose.addEventListener('input', nDraw); nIn.addEventListener('input', nDraw);
-      b.appendChild(nf); nDraw();
+      b.appendChild(nf); labDraw(); nDraw();
       let part = PART(s), mode = Array.isArray(s.days) ? 'days' : (s.days || 'all'), days = Array.isArray(s.days) ? s.days.slice() : [], wf = !!s.withFood;
       const pc = h('<div class="field"><label>When</label><div class="chips">' + Plan.PARTS.map(p => '<button class="chip" type="button" data-p="' + p + '">' + Plan.partLabel(p, new Date(2026, 10, 23)) + '</button>').join('') + '</div></div>');
       const mc = h('<div class="field"><label>Which days</label><div class="chips"><button class="chip" type="button" data-m="all">Every day</button><button class="chip" type="button" data-m="workdays">Workdays</button><button class="chip" type="button" data-m="daysoff">Days off</button><button class="chip" type="button" data-m="days">Some days</button></div></div>');
@@ -160,7 +209,8 @@
         if (left == null) out.supply = null;
         else if (!sp || left !== sp.left || (per.get() || 1) !== ((s.supply || {}).perDose || 1)) out.supply = { left, asOf: U.key(), perDose: per.get() || 1 };
         if (s.active === false) out.active = false;
-        const nv = Number(nIn.value.replace(',', '.')); if (nKey && nIn.value.trim() && nv >= 0) out.nutrients = { [nKey]: nv };
+        if (lab) out.label = lab;
+        const nv = Number(nIn.value.replace(',', '.')); if (nKey && !nf.hidden && nIn.value.trim() && nv >= 0) out.nutrients = { [nKey]: nv };
         else if (s.nutrients && nm === s.name && !nKey) out.nutrients = s.nutrients;
         const L = list();
         if (isNew) { while (L.some(x => x.id === out.id)) out.id += '-2'; L.push(out); } else L[idx] = out;

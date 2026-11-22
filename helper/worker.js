@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -51,7 +51,7 @@ Plan.validate = function (p) {
     if (r.part && !PARTS.includes(r.part)) errors.push('routine "' + r.id + '": part must be morning, workday or evening.');
     if (r.time && !TIME.test(r.time)) errors.push('routine "' + r.id + '": time should look like "12:00".');
   });
-  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'b12', 'folate'];
+  const MICROS = ['fiber', 'sodium', 'potassium', 'calcium', 'iron', 'magnesium', 'zinc', 'vitA', 'vitC', 'vitD', 'vitK', 'b12', 'folate'];
   const microErr = (o, where) => {
     if (typeof o !== 'object' || Array.isArray(o)) { errors.push(where + ': micros should be an object like { "fiber": 3.1, "potassium": 422 }.'); return; }
     for (const k of Object.keys(o)) {
@@ -74,6 +74,7 @@ Plan.validate = function (p) {
       if (x.time != null && !TIME.test(x.time)) errors.push('supplement "' + x.id + '": time should look like "07:30" (or null).');
       if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["mon","thu"].');
       if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
+      if (x.nutrients != null) { if (typeof x.nutrients !== 'object' || Array.isArray(x.nutrients)) errors.push('supplement "' + x.id + '": nutrients should be an object like { "magnesium": 200 } (per dose), or null.'); else for (const k of Object.keys(x.nutrients)) { if (!MICROS.includes(k)) errors.push('supplement "' + x.id + '": nutrients has "' + k + '"; use ' + MICROS.join(', ') + '.'); else if (x.nutrients[k] != null && !(Number(x.nutrients[k]) >= 0)) errors.push('supplement "' + x.id + '": nutrients.' + k + ' should be a number (or null).'); } }
       if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
     });
   }
@@ -780,7 +781,7 @@ async function phoneKey(env) {
 // Scout looks closest at a plate; Mistral reads printed labels and typed meals as well and in a fifth of the time (food/vision.json, Nov 22).
 // Gemma is not open to this account, so it is left out.
 const FOOD_MODELS = ['@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/mistralai/mistral-small-3.1-24b-instruct'];
-const FOOD_FIRST = { photo: FOOD_MODELS[0], label: FOOD_MODELS[1], words: FOOD_MODELS[1], receipt: FOOD_MODELS[1] };
+const FOOD_FIRST = { photo: FOOD_MODELS[0], label: FOOD_MODELS[1], words: FOOD_MODELS[1], receipt: FOOD_MODELS[1], supplement: FOOD_MODELS[1] };
 // neurons per million tokens (developers.cloudflare.com/workers-ai/platform/pricing, Nov 2026), for the phone's rough daily count
 const NEURONS = { '@cf/meta/llama-4-scout-17b-16e-instruct': [24545, 77273], '@cf/mistralai/mistral-small-3.1-24b-instruct': [31876, 50488], '@cf/google/gemma-3-12b-it': [31371, 50560] };
 const FOOD_PROMPT = `You are the eye of a food-logging phone app. The owner photographs what they eat, or types it, and you say what it is and how much.
@@ -803,6 +804,11 @@ const LABEL_PROMPT = `Read the Nutrition Facts panel in this photo exactly as pr
 Answer with JSON only, no other words, in exactly this shape (numbers without units; grams unless named):
 {"name":null,"brand":null,"serving_text":"","serving_g":null,"servings_per_container":null,"kcal":null,"fat_g":null,"carbs_g":null,"fiber_g":null,"sugar_g":null,"protein_g":null,"sodium_mg":null}
 "name" and "brand" only if printed on what you can see.`;
+const SUPP_PROMPT = `Read the Supplement Facts panel in this photo exactly as printed. Never guess a number you can't read clearly: use null for it.
+List every ingredient line that has an amount, in order. "name" is the line as printed, with the form in brackets if printed, like "Vitamin D (as cholecalciferol) (D3)". "amount" is the number alone and "unit" its unit as printed (mg, mcg, g, IU). If a line shows both mcg and IU, give the mcg. "dv" is the % Daily Value as a number, else null.
+Answer with JSON only, no other words, in exactly this shape:
+{"name":null,"brand":null,"serving_text":"","servings_per_container":null,"facts":[{"name":"","amount":0,"unit":"","dv":null}]}
+"name" (the product, like "Vitamin D3 5,000 IU") and "brand" only if printed on what you can see.`;
 const RECEIPT_PROMPT = `Read this store receipt exactly as printed. Never guess a number you can't read clearly: use null for it.
 List every item line that has a price, in order. For each: "text" is the item as printed, "name" is a plain name a person would say (expand store abbreviations only when sure, like "MM" for Member's Mark), "amount" is the line's price, "qty" the count if printed (like 3 @ 3.98), else null.
 A discount or coupon line is its own item with a negative amount.
@@ -834,6 +840,13 @@ function cleanLabel(o) {
   return { name: str(o.name, 80), brand: str(o.brand, 60), serving: str(o.serving_text, 60), servingG: numOr(o.serving_g, 0, 2000), servings: numOr(o.servings_per_container, 0, 200),
     kcal: numOr(o.kcal, 0, 5000), fat: numOr(o.fat_g, 0, 500), carbs: numOr(o.carbs_g, 0, 800), fiber: numOr(o.fiber_g, 0, 200), sugar: numOr(o.sugar_g, 0, 500), protein: numOr(o.protein_g, 0, 400), sodium: numOr(o.sodium_mg, 0, 20000) };
 }
+function cleanSupp(o) {
+  if (!isObj(o)) return null;
+  const units = { mg: 'mg', mcg: 'mcg', 'µg': 'mcg', ug: 'mcg', g: 'g', iu: 'IU' };
+  const facts = (Array.isArray(o.facts) ? o.facts : []).filter(isObj).slice(0, 40).map(x => ({ name: str(x.name, 100), amount: numOr(x.amount, 0, 1e7), unit: units[String(x.unit || '').toLowerCase().trim()] || null, dv: numOr(x.dv, 0, 1e6) })).filter(x => x.name && x.amount != null && x.unit);
+  if (!facts.length) return null;
+  return { name: str(o.name, 80), brand: str(o.brand, 60), serving: str(o.serving_text, 60), servings: numOr(o.servings_per_container, 0, 2000), facts };
+}
 // a receipt never keeps long numbers: card, reference, approval, terminal and transaction numbers are cut out here too
 const noIds = v => v == null ? null : String(v).replace(/[#*xX]*\d[\d\s-]{5,}\d/g, '').replace(/[*xX#•]{2,}\s*\d+/g, '').replace(/\b(ref|appr(oval)?|auth|term(inal)?|tc|aid|trans|acct)\b\s*[#:.]+\s*\S+/gi, '').replace(/\s+/g, ' ').trim() || null;
 function cleanReceipt(o) {
@@ -856,17 +869,17 @@ async function askModel(env, model, sys, text, image, max) {
 /* one read: the models in order until one answers with usable JSON; stops at once when today's free amount is used up */
 async function readFood(env, mode, text, image) {
   if (!env.AI) return { ok: false, code: 'setup', error: 'The helper has no AI binding yet. It comes with the next deploy.' };
-  const sys = mode === 'label' ? LABEL_PROMPT : mode === 'receipt' ? RECEIPT_PROMPT : FOOD_PROMPT;
-  const prompt = mode === 'label' ? 'Read this label.' : mode === 'receipt' ? 'Read this receipt.' : (text ? 'The owner\'s note: ' + text + (image ? '' : '\nThere is no photo; go by the note alone.') : 'No note from the owner; go by the photo.');
-  const first = FOOD_FIRST[mode === 'label' || mode === 'receipt' ? mode : image ? 'photo' : 'words'];
+  const sys = mode === 'label' ? LABEL_PROMPT : mode === 'receipt' ? RECEIPT_PROMPT : mode === 'supplement' ? SUPP_PROMPT : FOOD_PROMPT;
+  const prompt = mode === 'label' || mode === 'supplement' ? 'Read this label.' : mode === 'receipt' ? 'Read this receipt.' : (text ? 'The owner\'s note: ' + text + (image ? '' : '\nThere is no photo; go by the note alone.') : 'No note from the owner; go by the photo.');
+  const first = FOOD_FIRST[mode === 'label' || mode === 'receipt' || mode === 'supplement' ? mode : image ? 'photo' : 'words'];
   const order = [first].concat(FOOD_MODELS.filter(m => m !== first));
   const tried = [];
   for (const model of order) {
     try {
-      const a = await askModel(env, model, sys, prompt, image, mode === 'receipt' ? 2000 : 900);
-      const o = parseLoose(a.out), res = mode === 'label' ? cleanLabel(o) : mode === 'receipt' ? cleanReceipt(o) : cleanFood(o);
+      const a = await askModel(env, model, sys, prompt, image, mode === 'receipt' ? 2000 : mode === 'supplement' ? 1400 : 900);
+      const o = parseLoose(a.out), res = mode === 'label' ? cleanLabel(o) : mode === 'receipt' ? cleanReceipt(o) : mode === 'supplement' ? cleanSupp(o) : cleanFood(o);
       if (!res || (mode === 'receipt' && !res.items.length)) { tried.push(model.split('/').pop() + ': no JSON'); continue; }
-      return Object.assign({ ok: true, model: model.split('/').pop(), ms: a.ms, neurons: a.neurons }, mode === 'label' ? { label: res } : mode === 'receipt' ? { receipt: res } : res);
+      return Object.assign({ ok: true, model: model.split('/').pop(), ms: a.ms, neurons: a.neurons }, mode === 'label' ? { label: res } : mode === 'receipt' ? { receipt: res } : mode === 'supplement' ? { supplement: res } : res);
     } catch (e) {
       const m = String(e && e.message || e);
       if (isLimit(m)) return { ok: false, code: 'limit', error: 'Today\'s free photo reads are used up. They come back at midnight UTC.' };
@@ -883,10 +896,10 @@ async function foodRoute(request, env) {
   if (!same(request.headers.get('X-Opus-Key') || '', await phoneKey(env))) return J({ ok: false, code: 'key', error: 'This phone\'s helper key is out of date. Sync Opus and try again.' }, 401);
   if (Number(request.headers.get('Content-Length') || 0) > 4e6) return J({ ok: false, code: 'bad', error: 'That photo is too big.' }, 413);
   let b; try { b = await request.json(); } catch (e) { return J({ ok: false, code: 'bad', error: 'Bad request' }, 400); }
-  const mode = b.mode === 'label' || b.mode === 'receipt' ? b.mode : 'food';
+  const mode = ['label', 'receipt', 'supplement'].includes(b.mode) ? b.mode : 'food';
   const text = str(b.text, 400), image = typeof b.image === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(b.image) && b.image.length < 4e6 ? b.image : null;
   if (!image && !text) return J({ ok: false, code: 'bad', error: 'Send a photo or a few words.' }, 400);
-  if ((mode === 'label' || mode === 'receipt') && !image) return J({ ok: false, code: 'bad', error: 'A ' + mode + ' needs a photo.' }, 400);
+  if (mode !== 'food' && !image) return J({ ok: false, code: 'bad', error: 'A ' + mode + ' needs a photo.' }, 400);
   return J(await readFood(env, mode, text, image));
 }
 /* once per helper version: read a test label with each model and save what happened to food/vision.json in the data

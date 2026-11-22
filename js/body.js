@@ -87,6 +87,15 @@
     for (const [k] of NUT) { food[k] = fd ? fs[k] / fd : 0; supp[k] = sd ? ss[k] / sd : 0; v[k] = food[k] + supp[k]; }
     return { v, food, supp, missing: [...missing], days: Math.max(fd, sd), foodDays: fd, suppDays: sd, counted: [...counted.values()], unknown: [...unknown.values()], today: false };
   }
+  // the 7-day view leaves out today; say so when today's supplements are ticked, with a way to see them
+  function todayHint(est, go) {
+    if (est.today) return null;
+    const t = dayMicros(new Date()); if (!t.supps || !t.counted.length) return null;
+    const p = h('<p class="small nsupp-today"></p>');
+    p.appendChild(document.createTextNode('Today’s supplements (' + t.counted.map(x => x.name).join(', ') + ') aren’t in this average yet. '));
+    const bt = h('<button class="link" type="button">See today so far</button>'); bt.onclick = go; p.appendChild(bt);
+    return p;
+  }
   const pctOf = (k, val) => { const r = ref(); return r && r[k] ? val / r[k] : null; };
 
   /* ---------- blood tests ---------- */
@@ -127,8 +136,8 @@
     const fw = val > 0 ? pc * fv / val : 0, sw = val > 0 ? pc * sv / val : 0;
     const cls = limit ? (p > 1 ? ' over' : '') : (p != null && p < .5 ? ' low' : '');
     const row = h('<div class="nrow' + cls + '"><div class="nt"><span class="nn">' + name + '</span><span class="nv num">' + fmt(val, unit) + (r ? '<small> of ' + fmt(r[k], unit) + (limit ? ' limit' : '') + '</small>' : '') + '</span></div>' +
-      '<div class="nbar"><i style="width:' + (fw / 1.5 * 100).toFixed(1) + '%"></i>' + (sw > 0 ? '<i class="sp" style="left:' + (fw / 1.5 * 100).toFixed(1) + '%;width:' + (sw / 1.5 * 100).toFixed(1) + '%"></i>' : '') + '<b style="left:' + (100 / 1.5).toFixed(1) + '%"></b></div>' +
-      '<div class="np small num">' + (p != null ? Math.round(p * 100) + '%' + (limit ? ' of the limit' : ' of the daily amount') : '') + (sv > 0 ? '<span class="nsplit">' + fmt(fv, unit) + ' food · <em>' + fmt(sv, unit) + ' supplements</em></span>' : '') + '</div></div>');
+      '<div class="nbar"><i style="width:' + (fw / 1.5 * 100).toFixed(1) + '%"></i>' + (sw > 0 ? '<i class="sp' + (fw > 0 ? '' : ' solo') + '" style="left:' + (fw / 1.5 * 100).toFixed(1) + '%;width:' + (sw / 1.5 * 100).toFixed(1) + '%"></i>' : '') + '<b style="left:' + (100 / 1.5).toFixed(1) + '%"></b></div>' +
+      '<div class="np small num">' + (p != null ? Math.round(p * 100).toLocaleString('en-US') + '%' + (limit ? ' of the limit' : ' of the daily amount') : '') + (sv > 0 ? '<span class="nsplit">' + fmt(fv, unit) + ' food · <em>' + fmt(sv, unit) + ' supplements</em></span>' : '') + '</div></div>');
     if (withLab) labFor(k).forEach(m => row.appendChild(h('<div class="nlab small"><span class="lab-dot' + (flagOf(m) ? ' out' : '') + '"></span>Blood test ' + U.fmtDateShort(U.parseKey(m.date)) + ': <b class="num">' + U.esc(fmt(Number(m.value), m.unit)) + '</b> ' + U.esc(m.name) + ', ' + flagTxt(flagOf(m)) + '</div>')));
     return row;
   }
@@ -155,6 +164,7 @@
         const ranked = NUT.filter(n => !n[3]).map(n => [n, pctOf(n[0], est.v[n[0]])]).sort((a, b) => a[1] - b[1]).slice(0, 3).map(x => x[0]);
         const sod = NUT.find(n => n[0] === 'sodium'); if (pctOf('sodium', est.v.sodium) > 1) ranked.push(sod);
         ranked.forEach(([k, name, unit, limit]) => c.appendChild(nutRow(k, name, unit, limit, est.v[k], true, est)));
+        const th = todayHint(est, () => { nutrientsSheet('today'); }); if (th) c.appendChild(th);
         const sn = suppNote(est); if (sn && est.unknown.length) { sn.textContent = 'Taken but not counted, no amount per dose yet: ' + est.unknown.map(x => x.name).join(', ') + '.'; c.appendChild(sn); }
       }
       const n = labs().length, out = latest().filter(flagOf).length;
@@ -167,8 +177,8 @@
     v.appendChild(sec);
   }
 
-  function nutrientsSheet() {
-    let which = 'week';
+  function nutrientsSheet(start) {
+    let which = start === 'today' ? 'today' : 'week';
     ui.sheet({ title: 'Vitamins & minerals', kicker: 'Estimated from what you logged', full: true, onClose: () => Opus.refresh(), render(api) {
       const b = api.body;
       const draw = () => {
@@ -179,6 +189,7 @@
         b.appendChild(sw);
         const est = estimate(which);
         b.appendChild(h('<p class="small">' + (!est.days ? 'Nothing logged yet.' : est.today ? 'Today so far.' : 'Average of ' + est.days + (est.days === 1 ? ' day' : ' days') + ' you logged, not counting today.') + ' <span class="nkey"><i></i>food <i class="sp"></i>supplements</span></p>'));
+        const th = todayHint(est, () => { which = 'today'; draw(); }); if (th) b.appendChild(th);
         const card = h('<div class="card pad body-card"></div>');
         NUT.forEach(([k, name, unit, limit]) => card.appendChild(nutRow(k, name, unit, limit, est.v[k], true, est)));
         b.appendChild(card);

@@ -6,6 +6,7 @@
   const I = {
     today: '<path d="M4 20V11a8 8 0 0 1 16 0v9M8 20v-8a4 4 0 0 1 8 0v8M2 20h20"/>',
     food: '<path d="M4 11h16a8 8 0 0 1-16 0zM9 4c0 2 2 2 2 4M14 4c0 2 2 2 2 4"/>',
+    camera: '<path d="M4 8h3l1.6-2.4A1 1 0 0 1 9.4 5h5.2a1 1 0 0 1 .8.6L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/>',
     train: '<path d="M2 12h20M5 8v8M8 6v12M16 6v12M19 8v8"/>',
     money: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/>',
     home: '<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
