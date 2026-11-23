@@ -221,44 +221,116 @@
   }
 
   /* ---------- Food tab section ---------- */
-  function section(v, numeral) {
-    const d = new Date(), L = list();
-    const sec = h('<div class="sec"><div class="sh"><span class="r">' + numeral + '</span><span class="t">Supplements</span><button class="c" type="button">+ Add</button></div><div class="card"></div></div>');
-    sec.querySelector('button').onclick = () => editSheet(null, () => Opus.refresh());
-    const c = sec.querySelector('.card');
-    if (!L.length) c.appendChild(h('<p class="empty">Nothing here yet. Add what you take, or tell Grok and it adds them.</p>'));
-    // log one today: every supplement as a tap, the ones you take now and then first
-    const act = L.filter(s => s.active !== false);
-    if (act.length) {
-      const order = act.slice().sort((a, b) => (b.days === 'asneeded') - (a.days === 'asneeded'));
-      const box = h('<div class="chips sp-chips"></div>');
-      order.forEach(s => {
-        const ch = h('<button class="chip" type="button"></button>'); ch.textContent = s.name; ch.classList.toggle('on', taken(d, s.id)); ch.setAttribute('aria-pressed', taken(d, s.id) ? 'true' : 'false');
-        ch.onclick = () => {
-          const on = !taken(d, s.id); take(d, s.id, on); Store.save(); ui.buzz(on ? 12 : 6);
-          ch.classList.toggle('on', on); ch.setAttribute('aria-pressed', on ? 'true' : 'false');
-          const nr = nutrientsOf(s);
-          ui.toast(on ? s.name + ' logged for today' + (nr.amounts ? '' : nr.why === 'nodose' ? '. Add its amount to count it in vitamins' : '') : s.name + ' taken back', on ? { label: 'Undo', run: () => { take(d, s.id, false); Store.save(); Opus.refresh(); } } : null);
-          Opus.todayRefresh && Opus.todayRefresh();
-        };
-        box.appendChild(ch);
-      });
-      c.appendChild(h('<div class="row sp-log"><span class="tx"><b>Took one today?</b><small>Tap to log it. Tap again to take it back.</small></span></div>'));
-      c.appendChild(box);
+  /* the general daily upper limits for adults (NIH Office of Dietary Supplements), in the units Food uses. Only nutrients
+     that have one; magnesium's counts supplements alone, the rest count everything, so a supplement total is a floor. */
+  const UL = { vitD: [100, 'µg', '4,000 IU'], magnesium: [350, 'mg', 'from supplements'], zinc: [40, 'mg'], vitC: [2000, 'mg'], vitA: [3000, 'µg'],
+    iron: [45, 'mg'], calcium: [2500, 'mg'], folate: [1000, 'µg'] };
+  const r2 = v => v >= 100 ? Math.round(v).toLocaleString('en-US') : String(Math.round(v * 10) / 10);
+  function addsText(s) {
+    const r = nutrientsOf(s);
+    if (r.amounts) return 'Adds ' + Object.keys(r.amounts).sort((a, b) => (UL[b] ? 1 : 0) - (UL[a] ? 1 : 0)).map(k => nfmt(r.amounts[k], k)).join(', ');
+    return r.why === 'nodose' ? 'Amount not known yet, tap to add it' : '';
+  }
+  function takenAt(d, sid) {
+    const e = log().find(x => x.date === U.key(d) && x.supp === sid); if (!e || !e.at) return '';
+    const t = new Date(e.at); return isNaN(t) ? '' : U.fmtTimeAP(U.pad(t.getHours()) + ':' + U.pad(t.getMinutes()));
+  }
+  // the last seven days, oldest first: taken, missed, not due, or before it was added
+  function week(s, d) {
+    let o = '';
+    for (let k = 6; k >= 0; k--) {
+      const dd = U.addDays(d, -k), key = U.key(dd);
+      const st = s.since && key < s.since ? 'pre' : taken(dd, s.id) ? 'on' : s.days === 'asneeded' || !U.matchDays(s.days, U.dayKey(dd), Plan.isWorkday(dd)) ? 'off' : k === 0 ? 'due' : 'miss';
+      o += '<i class="' + st + '"></i>';
     }
-    L.forEach((s, i) => {
-      // the last 7 days it was due (since it was added), how many it was taken
-      let due = 0, n = 0;
-      for (let k = 0; k < 7; k++) { const dd = U.addDays(d, -k); if (s.since && U.key(dd) < s.since) break; if (U.matchDays(s.days, U.dayKey(dd), Plan.isWorkday(dd))) { due++; if (taken(dd, s.id)) n++; } }
-      let last = null, n30 = 0; if (s.days === 'asneeded') for (const e of log()) if (e.supp === s.id && U.daysBetween(U.parseKey(e.date), d) < 30) { n30++; if (!last || e.date > last) last = e.date; }
-      const when = s.days === 'asneeded' ? (n30 ? n30 + (n30 === 1 ? ' time' : ' times') + ' in 30 days, last ' + (last === U.key(d) ? 'today' : U.fmtDateShort(last)) : 'When you take it') : (s.days === 'workdays' ? 'Workdays' : s.days === 'daysoff' ? 'Days off' : Array.isArray(s.days) ? s.days.map(x => U.DAY_NAMES[U.DAYS.indexOf(x)].slice(0, 3)).join(' ') : 'Daily') + ', ' + Plan.partLabel(PART(s), d).toLowerCase() + (s.time ? ' ' + U.fmtTime(s.time) : '');
+    return '<span class="sp-wk" title="Last 7 days" aria-hidden="true">' + o + '</span>';
+  }
+  function section(v, numeral) {
+    const d = new Date(), L = list(), now = Plan.currentPart(d);
+    const sec = h('<div class="sec sp-sec"><div class="sh"><span class="r">' + numeral + '</span><span class="t">Supplements</span><button class="c" type="button">+ Add</button></div></div>');
+    sec.querySelector('button').onclick = () => editSheet(null, () => Opus.refresh());
+    if (!L.length) { const c = h('<div class="card"><p class="empty">Nothing here yet. Add what you take, or tell Grok and it adds them.</p></div>'); sec.appendChild(c); v.appendChild(sec); return; }
+
+    const act = L.filter(s => s.active !== false), due = dueOn(d), dueIds = new Set(due.map(s => s.id));
+    const groups = [];
+    for (const p of Plan.PARTS) { const ss = due.filter(s => PART(s) === p); if (ss.length) groups.push({ key: p, title: Plan.partLabel(p, d), ss, daily: true }); }
+    const some = act.filter(s => s.days === 'asneeded');
+    if (some.length) groups.push({ key: 'some', title: 'When you need it', ss: some });
+    const notToday = act.filter(s => s.days !== 'asneeded' && !dueIds.has(s.id));
+    if (notToday.length) groups.push({ key: 'off', title: 'Not today', ss: notToday, rest: true });
+    const paused = L.filter(s => s.active === false);
+    if (paused.length) groups.push({ key: 'paused', title: 'Paused', ss: paused, rest: true });
+
+    const card = h('<div class="card sp-card"></div>'); sec.appendChild(card);
+    const redraw = () => { Opus.todayRefresh && Opus.todayRefresh(); draw(); };
+    const draw = () => {
+      card.innerHTML = '';
+      for (const g of groups) {
+        const n = g.ss.filter(s => taken(d, s.id)).length;
+        const gh = h('<div class="sp-gh' + (g.key === now ? ' now' : '') + '"><span class="k">' + U.esc(g.title) + '</span>' + (g.key === now ? '<span class="tag">Now</span>' : '') +
+          '<span class="n num">' + (g.daily ? n + ' of ' + g.ss.length : '') + '</span></div>');
+        if (g.daily && g.ss.length > 1 && n < g.ss.length) {
+          const all = h('<button class="sp-all" type="button">Took all</button>');
+          all.onclick = () => {
+            const was = g.ss.filter(s => !taken(d, s.id)).map(s => s.id);
+            was.forEach(id => take(d, id, true)); Store.save(); ui.buzz(14);
+            ui.toast(g.title + ' supplements logged', { label: 'Undo', run: () => { was.forEach(id => take(d, id, false)); Store.save(); redraw(); } });
+            redraw();
+          };
+          gh.appendChild(all);
+        } else if (g.daily && n === g.ss.length) gh.appendChild(h('<span class="sp-done">All taken</span>'));
+        card.appendChild(gh);
+        for (const s of g.ss) card.appendChild(row(s, g));
+      }
+      const over = upper(d);
+      if (over.length) card.appendChild(h('<div class="sp-ul"><b>Above the general daily upper limit</b><small>' + over.map(U.esc).join('<br>') +
+        '</small><small class="q">Counted from supplements only. Doctors sometimes go above it on purpose, so it is worth a mention at your next checkup.</small></div>'));
+    };
+    const row = (s, g) => {
+      const i = L.indexOf(s), on = taken(d, s.id), can = !g.rest || g.key === 'off';
+      const bits = [];
+      if (on) bits.push('Taken ' + takenAt(d, s.id));
+      else if (s.days === 'asneeded') {
+        let last = null, n30 = 0; for (const e of log()) if (e.supp === s.id && U.daysBetween(U.parseKey(e.date), d) < 30) { n30++; if (!last || e.date > last) last = e.date; }
+        bits.push(n30 ? 'Last ' + U.fmtDateShort(last) + ', ' + n30 + (n30 === 1 ? ' time' : ' times') + ' in 30 days' : 'Not logged yet');
+      } else if (g.key === 'off') bits.push(s.days === 'workdays' ? 'Workdays' : s.days === 'daysoff' ? 'Days off' : Array.isArray(s.days) ? s.days.map(x => U.DAY_NAMES[U.DAYS.indexOf(x)].slice(0, 3)).join(' ') : '');
+      else if (s.days === 'workdays') bits.push('Workdays');
+      else if (s.days === 'daysoff') bits.push('Days off');
+      else if (Array.isArray(s.days)) bits.push(s.days.map(x => U.DAY_NAMES[U.DAYS.indexOf(x)].slice(0, 3)).join(' '));
+      if (!on && s.time) bits.push('at ' + U.fmtTimeAP(s.time));
+      if (s.withFood) bits.push('with food');
+      const ad = addsText(s); if (ad) bits.push(ad);
+      if (s.note) bits.push(s.note);
       const low = lowLine(s);
-      const nr = nutrientsOf(s), nt = nr.amounts ? nutrientText(s) : nr.why === 'nodose' ? 'amount not known yet' : '';
-      const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(label(s)) + '</b><small>' + U.esc(when + (s.withFood ? ' · with food' : '') + (nt ? ' · ' + nt : '')) + (low ? ' · <span class="warn">' + U.esc(low) + '</span>' : '') + '</small></span><span class="tm num" title="last 7 days">' + (due && s.days !== 'asneeded' ? n + '/' + due : '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
-      r.onclick = () => editSheet(i, () => Opus.refresh());
-      c.appendChild(r);
-    });
-    if (L.length) c.appendChild(h('<p class="small" style="padding:4px 0 10px">The number is days taken out of the last seven it was due, counted from when you added it. Daily ones tick on Today; the ones you take now and then, log here.</p>'));
+      const r = h('<div class="row sp-row' + (on ? ' done' : '') + (g.rest && g.key === 'paused' ? ' paused' : '') + '">' +
+        (can ? '<button class="ck" type="button" role="checkbox" aria-checked="' + on + '" aria-label="' + U.esc(s.name) + ' taken today">' + ui.CK + '</button>' : '<span class="ck ghost"></span>') +
+        '<span class="tx tap"><b>' + U.esc(s.name) + '</b><small>' + U.esc(bits.filter(Boolean).join(' · ')) + (low ? ' · <span class="warn">' + U.esc(low) + '</span>' : '') + '</small></span>' +
+        '<span class="sp-r tap">' + (s.dose ? '<span class="d">' + U.esc(s.dose) + '</span>' : '<span class="d none">no amount</span>') + week(s, d) + '</span></div>');
+      if (can) r.querySelector('.ck').onclick = e => {
+        e.stopPropagation();
+        const nv = !taken(d, s.id); take(d, s.id, nv); Store.save(); ui.buzz(nv ? 12 : 6);
+        const nr = nutrientsOf(s);
+        ui.toast(nv ? s.name + ' logged' + (nr.amounts ? '' : nr.why === 'nodose' ? '. Add its amount to count it in vitamins' : '') : s.name + ' taken back',
+          nv ? { label: 'Undo', run: () => { take(d, s.id, false); Store.save(); redraw(); } } : null);
+        redraw();
+      };
+      r.querySelectorAll('.tap').forEach(x => { x.onclick = () => editSheet(i, () => Opus.refresh()); });
+      return r;
+    };
+    // today's total from supplements (the ones due plus any as-needed already logged) against the upper limits
+    const upper = dd => {
+      const tot = {};
+      for (const s of act) {
+        if (!(dueIds.has(s.id) || (s.days === 'asneeded' && taken(dd, s.id)))) continue;
+        const r = nutrientsOf(s); if (!r.amounts) continue;
+        for (const k in r.amounts) tot[k] = (tot[k] || 0) + r.amounts[k];
+      }
+      return Object.keys(UL).filter(k => tot[k] > UL[k][0]).map(k => {
+        const u = UL[k], name = (NUTK[k] || [])[3] || k;
+        return name.charAt(0).toUpperCase() + name.slice(1) + ': ' + r2(tot[k]) + ' ' + u[1] + ' a day, limit ' + r2(u[0]) + ' ' + u[1] + (u[2] ? ' (' + u[2] + ')' : '');
+      });
+    };
+    draw();
     v.appendChild(sec);
   }
 

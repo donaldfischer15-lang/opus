@@ -245,6 +245,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.35.1': [['food', 'Supplements on Food, redone: grouped by morning, workday and evening with a check to log each, Took all for a whole group, the dose and the last seven days on the right, the time you took it, what each adds to vitamins and minerals, and a quiet note when a total from supplements is above the general daily upper limit.']],
     '1.35.0': [['food', 'Supplements on Food has Took one today?: tap any supplement to log it for today, tap again to take it back. A supplement can be set to When I take it, for the ones you don’t take every day; those stay off Today and show how often you took them.']],
     '1.34.1': [['food', 'Add food picks a unit that fits the food (cups for milk, oz for meat, each for eggs, bar for bars) with the other units as taps under it. Tap one and the amount converts, so the calories stay right. Typing oz, g or fl oz works too.']],
     '1.34.0': [['train', 'Hair on Body, when your plan has a hair routine: its evening ticks on Today, an optional “Anything off?” check, a monthly set of five photos lined up with last month’s, and side-by-side checks at your checkpoints with the dates hidden until you pick. Photos stay on your phone and in your private data.'], ['today', 'Lock screen reminders leave out the names of supplements your plan keeps private.']],
