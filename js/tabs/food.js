@@ -175,6 +175,54 @@
     } });
   }
 
+
+  /* units: how many grams one of each unit is for this food, and which unit fits the food best.
+     A food's own serving tells what a cup, an each or a bar weighs; weights are fixed; liquids count 1 ml as 1 g. */
+  const FIXED = { g: 1, oz: 28.35, lb: 453.6, kg: 1000, ml: 1, 'fl oz': 29.57, tbsp: 15, tsp: 5 };
+  const UNIT_ALIAS = [[/^(g|grams?|gr)$/i, 'g'], [/^(oz|ounces?)$/i, 'oz'], [/^(lbs?|pounds?)$/i, 'lb'], [/^(kg|kilos?|kilograms?)$/i, 'kg'], [/^(ml|milliliters?|millilitres?)$/i, 'ml'],
+    [/^(fl\.? ?oz|fluid ounces?)$/i, 'fl oz'], [/^cups?$/i, 'cup'], [/^(tbsp|tablespoons?)$/i, 'tbsp'], [/^(tsp|teaspoons?)$/i, 'tsp'], [/^(each|ea|whole|pieces?|pcs?|items?)$/i, 'each'],
+    [/^bars?$/i, 'bar'], [/^sticks?$/i, 'stick'], [/^slices?$/i, 'slice'], [/^eggs?$/i, 'egg'], [/^servings?$/i, 'serving'], [/^(scoops?)$/i, 'scoop'], [/^(cans?)$/i, 'can'], [/^(bottles?)$/i, 'bottle'], [/^(containers?|cups? \(container\))$/i, 'container']];
+  const canonUnit = u => { u = String(u || '').trim(); for (const [re, c] of UNIT_ALIAS) if (re.test(u)) return c; return u; };
+  // "cup (240 ml) (240 g)" → { unit: 'cup', g: 240 }; "serving (2 slices, 56 g)" → { unit: 'slice', g: 28 }; "g" → { unit: 'g', g: 1 }
+  function readUnit(raw) {
+    const str = String(raw || '').trim(); if (!str) return { unit: '', g: null };
+    const head = str.replace(/\s*\(.*$/, '').trim(), unit = canonUnit(head);
+    if (FIXED[unit]) return { unit, g: FIXED[unit] };
+    const gm = /([\d.]+)\s*g\b/i.exec(str), ml = /([\d.]+)\s*ml\b/i.exec(str);
+    let g = gm ? Number(gm[1]) : ml ? Number(ml[1]) : null;
+    const inner = /\(([\d.]+)\s+([a-z]+)/i.exec(str);
+    if (unit === 'serving' && inner && g) { const n = Number(inner[1]), u2 = canonUnit(inner[2]); if (n > 0 && u2 && !FIXED[u2]) return { unit: u2, g: Math.round(g / n * 10) / 10 }; }
+    return { unit, g: g > 0 ? g : null };
+  }
+  // the kind of food from its name: which units make sense, best first
+  const KINDS = [
+    [/\b(milk|juice|coffee|latte|soda|cola|coke|pepsi|sprite|tea|water|broth|stock|smoothie|shake|kefir|creamer|beer|wine|lemonade|gatorade|powerade|kombucha|energy drink|drink)\b/i, ['cup', 'fl oz', 'ml']],
+    [/\b(eggs?)\b/i, ['egg', 'g']],
+    [/\b(bar|bars)\b/i, ['bar', 'g']],
+    [/\b(sticks?|jerky)\b/i, ['stick', 'oz', 'g']],
+    [/\b(bread|toast|pizza|bacon|cheese slice|american cheese)\b/i, ['slice', 'g']],
+    [/\b(bagel|muffin|tortilla|wrap|bun|roll|english muffin|banana|apple|orange|pear|peach|plum|kiwi|avocado|potato|cookie|donut|doughnut|waffle|pancake|burrito|sandwich|hot dog|sausage link|pickle)\b/i, ['each', 'g']],
+    [/\b(chicken|beef|steak|pork|turkey|ham|salmon|tuna|fish|shrimp|ground|meat|brisket|ribs?|lamb|sausage|enchiladas?|lasagna|casserole|cheese)\b/i, ['oz', 'g', 'lb']],
+    [/\b(rice|pasta|noodles|oats|oatmeal|cereal|granola|beans|lentils|quinoa|soup|chili|salad|berries|blueberries|strawberries|grapes|veggies|vegetables|broccoli|spinach|corn|peas|yogurt|cottage cheese|ice cream|popcorn|chips|nuts|almonds|peanuts|trail mix)\b/i, ['cup', 'g', 'oz']],
+    [/\b(peanut butter|almond butter|butter|oil|mayo|mayonnaise|ranch|dressing|sauce|ketchup|mustard|syrup|honey|jam|jelly|cream cheese|hummus|sugar|creamer)\b/i, ['tbsp', 'tsp', 'g']],
+    [/\b(protein powder|whey|creatine|scoop)\b/i, ['scoop', 'g']]
+  ];
+  function unitsFor(name, own) {
+    const k = KINDS.find(([re]) => re.test(name || '')), list = k ? k[1].slice() : [];
+    if (own && own.unit && !list.includes(own.unit)) list.splice(own.unit === 'g' || own.unit === 'oz' ? list.length : 0, 0, own.unit);
+    for (const u of ['g', 'oz']) if (!list.includes(u)) list.push(u);
+    return list.slice(0, 5);
+  }
+  // grams in one of this unit, for this food (null when unknown)
+  function gramsPer(unit, own) {
+    if (!unit) return null; if (FIXED[unit]) return FIXED[unit];
+    if (own && own.unit === unit && own.g) return own.g;
+    if (unit === 'cup') return 240;
+    if (own && own.g && (own.unit === 'serving' || !own.unit) && /^(each|bar|stick|slice|egg|scoop|can|bottle|container)$/.test(unit)) return own.g;
+    return null;
+  }
+  const niceAmt = (v, unit) => { if (!(v > 0)) return 0; const st = /^(g|ml)$/.test(unit) ? 5 : /^(oz|fl oz|cup|lb|kg|tbsp|tsp)$/.test(unit) ? 0.25 : 0.5; return Math.max(st, Math.round(v / st) * st); };
+
   /* Anything you ate that wasn't in the plan: a yogurt cup, a coffee, a second banana. */
   const scaleMicros = (m, f) => { const o = {}; for (const k in m) o[k] = typeof m[k] === 'number' ? Math.round(m[k] * f * 100) / 100 : m[k]; o.estimate = m.estimate !== false; return o; };
   function addFood(d, o) {
@@ -184,7 +232,7 @@
     const recent = []; const seen = new Set(lib.map(x => String(x.name).toLowerCase()));
     (Store.data.eaten || []).filter(e => e.extra && e.name).sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).forEach(e => { const k = e.name.toLowerCase(); if (!seen.has(k) && recent.length < 6) { seen.add(k); recent.push(e); } });
     const picks = lib.map(x => Object.assign({ from: 'lib' }, x)).concat(recent.map(x => ({ name: x.name, amount: x.amount, unit: x.unit, macros: x.macros, micros: x.micros || null, from: 'recent' })));
-    let slot = ed ? ed.slot || slotNow() : o.slot || slotNow(), base = null, touched = false, mbase = null;
+    let slot = ed ? ed.slot || slotNow() : o.slot || slotNow(), base = null, touched = false, mbase = null, own = null, unitSet = false;
     ui.sheet({ title: ed ? ed.name : 'Add food', kicker: ed ? (Plan.foodOff(U.parseKey(ed.date)) ? 'Off day' : 'Something extra') : Plan.foodOff(d) ? 'Off day' : 'Not in the plan', foot: true, onClose: () => { o.after && o.after(); Opus.refresh(); }, render(api) {
       const b = api.body;
       let search = null;
@@ -197,9 +245,10 @@
       }
       const nm = h('<div class="field"><label for="af-name">What was it</label><input class="input" id="af-name" placeholder="Yogurt cup" autocomplete="off"></div>');
       b.appendChild(nm);
-      const ar = h('<div class="grid2 af-amt"><div class="field"><label>Amount</label></div><div class="field"><label for="af-unit">Unit</label><input class="input" id="af-unit" placeholder="cup, g, bar" autocomplete="off"></div></div>');
+      const ar = h('<div class="grid2 af-amt"><div class="field"><label>Amount</label></div><div class="field"><label for="af-unit">Unit</label><input class="input" id="af-unit" placeholder="cup, oz, each" autocomplete="off" autocapitalize="off" spellcheck="false"></div></div>');
+      const uc = h('<div class="chips af-units" role="group" aria-label="Unit"></div>');
       const st = ui.stepper({ label: 'Amount', value: 1, step: (v, dir) => Math.max(0, Math.round(((v || 0) + stepFor(v || 1, b.querySelector('#af-unit').value) * dir) * 100) / 100), onChange: () => scale() });
-      ar.children[0].appendChild(st.el); b.appendChild(ar);
+      ar.children[0].appendChild(st.el); b.appendChild(ar); b.appendChild(uc);
       const sl = h('<div class="sec"><div class="sh"><span class="t">With</span></div><div class="chips"></div></div>');
       SLOT_KEYS.forEach(k => { const ch = h('<button class="chip" type="button" data-s="' + k + '">' + SLOTS[k] + '</button>'); ch.onclick = () => { slot = k; drawSlot(); }; sl.querySelector('.chips').appendChild(ch); });
       const drawSlot = () => sl.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.s === slot));
@@ -213,16 +262,53 @@
       b.appendChild(h('<p class="small" style="padding:0 4px">No numbers? It still counts as eaten, and the day’s totals note it.</p>'));
       const inp = k => b.querySelector('#af-' + k);
       const setMac = x => MK.forEach(([k]) => { inp(k).value = x && x[k] != null ? U.wt(x[k]) : ''; });
-      function fill(x) {
-        inp('name').value = x.name || ''; inp('unit').value = x.unit || ''; st.set(x.amount == null ? 1 : x.amount, true);
-        base = x.macros ? { amount: x.amount == null ? 1 : Number(x.amount), macros: x.macros } : null; touched = false; setMac(x.macros);
-        mbase = x.micros ? { name: String(x.name || '').toLowerCase(), amount: x.amount == null ? 1 : Number(x.amount) || 1, micros: x.micros } : null;
-        keepOn = false; keep.classList.remove('on'); keep.hidden = x.from === 'lib';
+      // the unit chips: tap one and the amount converts, so the numbers stay right
+      function drawUnits() {
+        const cur = canonUnit(inp('unit').value), list = unitsFor(inp('name').value, own);
+        if (cur && !list.includes(cur)) list.unshift(cur);
+        uc.innerHTML = '';
+        list.forEach(u => { const c = h('<button class="chip" type="button"></button>'); c.textContent = u; c.classList.toggle('on', u === cur); c.onclick = () => { setUnit(u, true); ui.buzz(6); }; uc.appendChild(c); });
       }
-      function scale() { if (!base || touched || !base.amount) return; setMac(Plan.scaleMacros(base.macros, (st.get() || 0) / base.amount)); }
+      function setUnit(u, convert) {
+        const was = canonUnit(inp('unit').value), gOld = gramsPer(was, own), gNew = gramsPer(u, own), a = st.get();
+        inp('unit').value = u; unitSet = true;
+        if (convert && gOld && gNew && a > 0 && was !== u) st.set(niceAmt(a * gOld / gNew, u), true);
+        scale(); drawUnits();
+      }
+      // grams for the amount on screen, when the unit's weight is known
+      const gramsNow = () => { const g = gramsPer(canonUnit(inp('unit').value), own), a = st.get(); return g && a > 0 ? a * g : null; };
+      function fill(x) {
+        inp('name').value = x.name || '';
+        own = readUnit(x.unit); if (!own.g && x.serving && x.serving.g) own.g = Number(x.serving.g) || null;
+        const amt0 = x.amount == null ? 1 : Number(x.amount) || 1;
+        // per gram, when the food's weight is known: from its label per 100 g, or worked out from its macros
+        const g0 = own.g ? amt0 * own.g : null;
+        base = x.macros ? { amount: amt0, macros: x.macros, grams: g0, per100: x.per100 || null } : null; touched = false;
+        mbase = x.micros ? { name: String(x.name || '').toLowerCase(), amount: amt0, grams: g0, micros: x.micros } : null;
+        inp('unit').value = own.unit; st.set(amt0, true); unitSet = !!own.unit;
+        // a better unit for this kind of food, when the food came in grams or a bare serving
+        const best = unitsFor(x.name, null)[0];
+        if (!x.from && best && best !== own.unit && (own.unit === 'g' || own.unit === 'serving' || !own.unit) && g0 && gramsPer(best, own)) { inp('unit').value = best; st.set(FIXED[best] ? niceAmt(g0 / gramsPer(best, own), best) : 1, true); }
+        setMac(null); scale(); if (!base) setMac(x.macros);
+        keepOn = false; keep.classList.remove('on'); keep.hidden = x.from === 'lib';
+        drawUnits();
+      }
+      function scale() {
+        if (!base || touched) return;
+        const g = gramsNow();
+        if (g && base.per100) { setMac(Plan.scaleMacros(Object.assign({ estimate: base.macros.estimate }, base.per100), g / 100)); return; }
+        if (g && base.grams) { setMac(Plan.scaleMacros(base.macros, g / base.grams)); return; }
+        if (!base.amount) return; setMac(Plan.scaleMacros(base.macros, (st.get() || 0) / base.amount));
+      }
+      inp('unit').addEventListener('input', () => { unitSet = true; scale(); drawUnits(); });
+      inp('name').addEventListener('input', () => {
+        if (base) return; // a picked food keeps its own units
+        if (!unitSet) { const best = unitsFor(inp('name').value, null)[0]; if (best && unitsFor('', null)[0] !== best) inp('unit').value = best; else if (!inp('name').value.trim()) inp('unit').value = ''; }
+        drawUnits();
+      });
       const readMac = () => { const o2 = { estimate: true }; let any = false; for (const [k] of MK) { const raw = inp(k).value.trim(); if (raw === '') { o2[k] = null; continue; } const v = Number(raw.replace(',', '.')); if (!(v >= 0)) return false; o2[k] = v; any = true; } if (base && !touched) o2.estimate = base.macros.estimate !== false; else if (any) o2.estimate = false; return any ? o2 : null; };
-      if (ed) { fill({ name: ed.name, amount: ed.amount, unit: ed.unit, macros: ed.macros, micros: ed.micros }); base = null; }
-      drawSlot();
+      if (ed) { fill({ name: ed.name, amount: ed.amount, unit: ed.unit, macros: ed.macros, micros: ed.micros, from: 'entry' }); }
+      drawSlot(); drawUnits();
       const ft = h('<div class="btns">' + (ed ? '<button class="btn quiet" type="button">Remove</button>' : '') + '<button class="btn" type="button">' + (ed ? 'Save' : 'Add') + '</button></div>');
       api.foot.appendChild(ft);
       if (ed) ft.children[0].onclick = () => {
@@ -233,10 +319,10 @@
         const name = inp('name').value.trim(); if (!name) { ui.toast('What did you eat?'); inp('name').focus(); return; }
         const amount = st.get(); if (!(amount > 0)) { ui.toast('Enter an amount'); return; }
         const macros = readMac(); if (macros === false) { ui.toast('Macros: numbers only'); return; }
-        const unit = inp('unit').value.trim();
+        const unit = canonUnit(inp('unit').value), grams = gramsNow();
         // vitamins and minerals carry over from the food you picked, scaled to the amount (only while the name still matches)
-        const micros = mbase && mbase.name === name.toLowerCase() ? scaleMicros(mbase.micros, amount / mbase.amount) : null;
-        const e = Object.assign({ id: ed ? ed.id : newId(d), date: ed ? ed.date : U.key(d), extra: true, name, amount, unit, slot, macros, at: new Date().toISOString() }, micros ? { micros } : {});
+        const micros = mbase && mbase.name === name.toLowerCase() ? scaleMicros(mbase.micros, grams && mbase.grams ? grams / mbase.grams : amount / mbase.amount) : null;
+        const e = Object.assign({ id: ed ? ed.id : newId(d), date: ed ? ed.date : U.key(d), extra: true, name, amount, unit, slot, macros, at: new Date().toISOString() }, grams && !FIXED[unit] ? { grams: Math.round(grams) } : {}, micros ? { micros } : {});
         putEaten(e);
         if (keepOn) {
           const f = Plan.p.food = Plan.p.food || {}; f.library = Array.isArray(f.library) ? f.library : [];

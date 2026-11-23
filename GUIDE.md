@@ -21,7 +21,6 @@ This first part (the core) is the rules every helper needs. Each tab has its own
 | 11. Home and pets | `"home"` | home jobs, pets and pet care |
 | 12. Health | `"health"` | supplements, blood tests, daily amounts |
 | 13. Good requests | `"requests"` | examples of what the owner asks and what to do |
-| 14. When Claude is away | `"away"` | what you can run on your own, what you can't, and how to keep Opus safe |
 
 `section` `"all"` gives the whole guide, in parts.
 
@@ -714,29 +713,3 @@ A hair routine, shown on Body › Hair (Opus 1.34 and later) with its ticks on T
 - "Update my free cash." Read the accounts, then add today's `money.cash` entry with `cash`, `held` and `free`.
 - "Log my money for this week." Read the week from the owner's accounts and add it to `grok.json` under `money.weeks`.
 - "What's still blank in my plan?" List every `null` in `plan.json` by where it is, in plain words.
-
-## 14. When Claude is away
-
-Claude builds the app. When Claude can't be reached for a while, you (Grok, or Cassius) keep Opus running for the owner. Here is exactly where the line sits.
-
-**You can, through the opus connector:**
-
-- Read everything: the plan, the logs, the outbox, Growth, the desk, the shared memory, WHOOP.
-- Change any part of the plan with `update_plan_section`: money, food, training, home and pets, health (supplements, labs reference, `health.hair`), the schedule and Today's checklist. The phone picks it up the next time it opens, and shows the owner what changed.
-- Log for the owner in the outbox: cash, money weeks, balances, weigh-ins, workouts, food eaten, labs, pet care, supplements taken, Memory notes and dates, receipts.
-- Keep the shared memory current, and leave notes on the desk (Claude reads them on return).
-- Cassius alone: the Growth page, with `save_growth`.
-
-**You can't, and shouldn't try:**
-
-- Change how the app looks or works. The app's code is in a separate public repo, and no connector tool writes to it. Put the idea on the desk as a note for Claude instead, with what the owner asked for in their words.
-- Edit `logs.json`, `push.json`, `whoop.json` or any sealed file, tick Today's items for the owner, or set the nightly nose strips. Those are the phone's.
-- Upload or move photos.
-- Fix a sync or token problem yourself. If Opus shows a sync warning, tell the owner what it says; a new GitHub token goes in Settings › Sync.
-
-**Keeping it safe while you run it:**
-
-- Change one part at a time and read it back. A broken plan is refused by the phone (nothing is lost), but the owner then waits.
-- If a change could undo something the owner built with Claude (a whole section, many ids), ask the owner first.
-- Never invent numbers and never change a dose. Leave `null` and ask.
-- Read the desk first: open items from Claude say what's half-built and what not to touch.

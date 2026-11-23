@@ -553,6 +553,8 @@ button.row { width: 100%; background: none; border: 0; border-top: 1px solid var
 .part-row .ck.on { background: radial-gradient(circle at 35% 30%, var(--gold-2), var(--gold) 60%, var(--bronze)); border-color: var(--gold); }
 .part-row .ck.on svg { opacity: 1; }
 .af-amt .field label { display: block; }
+.af-units { margin-top: -4px; }
+.af-units .chip { padding: 6px 12px; }
 
 /* vitamins & minerals, blood tests */
 .body-card { display: flex; flex-direction: column; gap: 14px; }
