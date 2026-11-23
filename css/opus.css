@@ -554,6 +554,8 @@ button.row { width: 100%; background: none; border: 0; border-top: 1px solid var
 .part-row .ck.on svg { opacity: 1; }
 .af-amt .field label { display: block; }
 .af-units { margin-top: -4px; }
+.sp-log { border-top: 0; padding-bottom: 8px; }
+.sp-chips { padding: 0 0 14px; border-bottom: 1px solid var(--line-soft); }
 .af-units .chip { padding: 6px 12px; }
 
 /* vitamins & minerals, blood tests */
