@@ -1334,3 +1334,24 @@ button.g-pline:active { color: var(--gold-2); }
 .sp-fact .q { font-size: 13.5px; color: var(--gold-2); white-space: nowrap; }
 .sp-fact .link { padding: 6px 2px 6px 8px; color: var(--dim); }
 .nbar i.sp.solo { border-radius: 6px; }
+
+/* Food › Today: one group a meal, folding to one line; the same food logged twice in a meal is one row */
+.fd-g { border-top: 1px solid var(--line); }
+.fd-g:first-child { border-top: 0; }
+.fd-gh { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 0 10px; text-align: left; -webkit-tap-highlight-color: transparent; }
+.fd-gh .k { font-family: var(--display); font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--dim); }
+.fd-g.open .fd-gh .k { color: var(--gold-2); }
+.fd-gh .tag { font-size: 9px; padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: 999px; letter-spacing: .18em; }
+.fd-gh .v { margin-left: auto; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.fd-gh .fd-cv { width: 14px; height: 14px; color: var(--faint); transform: rotate(90deg); transition: transform .35s var(--ease); flex: none; }
+.fd-g:not(.open) .fd-gh .fd-cv { transform: rotate(0deg); }
+.fd-sum { font-size: 12.5px; color: var(--dim); padding: 0 0 14px; margin-top: -4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-g.open .fd-sum { display: none; }
+.fd-g:not(.open) .fd-b { display: none; }
+.fd-b > .row:first-child { border-top: 0; padding-top: 6px; }
+.fd-b { padding-bottom: 4px; }
+.fd-row .tx b { font-size: 14.5px; }
+.fd-n { width: 24px; flex: none; display: grid; place-items: center; font-size: 11.5px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.fd-n:not(.many)::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); opacity: .55; }
+.fd-n.many { height: 22px; border-radius: 999px; border: 1px solid var(--line-strong); font-weight: 600; letter-spacing: .02em; }
+.left-din[hidden] { display: none; } /* nothing left to show: no empty box */

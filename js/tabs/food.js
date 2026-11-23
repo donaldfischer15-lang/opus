@@ -98,6 +98,21 @@
   const isWeight = u => /^(g|ml|kg|oz|lb)$/i.test(u || '');
   const stepFor = (amount, unit) => /^(g|ml)$/i.test(unit || '') ? (amount >= 100 ? 10 : 5) : /^(oz|lb|kg|cups?|tbsp|tsp)$/i.test(unit || '') ? .5 : (amount >= 2 ? 1 : .5);
   const amt = (n, unit, name) => { const v = U.wt(n); return isWeight(unit) ? v + ' ' + unit + (name ? ' ' + name : '') : (v + (unit ? ' ' + unit : '') + (name ? ' ' + name : '')); };
+  /* how an amount reads on the day list: the unit without its label notes ("cup (240 ml) (240 g)" reads "cup"), and
+     common fractions where they fit (0.75 serving reads ¾ serving) */
+  const OPEN = {}; // which meals you folded or opened, while Opus is open
+  const unitName = u => String(u || '').replace(/\s*\([^)]*\)/g, '').trim();
+  const FRAC = [[.25, '¼'], [.333, '⅓'], [.5, '½'], [.667, '⅔'], [.75, '¾']];
+  function niceAmount(n, unit) {
+    const u = unitName(unit), v = Number(n);
+    if (!(v > 0)) return u;
+    if (isWeight(u) || /^fl oz$/i.test(u)) return U.wt(v) + ' ' + u;
+    const w = Math.floor(v), f = v - w, fr = FRAC.find(x => Math.abs(x[0] - f) < .04);
+    const num = f < .04 ? String(w) : f > .96 ? String(w + 1) : fr ? (w ? w : '') + fr[1] : U.wt(v);
+    const one = num === '1' || num === '¼' || num === '⅓' || num === '½' || num === '⅔' || num === '¾';
+    return num + (u ? ' ' + (one ? u : plural(u)) : '');
+  }
+  const plural = u => /s$|^(g|ml|oz|lb|kg)$/i.test(u) ? u : /^[a-z]/i.test(u) && !/\s/.test(u) ? u.replace(/(y)$/i, 'ie') + 's' : u;
   const kcal = x => (x && x.kcal != null ? n0(x.kcal) + ' cal' : '');
   const macroTxt = x => (x && x.kcal != null ? n0(x.kcal) + ' cal · ' + n0(x.protein) + ' P · ' + n0(x.carbs) + ' C · ' + n0(x.fat) + ' F' : '');
   const newId = d => U.key(d) + ':x' + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
@@ -465,12 +480,15 @@
     // today: the planned meals, what you actually ate of them, and anything extra
     const today = Plan.itemsFor(d).filter(it => it.kind === 'meal');
     const t = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Today</span><span class="c"></span></div><div class="mac"></div><div class="left-din" hidden><div class="ld-k">Left for dinner</div><div class="ld-v num"></div><small></small></div><div class="card"></div><p class="small mac-note" style="padding:0 4px" hidden></p></div>');
+    let drawDay = () => {};
     const drawTotals = () => {
       const pl = Plan.dayMacros(d), ea = Plan.dayMacros(d, true);
       const box = t.querySelector('.mac'); box.innerHTML = '';
       if ((pl.meals && pl.missing < pl.meals) || ea.extras) {
-        box.appendChild(h(macroStats(pl, ea)));
-        t.querySelector('.sh .c').textContent = pl.estimate || ea.estimate ? 'estimates' : '';
+        // no meal plan today (a day off): the big numbers are what you ate, not a plan of zeros
+        const noPlan = !pl.meals || pl.missing >= pl.meals;
+        box.appendChild(h(noPlan ? macroStats(ea) : macroStats(pl, ea)));
+        t.querySelector('.sh .c').textContent = noPlan ? 'eaten' + (ea.estimate ? ', estimates' : '') : pl.estimate || ea.estimate ? 'estimates' : '';
       }
       const note = t.querySelector('.mac-note'), bits = [];
       const bu = Opus.whoop && Opus.whoop.burned(d); if (bu) bits.push('WHOOP: ' + bu.kcal.toLocaleString('en-US') + ' cal burned' + (bu.open ? ' so far today' : ' today') + '.');
@@ -490,26 +508,85 @@
       }
     };
     const card = t.querySelector('.card');
-    if (!today.length) card.appendChild(h('<p class="empty">' + (Plan.foodOff(d) ? 'Off day. No meal plan today, so log what you eat as you go.' : 'No meals planned today.') + '</p>'));
-    today.forEach(it => {
+    if (!today.length && !Plan.eatenOn(d).some(e => e.extra)) card.appendChild(h('<p class="empty">' + (Plan.foodOff(d) ? 'Off day. No meal plan today, so log what you eat as you go.' : 'No meals planned today.') + '</p>'));
+    const mealRow = it => {
       const on = Plan.isChecked(d, it.id), ml = macroLine(it.meal), el = on ? eatenLine(d, it) : null, sk = !on && Plan.eatenEntry(d, it.id) && Plan.eatenEntry(d, it.id).skipped;
-      const r = h('<div class="row tap' + (on ? ' done' : '') + (el ? ' part' : '') + (sk ? ' skip' : '') + '"><span class="ck" role="checkbox" aria-checked="' + on + '" aria-label="Eaten">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.meal.name) + '</b><small class="num">' + U.esc(el || (sk ? 'Skipped' : ml || it.meal.how || '')) + '</small></span><span class="tm num">' + U.fmtTime(it.time) + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
+      const r = h('<div class="row tap fd-row' + (on ? ' done' : '') + (el ? ' part' : '') + (sk ? ' skip' : '') + '"><span class="ck" role="checkbox" aria-checked="' + on + '" aria-label="Eaten">' + ui.CK + '</span><span class="tx"><b>' + U.esc(it.meal.name) + '</b><small class="num">' + U.esc(el || (sk ? 'Skipped' : ml || it.meal.how || '')) + '</small></span><span class="tm num">' + U.fmtTime(it.time) + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
       r.onclick = e => {
         if (!e.target.closest('.ck')) { eatSheet(d, it); return; }
         const n = !Plan.isChecked(d, it.id); Plan.setChecked(d, it.id, n);
         const en = Plan.eatenEntry(d, it.id); if (n && en && en.skipped) dropEaten(en.id);
-        Store.save(); r.classList.toggle('done', n); r.querySelector('.ck').setAttribute('aria-checked', n); ui.buzz(10);
-        const l2 = n ? eatenLine(d, it) : null; r.classList.toggle('part', !!l2); r.classList.remove('skip');
-        r.querySelector('small').textContent = l2 || ml || it.meal.how || ''; drawTotals();
+        Store.save(); ui.buzz(10); drawDay(); drawTotals(); Opus.todayRefresh && Opus.todayRefresh();
       };
-      card.appendChild(r);
-    });
-    const extras = Plan.eatenOn(d).filter(e => e.extra).sort((a, b) => SLOT_KEYS.indexOf(a.slot) - SLOT_KEYS.indexOf(b.slot) || String(a.at).localeCompare(String(b.at)));
-    extras.forEach(e => {
-      const r = h('<div class="row tap extra"><span class="plus-dot">' + ui.icon('plus') + '</span><span class="tx"><b>' + U.esc(e.name) + '</b><small class="num">' + U.esc([amt(e.amount, e.unit), kcal(e.macros) || 'no macros', e.by === 'grok' ? 'from Grok' : ''].filter(Boolean).join(' · ')) + '</small></span><span class="tm">' + U.esc(SLOTS[e.slot] || '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
-      r.onclick = () => addFood(d, { entry: e });
-      card.appendChild(r);
-    });
+      return r;
+    };
+    drawDay = () => {
+      card.querySelectorAll('.fd-g').forEach(x => x.remove());
+      // one group a meal: the planned meal, then what you added, with the same food in one row
+      const groups = {}, order = SLOT_KEYS.slice(), g = k => (groups[k] = groups[k] || { meals: [], foods: new Map(), last: '' });
+      for (const it of today) { const k = SLOTS[it.slot] ? it.slot : 'other'; g(k).meals.push(it); if (!order.includes(k)) order.push(k); }
+      const extras = Plan.eatenOn(d).filter(e => e.extra).sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+      for (const e of extras) {
+        const k = SLOTS[e.slot] ? e.slot : 'other', gr = g(k), key = String(e.name || '').trim().toLowerCase();
+        if (!order.includes(k)) order.push(k);
+        (gr.foods.get(key) || gr.foods.set(key, []).get(key)).push(e);
+        if (String(e.at || '') > gr.last) gr.last = String(e.at || '');
+      }
+      const has = order.filter(k => groups[k] && (groups[k].meals.length || groups[k].foods.size));
+      if (!has.length) return;
+      // the meal you're on stays open; earlier ones fold to one line once they're done
+      const cur = slotNow(), latest = has.slice().sort((a, b) => (groups[b].last || '').localeCompare(groups[a].last || ''))[0];
+      for (const k of has) {
+        const gr = groups[k], tot = { kcal: 0, protein: 0 }, names = [];
+        let none = 0, planned = 0;
+        for (const it of gr.meals) {
+          names.push(it.meal.name);
+          if (!Plan.isChecked(d, it.id)) { const x = Plan.macros(it.meal); if (x && x.kcal != null) planned += x.kcal; continue; }
+          const en = Plan.eatenEntry(d, it.id), x = en && !en.skipped && en.macros ? en.macros : Plan.macros(it.meal);
+          if (x && x.kcal != null) { tot.kcal += x.kcal; tot.protein += Number(x.protein) || 0; } else none++;
+        }
+        for (const es of gr.foods.values()) { names.push(es[0].name); for (const e of es) { if (e.macros && e.macros.kcal != null) { tot.kcal += e.macros.kcal; tot.protein += Number(e.macros.protein) || 0; } else none++; } }
+        const count = gr.meals.length + gr.foods.size, ate = tot.kcal > 0;
+        const open = OPEN[U.key(d) + k] != null ? OPEN[U.key(d) + k] : (k === cur || k === latest || count <= 2);
+        const wrap = h('<div class="fd-g' + (open ? ' open' : '') + '"><button class="fd-gh" type="button" aria-expanded="' + open + '"><span class="k">' + U.esc(SLOTS[k] || 'Other') + '</span>' + (k === cur ? '<span class="tag">Now</span>' : '') +
+          '<span class="v num">' + (ate ? n0(tot.kcal) + ' cal · ' + n0(tot.protein) + ' P' : planned ? n0(planned) + ' cal planned' : '') + '</span>' + ui.icon('chev', 'ico fd-cv') + '</button>' +
+          '<div class="fd-sum"></div><div class="fd-b"></div></div>');
+        wrap.querySelector('.fd-sum').textContent = names.join(' · ');
+        wrap.querySelector('.fd-gh').onclick = () => { const o = !wrap.classList.contains('open'); OPEN[U.key(d) + k] = o; wrap.classList.toggle('open', o); wrap.querySelector('.fd-gh').setAttribute('aria-expanded', o); ui.buzz(4); };
+        const body = wrap.querySelector('.fd-b');
+        gr.meals.forEach(it => body.appendChild(mealRow(it)));
+        for (const es of gr.foods.values()) body.appendChild(foodRow(es));
+        card.appendChild(wrap);
+      }
+    };
+    // one food, however many times you logged it in this meal
+    const foodRow = es => {
+      const e0 = es[0], n = es.length, kc = es.reduce((s, e) => s + (e.macros && e.macros.kcal != null ? e.macros.kcal : 0), 0), anyKc = es.some(e => e.macros && e.macros.kcal != null);
+      const same = es.every(e => unitName(e.unit) === unitName(e0.unit));
+      const total = same ? niceAmount(es.reduce((s, e) => s + (Number(e.amount) || 0), 0), e0.unit) : es.map(e => niceAmount(e.amount, e.unit)).join(' + ');
+      const bits = [total, anyKc ? n0(kc) + ' cal' : 'no macros', es.some(e => e.by === 'grok') ? 'from Grok' : ''].filter(Boolean);
+      const r = h('<div class="row tap fd-row extra"><span class="fd-n' + (n > 1 ? ' many' : '') + '">' + (n > 1 ? '×' + n : '') + '</span><span class="tx"><b></b><small class="num"></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+      r.querySelector('b').textContent = e0.name; r.querySelector('small').textContent = bits.join(' · ');
+      if (n > 1) r.querySelector('.fd-n').setAttribute('aria-label', 'Logged ' + n + ' times');
+      r.onclick = () => n === 1 ? addFood(d, { entry: e0 }) : timesSheet(es);
+      return r;
+    };
+    // tap a food you logged more than once: each time, to change or take out one of them
+    const timesSheet = es => ui.sheet({ title: es[0].name, kicker: (SLOTS[es[0].slot] || 'Food') + ' · ' + es.length + ' times', render(api) {
+      const c = h('<div class="card"></div>');
+      es.forEach(e => {
+        const t0 = e.at ? new Date(e.at) : null, tm = t0 && !isNaN(t0) ? U.fmtTimeAP(U.pad(t0.getHours()) + ':' + U.pad(t0.getMinutes())) : '';
+        const r = h('<div class="row tap"><span class="tx"><b></b><small class="num"></small></span><span class="tm num"></span>' + ui.icon('chev', 'chev ico') + '</div>');
+        r.querySelector('b').textContent = niceAmount(e.amount, e.unit) || '1'; r.querySelector('small').textContent = kcal(e.macros) || 'no macros'; r.querySelector('.tm').textContent = tm;
+        r.onclick = () => { api.close(); addFood(d, { entry: e }); };
+        c.appendChild(r);
+      });
+      api.body.appendChild(c);
+      const b = h('<div class="btns"><button class="btn ghost" type="button">Log one more</button></div>');
+      b.firstChild.onclick = () => { const e0 = es[es.length - 1]; api.close(); logAgain(d, { last: e0, slots: { [e0.slot]: 1 } }); };
+      api.body.appendChild(b);
+    } });
+    drawDay();
     const again = againPicks(d);
     if (again.length) {
       const ag = h('<div class="again"><div class="again-k">Again</div><div class="chips"></div></div>');
@@ -534,7 +611,7 @@
     v.appendChild(t);
 
     // this week and next
-    const wkSec = h('<div class="sec"><div class="sh"><span class="r">II</span><span class="t">The rotation</span><span class="c">' + U.esc(planDaysLabel()) + '</span></div><div class="card"></div></div>');
+    const wkSec = h('<div class="sec"><div class="sh"><span class="r">VI</span><span class="t">The rotation</span><span class="c">' + U.esc(planDaysLabel()) + '</span></div><div class="card"></div></div>');
     const nextW = Plan.rotationWeek(U.addDays(U.weekStart(d), 7));
     const meals = Plan.weekMeals(d), nmeals = Plan.weekMeals(U.addDays(U.weekStart(d), 7));
     meals.forEach(m => {
@@ -548,7 +625,7 @@
       meals.forEach(m => { const x = Plan.macros(m); if (x && x.kcal != null) { any = true; if (x.estimate) est = true; sum.kcal += x.kcal; sum.protein += x.protein || 0; } });
       if (any) wkSec.appendChild(h('<p class="small num" style="padding:0 4px">A day of this week’s meals is about ' + n0(sum.kcal) + ' calories and ' + n0(sum.protein) + ' g protein' + (est ? ' (estimates)' : '') + '.</p>'));
     }
-    v.appendChild(wkSec);
+    if (Opus.supps) Opus.supps.section(v, 'II');
 
     // prep
     const pc = prepCard(d);
@@ -571,7 +648,7 @@
     { const r = h('<div class="row tap bd-moved"><span class="tx"><b>Weigh-ins</b><small>On Body now, with your trend and goal</small></span>' + ui.icon('chev', 'chev ico') + '</div>'); r.onclick = () => Opus.go('train'); const c = h('<div class="sec"><div class="card"></div></div>'); c.querySelector('.card').appendChild(r); v.appendChild(c); }
 
     if (Opus.body) Opus.body.section(v, 'V');
-    if (Opus.supps) Opus.supps.section(v, 'VI');
+    v.appendChild(wkSec);
 
     if ((f.rules || []).length) {
       const r = h('<div class="sec"><div class="sh"><span class="r">VII</span><span class="t">House rules</span></div><div class="card"></div></div>');

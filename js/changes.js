@@ -245,6 +245,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.36.0': [['food', 'Today on Food is grouped by Breakfast, Lunch, Snack and Dinner, each with its calories and protein. Tap a meal to fold it to one line; the meal you’re on stays open. The same food logged more than once in a meal is one row with the total (tap it to see or change each time). Amounts read plainly, like ⅔ cup or ¾ serving. On a day with no meal plan the big numbers are what you ate. Supplements moved up, and The rotation moved down.']],
     '1.35.1': [['food', 'Supplements on Food, redone: grouped by morning, workday and evening with a check to log each, Took all for a whole group, the dose and the last seven days on the right, the time you took it, what each adds to vitamins and minerals, and a quiet note when a total from supplements is above the general daily upper limit.']],
     '1.35.0': [['food', 'Supplements on Food has Took one today?: tap any supplement to log it for today, tap again to take it back. A supplement can be set to When I take it, for the ones you don’t take every day; those stay off Today and show how often you took them.']],
     '1.34.1': [['food', 'Add food picks a unit that fits the food (cups for milk, oz for meat, each for eggs, bar for bars) with the other units as taps under it. Tap one and the amount converts, so the calories stay right. Typing oz, g or fl oz works too.']],
