@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.38.0';
+  Opus.VERSION = '1.38.1';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -242,13 +242,20 @@
     partsOf(m) {
       if (!m) return [];
       if (Array.isArray(m.parts) && m.parts.length) return m.parts.map(p => ({ name: p.name, amount: p.amount == null ? 1 : Number(p.amount), unit: p.unit || '', macros: p.macros || null, micros: p.micros || null }));
-      // no parts written yet: read them off the serving line ("4 large eggs, 1 banana"), without macros
-      return String(m.serving || '').split(/,\s*(?![^()]*\))|\s+and\s+(?=\d)/).map(t => t.trim()).filter(Boolean).map(t => {
+      // no parts written yet: read them off the serving line ("4 large eggs, 1 banana"), without macros.
+      // A bare amount ("251 g") is the meal itself, and a note ("your saved entry (estimate until the label)",
+      // "about 2 cups") is not a food, so it's dropped once a real part is there.
+      const NOTE = /^(\(.*\)|(your|my|the saved|saved|see|per|estimate[ds]?|est\.|approx\w*|about|roughly|until|based|from|note|label|or|if)\b)/i;
+      const cut = String(m.serving || '').split(/,\s*(?![^()]*\))|;\s*|\s+and\s+(?=\d)/).map(t => t.trim()).filter(Boolean);
+      const out = cut.map(t => {
         const x = t.match(/^(\d+(?:\.\d+)?|[½¼¾])\s*(g|kg|oz|lb|ml|cups?|tbsp|tsp)?\b\s*(.*)$/i);
-        if (!x) return { name: t, amount: 1, unit: '', macros: null };
+        if (!x) return { name: t, amount: 1, unit: '', macros: null, note: NOTE.test(t) };
         const n = { '½': .5, '¼': .25, '¾': .75 }[x[1]] || Number(x[1]);
-        return { name: x[3] || t, amount: n, unit: (x[2] || '').toLowerCase(), macros: null };
+        const nm = String(x[3] || '').replace(/^of\s+/i, '').trim();
+        return { name: nm || m.name || t, amount: n, unit: (x[2] || '').toLowerCase(), macros: null };
       });
+      const keep = out.filter(p => !p.note);
+      return (keep.length ? keep : out.slice(0, 1).map(p => Object.assign(p, { name: m.name || p.name }))).map(({ note, ...p }) => p);
     },
     sumMacros(list) {
       const o = { kcal: 0, protein: 0, carbs: 0, fat: 0, estimate: false };
