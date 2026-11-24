@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.42.0': [['growth', 'The sitting opens with Your task: the question, about how long it takes, and one plain line on what to do. Cassius’s letter follows, and your answer sits at the bottom once you’ve written it.']],
     '1.41.2': [['growth', 'Fixed: Answer in writing on the sitting did nothing when Listen was there. It opens the answer sheet again.']],
     '1.41.1': [['settings', 'Fixed: plan changes from Grok and Cassius failed to save since Monday night. They save again.']],
     '1.41.0': [['money', 'Tap a bill in Before payday to say it already came out, from one of your accounts or another way, like a card or Apple Cash. Opus stops holding it back right away, and Grok can mark one the same way.']],

@@ -141,6 +141,24 @@
     Opus.today.writeSheet(after, Object.assign({ free: true, placeholder: 'Plain sentences. Say it the way you’d say it to a friend.' }, o));
   }
 
+  /* "Your task": the first thing on a sitting, so what's asked of him is never buried in the letter.
+     growth.json lesson.task is Cassius's own plain line of what to do; without it Opus says it from the form */
+  function taskHow(l) {
+    if (typeof l.task === 'string' && l.task.trim()) return l.task.trim();
+    if (!asks(l)) return /^quiet/i.test(l.form || '') ? 'Nothing to write today. Read it, then let it sit.' : 'Just read it. Nothing to write today.';
+    return (/cold/i.test(l.form || '') ? 'Answer from your own head first. Don’t look anything up. ' : '') +
+      'Tap Answer in writing below, or talk it through with Cassius. A few plain sentences is enough.';
+  }
+  function taskBox(l, ans) {
+    const ask = asks(l);
+    const el = h('<div class="g-task' + (ans ? ' done' : '') + '"><div class="gt-head"><span class="tag">Your task</span><span class="small num"></span></div>' +
+      (ask ? '<div class="gt-q"></div>' : '') + '<p class="gt-how"></p>' + (ans ? '<div class="gt-done small"></div>' : '') + '</div>');
+    set(el, '.gt-head .small', 'About ' + readMins(l) + ' min');
+    if (ask) set(el, '.gt-q', l.question);
+    set(el, '.gt-how', taskHow(l));
+    if (ans) set(el, '.gt-done', 'Done. You answered ' + ago(ans.date) + ' (' + ans.words + ' words). Your answer is at the bottom.');
+    return el;
+  }
   /* what Listen reads for a sitting: the title, the letter, what to take with you, and the question */
   const listenTo = l => ({ who: 'Cassius', title: l.title || 'The sitting', pieces: [l.title, l.body, l.takeaway ? 'Take with you. ' + l.takeaway : null, asks(l) ? 'Cassius asks. ' + l.question : null] });
   function lessonSheet(l, after) {
@@ -149,14 +167,10 @@
       title: l.title || 'The sitting', kicker: [l.form || 'The sitting', ago(l.date) === 'today' ? null : ago(l.date), readMins(l) + ' min'].filter(Boolean).join(' · '), foot: true,
       render(api) {
         const b = api.body;
-        b.appendChild(h('<div class="g-prose">' + (prose(l.body) || '<p class="note">Cassius left a title and nothing more today. Some days that is the lesson.</p>') + '</div>'));
+        b.appendChild(taskBox(l, ans));
+        b.appendChild(h('<div class="g-prose">' + (l.body ? '<div class="g-lh">Cassius’s letter</div>' : '') + (prose(l.body) || '<p class="note">Cassius left a title and nothing more today. Some days that is the lesson.</p>') + '</div>'));
         if (l.takeaway) b.appendChild(take('Take with you', l.takeaway));
-        if (asks(l)) {
-          const q = h('<div class="card pad g-ask"><div class="tag">Cassius asks</div><div class="serif-h"></div>' + (ans ? '<div class="small" style="margin-top:8px"></div>' : '') + '</div>');
-          set(q, '.serif-h', l.question); if (ans) set(q, '.small', 'You answered ' + ago(ans.date) + ' · ' + ans.words + ' words');
-          b.appendChild(q);
-          if (ans) b.appendChild(h('<div class="g-mine g-prose">' + prose(ans.text) + '</div>'));
-        }
+        if (ans) b.appendChild(h('<div class="g-mine g-prose"><div class="g-lh">Your answer</div>' + prose(ans.text) + '</div>'));
         const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans)); if (n) b.appendChild(noteBox(n, ans ? 'Cassius on your answer' : 'Cassius on this'));
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
         const btns = h('<div class="btns">' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
