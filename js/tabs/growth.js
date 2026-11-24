@@ -161,6 +161,7 @@
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
         const btns = h('<div class="btns">' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
         btns.insertBefore(talkLink('btn quiet', 'Talk it through'), btns.firstChild);
+        if (Opus.voice && l.body) btns.insertBefore(Opus.voice.button(l, 'btn quiet', 'Listen'), btns.firstChild);
         if (asks(l)) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'The sitting', tag: 'Cassius asks' }); };
         api.foot.appendChild(btns);
       }
@@ -261,7 +262,7 @@
     const c = h('<div class="card pad g-class tap' + (ans ? ' answered' : '') + (readOnly(l) ? ' g-read' : '') + '">' +
       '<div class="g-meta"><span class="tag"></span><span class="small num"></span></div><div class="serif-h" style="margin-top:6px"></div>' +
       (firstPara(l.body) ? '<p class="g-first"></p>' : '') + (ask ? '<div class="g-q"><span class="tag">Cassius asks</span><div></div></div>' : '') +
-      '<div class="g-cfoot"><span class="g-state small"></span>' + (l.why ? '<button class="link g-whyb" type="button">Why this, today?</button>' : '') + '</div>' +
+      '<div class="g-cfoot"><span class="g-state small"></span><span class="g-cbtns">' + (l.why ? '<button class="link g-whyb" type="button">Why this, today?</button>' : '') + '</span></div>' +
       (l.why ? '<p class="g-whyt" hidden></p>' : '') + '</div>');
     set(c, '.g-meta .tag', l.form || 'The sitting');
     set(c, '.g-meta .small', [u ? u.subject.name + ' ' + U.roman(u.n) : null, readMins(l) + ' min', old ? ago(l.date) : null].filter(Boolean).join(' · '));
@@ -273,6 +274,7 @@
       const wb = c.querySelector('.g-whyb'), wt = c.querySelector('.g-whyt'); wt.textContent = l.why;
       wb.onclick = ev => { ev.stopPropagation(); wt.hidden = !wt.hidden; wb.textContent = wt.hidden ? 'Why this, today?' : 'Hide the why'; };
     }
+    if (Opus.voice && l.body) c.querySelector('.g-cbtns').prepend(Opus.voice.button(l, 'link g-listen', 'Listen'));
     const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans));
     if (n) c.appendChild(noteBox(n, (ans ? 'Cassius on your answer' : 'Cassius on this') + ' · ' + ago(n.date)));
     c.onclick = () => lessonSheet(l, () => Opus.refresh());

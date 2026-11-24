@@ -1436,3 +1436,28 @@ button.g-pline:active { color: var(--gold-2); }
 .g-wait p.small { margin: 6px 0 0; color: var(--dim); line-height: 1.45; }
 .g-wait.g-unow { cursor: default; }
 .g-sname:disabled { opacity: 1; color: inherit; cursor: default; }
+
+/* Cassius's voice (js/voice.js): the player reuses the listen dock */
+.g-cbtns { display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.g-listen { color: var(--gold-2); font-weight: 600; }
+.vdock .lbl { text-align: left; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.vdock .lbl .lp { height: 3px; margin-top: 8px; padding: 6px 0; background-clip: content-box; }
+.vdock .lbl .lp u { transition: width .25s linear; }
+.vdock .lb svg.ln { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; width: 24px; height: 24px; }
+.vdock .lb svg.ln text { fill: currentColor; stroke: none; font: 700 6.6px var(--sans); }
+.vdock .lb.main:disabled { opacity: .55; }
+.vdock.waiting .lbl span { white-space: normal; line-height: 1.3; }
+.vdock.waiting .lp u { width: 30% !important; animation: vwait 1.4s ease-in-out infinite; }
+@keyframes vwait { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.v-steps ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+.v-steps b { color: var(--ink); }
+.v-msg.warn { color: var(--warn); }
+.v-bar { height: 6px; border-radius: 6px; background: var(--line); margin: 12px 0 10px; overflow: hidden; }
+.v-bar u { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #c98a4c, #f0c88f); border-radius: 6px; }
+.v-usetx { margin: 0; color: var(--ink-2); }
+.v-row { gap: 12px; }
+.v-dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); flex: none; display: grid; place-items: center; }
+.v-row.on .v-dot::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
+.v-row.on b { color: var(--gold-2); }
+.v-pv { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); color: var(--ink-2); flex: none; }
+.v-pv svg { width: 14px; height: 14px; fill: currentColor; }

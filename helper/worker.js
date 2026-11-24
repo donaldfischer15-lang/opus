@@ -21,6 +21,7 @@
                    the same finished address, https://<worker>/<cassius key>/mcp.
     WHOOP app      client id and secret, typed once into the page at https://<worker>/<ACCESS_KEY>/whoop.
   A CASSIUS_KEY, WHOOP_CLIENT_ID or WHOOP_CLIENT_SECRET secret set in Cloudflare still wins over the kept one.
+  ElevenLabs (1.27.0): the owner's API key, pasted once into Opus (Growth › Listen), is kept sealed here as well. See voiceRoute.
   WHOOP (1.13.0): once its app is known, the helper pulls the owner's WHOOP data into whoop.json
   (see the WHOOP section below). Grok and Cassius can read it; nobody writes it but the helper.
   Notifications: Opus writes push.json (push address + schedule); this helper sends what falls due every five minutes.
@@ -29,7 +30,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.26.0';
+const VERSION = '1.27.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -1013,6 +1014,127 @@ async function voiceSamples(env, now) {
   } finally { voiceBusy = false; }
 }
 
+/* ---------- Cassius's voice: ElevenLabs (since 1.27.0) ----------
+   The owner's own ElevenLabs account (he signs up and pays ElevenLabs himself). He pastes its API key into Opus once;
+   the phone hands it here and the helper keeps it sealed in keys.json as "eleven" (never in a repo in the open, never
+   on the phone, never on the public site). On the first play of a sitting the helper reads it aloud once with
+   ElevenLabs and saves the mp3 to voice/lessons/ in opus-data; every later play reads that file, so a lesson costs
+   its characters once. voice/lessons.json lists what was made and how many characters each month took.
+   The phone talks to POST /voice with its phone key (X-Opus-Key), as the food camera does:
+     { do: "status" }                         ready?, plan, characters used this month, the account's voices
+     { do: "key", key }                       check the key with ElevenLabs, then keep it sealed
+     { do: "forget" }                         drop the kept key
+     { do: "make", date, voice, fast }        the sitting of that date read aloud: { file, chars, cached } */
+const EL = 'https://api.elevenlabs.io';
+const EL_MODELS = { best: 'eleven_multilingual_v2', fast: 'eleven_flash_v2_5' };
+const VL_INDEX = 'voice/lessons.json';
+const VL_KEEP = 120;
+const VOICE_FIT = ['Bill', 'George', 'Brian', 'Daniel', 'Adam']; // older, calm, measured: the first of these the account has
+let voicesCache = null; // { at, list }
+const voiceBusy2 = new Map();
+async function elevenKey(env) { if (env.ELEVENLABS_API_KEY) return String(env.ELEVENLABS_API_KEY); try { const k = await readKept(env); return k.keys.eleven || null; } catch (e) { return null; } }
+async function elFetch(key, path, opts) {
+  const r = await fetch(EL + path, Object.assign({}, opts || {}, { headers: Object.assign({ 'xi-api-key': key }, (opts && opts.headers) || {}) }));
+  if (r.ok) return r;
+  let d = null; try { d = (await r.json()).detail; } catch (e) {}
+  const st = String((d && d.status) || ''), m = String((d && d.message) || (typeof d === 'string' ? d : '') || '');
+  const e = new Error(r.status === 401 && /permission/i.test(st + m) ? 'The ElevenLabs key is missing a permission: ' + (m || st).slice(0, 160)
+    : r.status === 401 ? 'ElevenLabs didn’t accept the key. Copy it again from ElevenLabs › Developers › API Keys.'
+    : /quota|credits|character_limit/i.test(st + m) ? 'This month’s ElevenLabs characters are used up. They come back when the plan resets.'
+    : r.status === 429 ? 'ElevenLabs is busy right now. Try again in a minute.'
+    : 'ElevenLabs answered ' + r.status + (m ? ': ' + m.slice(0, 160) : ''));
+  e.code = r.status === 401 ? 'key' : /quota|credits|character_limit/i.test(st + m) ? 'quota' : 'fail'; throw e;
+}
+const voiceScore = v => { const l = v.labels || {}, t = (Object.values(l).join(' ') + ' ' + (v.description || '')).toLowerCase();
+  return (/\bmale\b/.test(l.gender || '') && !/female/.test(l.gender || '') ? 2 : 0) + (/\bold\b/.test(l.age || '') ? 3 : /middle/.test(l.age || '') ? 1 : 0)
+    + (/calm|wise|deep|warm|mature|trustworthy|authoritative|measured|soothing/.test(t) ? 1 : 0) + (/narrat|story|audiobook/.test(t) ? 1 : 0); };
+async function elVoices(key, fresh) {
+  if (!fresh && voicesCache && Date.now() - voicesCache.at < 3600e3) return voicesCache.list;
+  const j = await (await elFetch(key, '/v1/voices')).json();
+  const list = (j.voices || []).filter(v => v && v.voice_id && v.name).map(v => ({ id: v.voice_id, name: String(v.name).split(/\s+-\s+/)[0].slice(0, 40), about: [v.labels && v.labels.age, v.labels && v.labels.accent, v.labels && (v.labels.description || v.labels.descriptive), v.labels && v.labels.use_case].filter(Boolean).join(', ').replace(/_/g, ' ').slice(0, 80), preview: /^https:\/\//.test(v.preview_url || '') ? v.preview_url : null, own: !!v.category && v.category !== 'premade', score: voiceScore(v) }));
+  const fit = n => { const i = VOICE_FIT.indexOf(n); return i < 0 ? 0 : 10 - i; };
+  list.sort((a, b) => (b.own - a.own) || (b.score * 10 + fit(b.name)) - (a.score * 10 + fit(a.name)) || a.name.localeCompare(b.name)); // voices he added from the library come first
+  voicesCache = { at: Date.now(), list }; return list;
+}
+async function elUsage(key) {
+  try { const s = await (await elFetch(key, '/v1/user/subscription')).json();
+    return { tier: s.tier || null, used: num(s.character_count) ? s.character_count : null, limit: num(s.character_limit) ? s.character_limit : null, resets: num(s.next_character_count_reset_unix) ? new Date(s.next_character_count_reset_unix * 1000).toISOString() : null };
+  } catch (e) { if (e.code === 'key' && !/permission/i.test(e.message)) throw e; return null; } // a key without "User: read" still works; usage then comes from voice/lessons.json
+}
+/* the sitting as Cassius would say it: the Lamp, the lesson, what to take, his question, and the one from before */
+function lessonScript(g, date) {
+  const today = g && isObj(g.lesson) && g.lesson.date === date;
+  const L = today ? g.lesson : (Array.isArray(g && g.lessons) ? g.lessons : []).find(x => x && x.date === date);
+  if (!L || !L.body) return null;
+  const said = t => { const s = sayable(t); return s && !/[.!?…:"”’)]$/.test(s) ? s + '.' : s; };
+  const body = String(L.body).split('\n').map(x => /^#{1,4}\s+/.test(x) ? said(x.replace(/^#{1,4}\s+/, '')) : x).join('\n');
+  const out = [], BR = ' <break time="1.2s" /> ';
+  const e = today && isObj(g.energy) && g.energy.text && (!g.energy.date || g.energy.date === date) ? g.energy : null;
+  if (e) out.push('The lamp, for today. ' + said(e.text) + (e.from ? ' ' + said(e.from) : ''));
+  if (L.title) out.push((today ? 'Today’s sitting. ' : 'The sitting. ') + said(L.title));
+  out.push(sayable(body));
+  if (L.takeaway) out.push('Take this with you. ' + said(L.takeaway));
+  if (L.question && !/^(thought|quiet)/i.test(String(L.form || ''))) out.push('My question for you today. ' + said(L.question));
+  const r = today && isObj(g.recall) && g.recall.question && (!g.recall.date || g.recall.date === date) ? g.recall : null;
+  if (r) out.push('And one from before. ' + said(r.question));
+  return out.filter(Boolean).join('\n\n' + BR + '\n\n').slice(0, 9500);
+}
+async function sha10(s) { const d = new Uint8Array(await crypto.subtle.digest('SHA-256', utf8(s))); return [...d.slice(0, 5)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+async function readVoiceIndex(G) { const cur = await G.get(VL_INDEX); let j = null; if (!cur.missing) { try { j = JSON.parse(cur.text); } catch (e) {} } if (!isObj(j)) j = { format: 'opus-voice-lessons', items: [], months: {} }; if (!Array.isArray(j.items)) j.items = []; if (!isObj(j.months)) j.months = {}; return { j, sha: cur.missing ? null : cur.sha }; }
+async function makeLesson(env, key, b) {
+  const date = isDate(b.date) ? b.date : null; if (!date) return { ok: false, code: 'bad', error: 'Which day?' };
+  const G = gh(env, 'Helper');
+  const gf = await G.get('growth.json'); let g = null; if (!gf.missing) { try { g = JSON.parse(gf.text); } catch (e) {} }
+  const text = lessonScript(g, date); if (!text) return { ok: false, code: 'none', error: 'There’s no sitting for that day to read.' };
+  const voices = await elVoices(key);
+  const v = voices.find(x => x.id === b.voice) || voices[0]; if (!v) return { ok: false, code: 'fail', error: 'Your ElevenLabs account has no voices to read with.' };
+  const model = b.fast ? EL_MODELS.fast : EL_MODELS.best;
+  const h = await sha10(model + '|' + v.id + '|' + text), file = 'voice/lessons/' + date + '-' + h + '.mp3';
+  let { j, sha } = await readVoiceIndex(G);
+  const had = j.items.find(x => x.file === file);
+  if (had) return { ok: true, cached: true, file, chars: 0, voice: v.name, made: had.at };
+  if (voiceBusy2.has(file)) return voiceBusy2.get(file);
+  const job = (async () => {
+    const r = await elFetch(key, '/v1/text-to-speech/' + encodeURIComponent(v.id) + '?output_format=mp3_44100_64', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+      body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.6, similarity_boost: 0.75, style: 0, use_speaker_boost: true, speed: 0.95 } }) });
+    const bytes = new Uint8Array(await r.arrayBuffer()); if (bytes.length < 2000) throw new Error('ElevenLabs sent back no audio.');
+    const chars = Number(r.headers.get('x-character-count')) || text.length;
+    await G.put(file, bytes, null, 'Helper: Cassius’s sitting of ' + date + ' read aloud (' + v.name + ')').catch(e => { if (!e.conflict) throw e; });
+    const month = new Date().toISOString().slice(0, 7);
+    for (let i = 0; i < 3; i++) {
+      if (i) ({ j, sha } = await readVoiceIndex(G));
+      j.items = [{ date, file, voice: v.name, model, chars, bytes: bytes.length, at: new Date().toISOString() }].concat(j.items.filter(x => x.file !== file)).slice(0, VL_KEEP);
+      j.months[month] = (Number(j.months[month]) || 0) + chars;
+      try { await G.put(VL_INDEX, JSON.stringify(j, null, 2) + '\n', sha, 'Helper: voice list'); break; } catch (e) { if (!e.conflict || i === 2) throw e; }
+    }
+    return { ok: true, cached: false, file, chars, voice: v.name };
+  })();
+  voiceBusy2.set(file, job);
+  try { return await job; } finally { voiceBusy2.delete(file); }
+}
+async function voiceRoute(request, env) {
+  const H = { 'Access-Control-Allow-Origin': corsFor(request), 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Opus-Key', 'Access-Control-Max-Age': '86400', 'Cache-Control': 'no-store', Vary: 'Origin' };
+  const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: Object.assign({ 'Content-Type': 'application/json' }, H) });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: H });
+  if (request.method !== 'POST') return J({ ok: false, code: 'bad', error: 'POST only' }, 405);
+  if (!same(request.headers.get('X-Opus-Key') || '', await phoneKey(env))) return J({ ok: false, code: 'phone', error: 'This phone\'s helper key is out of date. Sync Opus and try again.' }, 401);
+  let b; try { b = await request.json(); } catch (e) { return J({ ok: false, code: 'bad', error: 'Bad request' }, 400); }
+  try {
+    if (b.do === 'key') {
+      const k = String(b.key || '').trim();
+      if (!/^[\w-]{20,200}$/.test(k)) return J({ ok: false, code: 'key', error: 'That doesn’t look like an ElevenLabs API key. It usually starts with sk_. Copy it again.' });
+      const voices = await elVoices(k, true); // checks the key works for reading voices
+      await saveKept(env, { eleven: k }, 'ElevenLabs key kept (sealed)'); reported = null;
+      return J({ ok: true, ready: true, usage: await elUsage(k), voices, months: (await readVoiceIndex(gh(env, 'Helper'))).j.months });
+    }
+    if (b.do === 'forget') { if (env.ELEVENLABS_API_KEY) return J({ ok: false, code: 'bad', error: 'The key is set in Cloudflare (ELEVENLABS_API_KEY), so it can only be removed there.' }); await saveKept(env, { eleven: null }, 'ElevenLabs key removed'); voicesCache = null; reported = null; return J({ ok: true, ready: false }); }
+    const key = await elevenKey(env);
+    if (!key) return J({ ok: true, ready: false });
+    if (b.do === 'make') return J(await makeLesson(env, key, b));
+    return J({ ok: true, ready: true, usage: await elUsage(key), voices: await elVoices(key), months: (await readVoiceIndex(gh(env, 'Helper'))).j.months });
+  } catch (e) { return J({ ok: false, code: e.code || 'fail', error: String(e.message || e).slice(0, 240) }); }
+}
+
 let reported = null, reportedAt = 0;
 const WARN_DAYS = [7, 1];
 async function report(env, now) {
@@ -1039,8 +1161,9 @@ async function report(env, now) {
     }
     const token = { expires, warned };
     const phone = { key: await phoneKey(env), url: ORIGIN || (old && isObj(old.phone) && old.phone.url) || null };
-    const same = old && old.version === VERSION && old.push && old.push.key === key && ot && ot.expires === expires && JSON.stringify(ot.warned || []) === JSON.stringify(warned) && isObj(old.phone) && old.phone.key === phone.key && old.phone.url === phone.url;
-    if (!same) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: old && old.version === VERSION && old.since ? old.since : new Date().toISOString(), push: { key }, phone, token }, null, 2) + '\n', cur.sha, old && old.version !== VERSION ? 'Helper: now ' + VERSION : !(old && isObj(old.phone) && old.phone.url === phone.url) ? 'Helper: the phone\'s food camera address' : 'Helper: token ' + (expires ? 'runs out ' + expires.slice(0, 10) : 'has no end date'));
+    const voice = { ready: !!(await elevenKey(env)) };
+    const same = old && old.version === VERSION && old.push && old.push.key === key && ot && ot.expires === expires && JSON.stringify(ot.warned || []) === JSON.stringify(warned) && isObj(old.phone) && old.phone.key === phone.key && old.phone.url === phone.url && isObj(old.voice) && old.voice.ready === voice.ready;
+    if (!same) await G.put('helper.json', JSON.stringify({ format: 'opus-helper', version: VERSION, since: old && old.version === VERSION && old.since ? old.since : new Date().toISOString(), push: { key }, phone, voice, token }, null, 2) + '\n', cur.sha, old && old.version !== VERSION ? 'Helper: now ' + VERSION : !(old && isObj(old.voice) && old.voice.ready === voice.ready) ? 'Helper: Cassius’s voice ' + (voice.ready ? 'is set up' : 'is off') : !(old && isObj(old.phone) && old.phone.url === phone.url) ? 'Helper: the phone\'s food camera address' : 'Helper: token ' + (expires ? 'runs out ' + expires.slice(0, 10) : 'has no end date'));
     reported = VERSION; reportedAt = now;
   } catch (e) { /* try again next time */ }
 }
@@ -1403,6 +1526,8 @@ export default {
     const notFound = () => new Response('Not found', { status: 404 });
     // the phone's food camera: a photo or a typed meal in, what's in it out (see foodRoute)
     if (parts.length === 1 && parts[0] === 'food' && env.ACCESS_KEY && env.GITHUB_TOKEN) return foodRoute(request, env);
+    // Cassius's voice: the sitting read aloud with the owner's own ElevenLabs account (see voiceRoute)
+    if (parts.length === 1 && parts[0] === 'voice' && env.ACCESS_KEY && env.GITHUB_TOKEN) return voiceRoute(request, env);
     if (!env.ACCESS_KEY || String(env.ACCESS_KEY).length < 24 || !env.GITHUB_TOKEN) {
       // made fresh on every visit and never stored: copy it into the ACCESS_KEY secret
       const a = new Uint8Array(24); crypto.getRandomValues(a); const key = [...a].map(x => x.toString(16).padStart(2, '0')).join('');
