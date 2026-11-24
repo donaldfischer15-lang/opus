@@ -149,8 +149,31 @@
     }
     return (Array.isArray(l) ? l : []).filter(x => x && typeof x.amount === 'number');
   }
-  // money on its way between the owner's own accounts: it has left one and not landed in the other, so it still counts as cash
-  const transitOf = c => (Array.isArray(c && c.transfers) ? c.transfers : []).filter(x => x && typeof x.amount === 'number' && x.amount > 0 && x.pending !== false);
+  // money on its way between the owner's own accounts: it has left one and not landed in the other, so it still counts as cash.
+  // It stops being on its way once a landed mark (money.landed: from Grok, or the owner's tap) matches it, even if a later reading still lists it.
+  const tKey = x => String(x.from || '').trim().toLowerCase() + '>' + String(x.to || '').trim().toLowerCase();
+  const sameT = (a, b) => tKey(a) === tKey(b) && Math.abs(a.amount - b.amount) < 0.01;
+  const tTime = s => { s = String(s || ''); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? U.parseKey(s).getTime() : new Date(s).getTime(); };
+  const tDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s)) ? String(s) : U.key(new Date(s));
+  const readAt = c => c.at ? new Date(c.at).getTime() : U.parseKey(c.date).getTime() + 12 * 36e5;
+  const landedList = () => (Store.data.money.landed || []).filter(m => m && !m.delete && typeof m.amount === 'number' && m.at && !isNaN(tTime(m.at)));
+  const listedOf = c => (Array.isArray(c && c.transfers) ? c.transfers : []).filter(x => x && typeof x.amount === 'number' && x.amount > 0 && (x.pending !== false || x.landed));
+  // the first reading, in an unbroken run up to this one, that lists the same transfer as on its way
+  function firstSeen(t, c) {
+    const l = cashList(); let f = c;
+    for (let j = l.indexOf(c) - 1; j >= 0; j--) { if (listedOf(l[j]).some(y => y.pending !== false && sameT(y, t))) f = l[j]; else break; }
+    return f;
+  }
+  // when this transfer landed, if it has: a mark made on or after the day it was first seen. An older reading only counts marks made by its own time.
+  function landingOf(t, c) {
+    if (t.landed && !isNaN(tTime(t.landed))) return { at: t.landed, by: c.by };
+    if (t.pending === false) return null;
+    const f = firstSeen(t, c), latest = c === latestCash();
+    return landedList().filter(m => sameT(m, t) && tDay(m.at) >= f.date && (latest || tTime(m.at) <= readAt(c))).sort((a, b) => tTime(b.at) - tTime(a.at))[0] || null;
+  }
+  const transitOf = c => listedOf(c).filter(x => x.pending !== false && !landingOf(x, c));
+  const landedOf = c => listedOf(c).map(t => ({ t, m: landingOf(t, c) })).filter(o => o.m);
+  const sinceOf = (t, c) => firstSeen(t, c).date;
   // each account's balance: this reading's, or the last one known when this reading left an account out (carried: true)
   function accountsOf(c) {
     if (!c || !Array.isArray(c.accounts) || !c.accounts.length) return [];
@@ -164,10 +187,20 @@
         have.add(n); own.push(Object.assign({ at: l[j].at || null, date: l[j].date }, a, { carried: true }));
       }
     }
+    // money that landed isn't in a balance read while this reading still listed it as on its way, so add it there,
+    // unless that balance has already gone up by about the amount since the transfer was first seen
+    for (const { t, m } of landedOf(c)) {
+      const nm = String(t.to || '').trim().toLowerCase(), a = own.find(x => String(x.name || '').toLowerCase() === nm);
+      const f0 = ((firstSeen(t, c) || {}).accounts || []).find(x => x && String(x.name || '').toLowerCase() === nm && typeof x.amount === 'number');
+      if (a && f0 && a.amount - f0.amount >= t.amount - 1) continue;
+      if (a && t.pending === false && a.at && new Date(a.at).getTime() >= tTime(m.at)) continue;
+      if (a) { a.amount = Math.round((a.amount + t.amount) * 100) / 100; a.landed = (a.landed || 0) + t.amount; }
+      else own.push({ name: t.to || 'Account', amount: t.amount, landed: t.amount, at: null });
+    }
     return own;
   }
   // worked out from the accounts when money is on its way or an account was carried over; Grok's own numbers otherwise
-  const computed = c => !!c && (transitOf(c).length > 0 || accountsOf(c).some(a => a.carried) || (typeof c.cash !== 'number' && accountsOf(c).length > 0));
+  const computed = c => !!c && (transitOf(c).length > 0 || landedOf(c).length > 0 || accountsOf(c).some(a => a.carried) || (typeof c.cash !== 'number' && accountsOf(c).length > 0));
   function cashOf(c) {
     if (!c) return null;
     if (computed(c)) return U.sum(accountsOf(c).map(a => a.amount)) + U.sum(transitOf(c).map(x => x.amount));
@@ -630,8 +663,22 @@
   function acctLine(c) {
     const ac = accountsOf(c), tr = transitOf(c);
     if (!ac.length && !tr.length) return '';
-    return '<div class="fc-accts">' + ac.map(a => { const old = a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : true; return '<span class="' + (old ? 'old' : '') + '"><b>' + U.esc(a.name || 'Account') + '</b> ' + U.money(a.amount) + ' <small>' + U.esc(whenAcct(a)) + '</small></span>'; }).join('') +
-      tr.map(x => '<span class="mv"><b>On its way</b> ' + U.money(x.amount) + ' <small>' + U.esc((x.from || '') + (x.to ? ' \u2192 ' + x.to : '')) + '</small></span>').join('') + '</div>';
+    return '<div class="fc-accts">' + ac.map(a => { const old = !a.landed && (a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : true); return '<span class="' + (old ? 'old' : '') + '"><b>' + U.esc(a.name || 'Account') + '</b> ' + U.money(a.amount) + ' <small>' + U.esc(a.landed ? 'with ' + U.money(a.landed) + ' that landed' : whenAcct(a)) + '</small></span>'; }).join('') +
+      tr.map(x => '<span class="mv"><b>On its way</b> ' + U.money(x.amount) + ' <small>' + U.esc((x.from || '') + (x.to ? ' \u2192 ' + x.to : '') + sinceLabel(x, c)) + '</small></span>').join('') + '</div>';
+  }
+  // ", since Sat" once a transfer has been on its way for more than a day
+  function sinceLabel(t, c) { const d = sinceOf(t, c), n = U.daysBetween(U.parseKey(d), new Date()); return n < 1 ? '' : ', since ' + (n < 7 ? U.DAY_NAMES[U.parseKey(d).getDay()].slice(0, 3) : U.fmtDateShort(d)); }
+  // the owner says a transfer arrived: a landed mark, kept in the logs so every later reading knows it too
+  function markLanded(t, after) {
+    const mo = Store.data.money, at = new Date().toISOString();
+    const m = { id: 'landed-' + at.slice(0, 16).replace(/[^0-9]/g, '') + '-' + Math.round(t.amount), from: t.from || '', to: t.to || '', amount: t.amount, at, by: 'you' };
+    mo.landed = (mo.landed || []).concat([m]); Store.save();
+    ui.toast(U.money(t.amount) + ' landed in ' + (t.to || 'your account'), { label: 'Undo', run: () => {
+      mo.landed = (mo.landed || []).filter(x => x.id !== m.id);
+      const d = Store.data.deleted = Store.data.deleted || {}; (d['money.landed'] = d['money.landed'] || {})[m.id] = new Date().toISOString();
+      Store.save(); after && after();
+    } });
+    after && after();
   }
   function cashSheet() {
     const c = latestCash(); if (!c) { updateCash(); return; }
@@ -641,7 +688,13 @@
       const kv = (k, v, cls) => card.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + v + '</span></div>'));
       const ac = accountsOf(c), tr = transitOf(c), cash = cashOf(c);
       ac.forEach(a => kv(U.esc(a.name || 'Account') + ' <span class="muted">· ' + U.esc((a.carried ? 'last read ' : '') + whenAcct(a)) + '</span>', U.money(a.amount, { cents: true })));
-      tr.forEach(x => kv('On its way' + ' <span class="muted">· ' + U.esc((x.from || 'your account') + (x.to ? ' \u2192 ' + x.to : '')) + '</span>', '+ ' + U.money(x.amount, { cents: true })));
+      ac.filter(a => a.landed).forEach(a => card.appendChild(h('<p class="small" style="margin:-2px 0 6px">' + U.esc(a.name || 'Account') + ' includes ' + U.money(a.landed, { cents: true }) + ' that landed after it was last read' + (a.at ? ' (' + U.esc(whenAcct(a)) + ')' : '') + '.</p>')));
+      tr.forEach(x => {
+        kv('On its way' + ' <span class="muted">· ' + U.esc((x.from || 'your account') + (x.to ? ' \u2192 ' + x.to : '') + sinceLabel(x, c)) + '</span>', '+ ' + U.money(x.amount, { cents: true }));
+        const r = h('<div class="row" style="justify-content:flex-end;margin:-4px 0 6px"><button class="btn sm quiet" type="button">It landed</button></div>');
+        r.querySelector('button').onclick = () => markLanded(x, () => { api.close(true); cashSheet(); Opus.refresh && Opus.refresh(); });
+        card.appendChild(r);
+      });
       if (cash != null) kv('<b>' + (ac.length ? 'Total cash' : 'Cash') + '</b>', '<b>' + U.money(cash, { cents: true }) + '</b>');
       held.forEach(x => kv(U.esc(x.name || 'Held back') + (x.due ? ' <span class="muted">· ' + U.esc(dueLabel(x.due)) + '</span>' : ''), '− ' + U.money(x.amount, { cents: true })));
       kv('Free cash', U.money(free, { cents: true }), 'total');

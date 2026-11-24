@@ -18,7 +18,7 @@
   const CKEY = 'opus.sync', BKEY = 'opus.syncbase';
   const API = 'https://api.github.com';
   const F = { plan: 'plan.json', logs: 'logs.json', grok: 'grok.json', guide: 'GUIDE.md', growth: 'growth.json', helper: 'helper.json', whoop: 'whoop.json' };
-  const HELPER = '1.27.2'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
+  const HELPER = '1.27.3'; // the Grok helper version this Opus expects (grok-helper/worker.src.js VERSION)
   const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0).reduce((a, n) => a * 1000 + n, 0);
 
   const ls = {
@@ -58,6 +58,7 @@
     ['money.weeks', w => w.weekEnding],
     ['money.balances', w => w.date],
     ['money.cash', c => c.date],
+    ['money.landed', m => m.id], // transfers between the owner's own accounts that arrived (from Grok or the owner's tap)
     ['reviews', r => r.weekOf],
     ['writing', w => (w.kind ? w.date + ':' + w.kind + (w.unit || w.on ? ':' + (w.unit || w.on) : '') : w.date)], // a unit's piece or a reply is one a day per unit or note
     ['reading', r => r.id],
@@ -75,7 +76,7 @@
     ['hair.photos', e => e.date + ':' + e.angle],
     ['hair.compares', e => e.id]
   ];
-  const TOMBS = ['workouts', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
+  const TOMBS = ['workouts', 'money.landed', 'eaten', 'labs', 'pets', 'supps', 'ledger', 'glimpses', 'remember', 'receipts']; // lists where a removal on purpose is remembered, so a sync doesn't bring it back
   const tombsOf = d => { const o = {}; for (const t of TOMBS) o[t] = ((d && d.deleted) || {})[t] || {}; return o; };
   /* removed on purpose, unless it was written again after that (an entry with a newer "at") */
   const buried = (tomb, k, x) => !!(tomb && tomb[k]) && !(x && x.at && String(x.at) > String(tomb[k]));
@@ -177,6 +178,7 @@
     ['money.weeks', w => w.weekEnding, w => isDate(w.weekEnding) && (w.paycheck == null || num(w.paycheck)) && ['spent', 'bills', 'debtPayments', 'balances', 'transfers'].every(k => w[k] == null || (Array.isArray(w[k]) && w[k].every(x => isObj(x) && num(x.amount))))],
     ['money.balances', w => w.date, w => isDate(w.date) && isObj(w.debts)],
     ['money.cash', c => c.date, c => isDate(c.date) && (num(c.cash) || num(c.free) || (Array.isArray(c.accounts) && c.accounts.length > 0)) && ['held', 'accounts', 'transfers'].every(k => c[k] == null || (Array.isArray(c[k]) && c[k].every(x => isObj(x) && num(x.amount))))],
+    ['money.landed', m => m.id, m => typeof m.id === 'string' && !!m.id && num(m.amount) && m.amount > 0 && typeof m.from === 'string' && !!m.from.trim() && typeof m.to === 'string' && !!m.to.trim() && typeof m.at === 'string' && !isNaN(Date.parse(m.at))],
     ['workouts', w => w.id, w => typeof w.id === 'string' && isDate(w.date) && Array.isArray(w.sets)],
     ['eaten', e => e.id, e => typeof e.id === 'string' && isDate(e.date) && typeof e.name === 'string' && !!e.name.trim() && (e.amount == null || num(e.amount)) && (e.macros == null || (isObj(e.macros) && ['kcal', 'protein', 'carbs', 'fat'].every(k => e.macros[k] == null || num(e.macros[k])))) && (e.micros == null || (isObj(e.micros) && Object.keys(e.micros).every(k => k === 'estimate' || e.micros[k] == null || num(e.micros[k]))))],
     ['labs', l => l.date, l => isDate(l.date) && Array.isArray(l.markers) && l.markers.length > 0 && l.markers.every(m => isObj(m) && typeof m.name === 'string' && !!m.name.trim() && num(m.value) && (m.low == null || num(m.low)) && (m.high == null || num(m.high)))],
@@ -205,7 +207,7 @@
       const list = getp(d, p) || []; setp(d, p, list);
       for (const x of getp(g, p) || []) {
         const k = isObj(x) ? key(x) : null;
-        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' || p === 'eaten' || p === 'remember' ? 'id' : 'date')); continue; }
+        if (!isObj(x) || k == null) { r.bad.push(p + ': an entry has no ' + (p === 'workouts' || p === 'eaten' || p === 'remember' || p === 'money.landed' ? 'id' : 'date')); continue; }
         const i = list.findIndex(y => key(y) === k);
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
@@ -652,7 +654,7 @@
       '- Keep Opus current without being asked: whenever something comes up in any chat that belongs in Opus (a bill, a debt, a payday, a meal change, a weight, food I ate), save it right away, then tell me in one line what you saved. Don’t save guesses; ask me for the one missing detail.',
       '- When I say "Sync Opus", follow "Keeping Opus current" in the guide: check what Opus picked up, save my cash and money week, fill the blanks you can, apply changes I asked for, then tell me what you saved and what only I can answer.',
       '- Free cash is the top of my Money tab: cash I can use now that isn’t needed for bills or anything else before payday. Whenever you look at my accounts, add a "money.cash" entry with today’s date, the time, my cash, and every amount that has to come out before payday (with due dates), as GUIDE.md section 4 shows.',
-      '- Money I move between my own accounts is never spending. While it is on its way, list it in "transfers" and keep the bill it covers held; when you only read one account, send just that account in "accounts" with the time you read it.',
+      '- Money I move between my own accounts is never spending. While it is on its way, list it in "transfers" and keep the bill it covers held. When it lands, add a "money.landed" entry (id, from, to, amount, and "at" = when it landed) and stop listing it in "transfers"; never list a landed transfer as on its way again. When you only read one account, send just that account in "accounts" with the time you read it.',
       '- Never invent numbers. Leave out anything you don’t know.',
       '- After each change, tell me in one line what you saved.',
       '',
