@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.37.2': [['growth', 'The Course and the Ledger now show even before Cassius fills them: the five subjects wait with units to come, and the Ledger says what will land there.']],
     '1.37.1': [['growth', 'Talk now opens your chat with Cassius in Claude Duet. If the Claude app doesn’t open, it opens on the web; sign in there once.']],
     '1.37.0': [['growth', 'Growth now shows only what’s in use: the Lamp, the sitting (Before class has a new name), the Course, Talk, the Scroll, the Ledger, and the Library. The Course lays out five subjects as rows of tiles: gold is solid, cracked is thin, the lit one is where you are. Tap a unit for Cassius’s mark, what it covered and what you wrote, and write its piece and teach-back right there. Every note from Cassius has a Write back box under it. Talk opens Claude Duet in one tap, and a small coin waits in the corner when the Talk card is off screen.']],
     '1.36.0': [['food', 'Today on Food is grouped by Breakfast, Lunch, Snack and Dinner, each with its calories and protein. Tap a meal to fold it to one line; the meal you’re on stays open. The same food logged more than once in a meal is one row with the total (tap it to see or change each time). Amounts read plainly, like ⅔ cup or ¾ serving. On a day with no meal plan the big numbers are what you ate. Supplements moved up, and The rotation moved down.']],

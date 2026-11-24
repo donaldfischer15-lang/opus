@@ -1433,3 +1433,6 @@ button.g-pline:active { color: var(--gold-2); }
 .g-lrow .g-prose { margin-top: 3px; font-size: 17px; }
 .g-ltext { margin-top: 12px; font-size: 17px; }
 .g-log + .g-log, .g-log + .g-letter, .g-letter + .g-log { margin-top: 8px; }
+.g-wait p.small { margin: 6px 0 0; color: var(--dim); line-height: 1.45; }
+.g-wait.g-unow { cursor: default; }
+.g-sname:disabled { opacity: 1; color: inherit; cursor: default; }

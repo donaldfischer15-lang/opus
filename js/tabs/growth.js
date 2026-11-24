@@ -510,10 +510,13 @@
     t.onclick = () => unitSheet(u);
     return t;
   }
+  // until Cassius lays the course out, the page still shows its shape: the five subjects, units to come
+  const SUBJECTS = [['logic', 'Logic'], ['ethics', 'Ethics'], ['people', 'People'], ['world', 'The world'], ['why', 'The why']];
   function courseCard(g, num) {
-    const c = courseOf(g); if (!c) return null;
+    const c = courseOf(g) || { subjects: SUBJECTS.map(([id, name]) => ({ id, name, units: [] })), all: [], cur: null, empty: true };
     const solid = c.all.filter(u => u.st === 'solid').length;
-    const s = sec(num(), 'The Course', '<span class="c"></span>'); set(s, '.sh .c', solid ? solid + ' of ' + c.all.length + ' solid' : c.all.length + ' units');
+    const s = sec(num(), 'The Course', '<span class="c"></span>'); set(s, '.sh .c', c.empty ? '' : solid ? solid + ' of ' + c.all.length + ' solid' : c.all.length + ' units');
+    if (c.empty) s.appendChild(h('<div class="card pad g-unow g-wait"><div class="tag">Being laid out</div><p class="small">Cassius is setting the units for each subject. They appear here as tiles as he does, with the one you’re on lit.</p></div>'));
     const u = c.cur;
     if (u) {
       const now = h('<div class="card pad g-unow tap"><div class="g-meta"><span class="tag"></span><span class="small"></span></div><div class="serif-h"></div><p class="g-uq"></p><div class="g-pbtns"></div></div>');
@@ -531,7 +534,7 @@
       set(row, '.t', sb.name);
       const so = sb.units.filter(x => x.st === 'solid').length;
       set(row, '.small', sb.units.length ? so + '/' + sb.units.length : '');
-      row.querySelector('.g-sname').onclick = () => subjectSheet(sb);
+      if (c.empty) row.querySelector('.g-sname').disabled = true; else row.querySelector('.g-sname').onclick = () => subjectSheet(sb);
       sb.units.forEach(x => { const t = tile(x); t.setAttribute('role', 'listitem'); row.querySelector('.g-tiles').appendChild(t); });
       if (!sb.units.length) row.querySelector('.g-tiles').appendChild(h('<span class="small g-tnone">Units to come</span>'));
       m.appendChild(row);
@@ -630,7 +633,8 @@
     return c;
   }
   function changedCard(g, num) {
-    const list = changelog(g); if (!list.length) return null;
+    const list = changelog(g);
+    if (!list.length) { const e = sec(num(), 'The Ledger'); e.appendChild(h('<div class="card pad g-wait"><p class="small">Cassius’s teaching log and his monthly letters land here: what he tried with you, what happened, and what he’s changing. Nothing written yet.</p></div>')); return e; }
     const s = sec(num(), 'The Ledger', list.length > 3 ? '<button class="c" type="button">All</button>' : '');
     const more = s.querySelector('button.c'); if (more) more.onclick = () => ui.sheet({ title: 'The Ledger', kicker: 'Cassius’s teaching log · ' + list.length, render(api) { list.forEach(x => { const c = changeCard(x); c.style.marginBottom = '10px'; api.body.appendChild(c); }); } });
     list.slice(0, 3).forEach(x => s.appendChild(changeCard(x)));
