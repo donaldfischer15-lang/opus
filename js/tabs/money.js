@@ -194,8 +194,8 @@
       const f0 = ((firstSeen(t, c) || {}).accounts || []).find(x => x && String(x.name || '').toLowerCase() === nm && typeof x.amount === 'number');
       if (a && f0 && a.amount - f0.amount >= t.amount - 1) continue;
       if (a && t.pending === false && a.at && new Date(a.at).getTime() >= tTime(m.at)) continue;
-      if (a) { a.amount = Math.round((a.amount + t.amount) * 100) / 100; a.landed = (a.landed || 0) + t.amount; }
-      else own.push({ name: t.to || 'Account', amount: t.amount, landed: t.amount, at: null });
+      if (a) { a.amount = Math.round((a.amount + t.amount) * 100) / 100; a.landed = (a.landed || 0) + t.amount; a.landedAt = m.at; }
+      else own.push({ name: t.to || 'Account', amount: t.amount, landed: t.amount, landedAt: m.at, at: null });
     }
     return own;
   }
@@ -663,8 +663,13 @@
   function acctLine(c) {
     const ac = accountsOf(c), tr = transitOf(c);
     if (!ac.length && !tr.length) return '';
-    return '<div class="fc-accts">' + ac.map(a => { const old = !a.landed && (a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : true); return '<span class="' + (old ? 'old' : '') + '"><b>' + U.esc(a.name || 'Account') + '</b> ' + U.money(a.amount) + ' <small>' + U.esc(a.landed ? 'with ' + U.money(a.landed) + ' that landed' : whenAcct(a)) + '</small></span>'; }).join('') +
-      tr.map(x => '<span class="mv"><b>On its way</b> ' + U.money(x.amount) + ' <small>' + U.esc((x.from || '') + (x.to ? ' \u2192 ' + x.to : '') + sinceLabel(x, c)) + '</small></span>').join('') + '</div>';
+    const row = (cls, name, sub, v) => '<div class="lr' + cls + '"><span class="ln"><b>' + U.esc(name) + '</b><small>' + sub + '</small></span><span class="la num">' + v + '</span></div>';
+    return '<div class="fc-led">' + ac.map(a => {
+      const old = a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : !a.landed;
+      const read = a.at || !a.landed ? '<span' + (old ? ' class="old"' : '') + '>' + U.esc(whenAcct(a)) + '</span>' : '';
+      const came = a.landed ? '<span class="in">+' + U.esc(U.money(a.landed)) + ' landed ' + U.esc(whenAt({ at: a.landedAt, date: tDay(a.landedAt) })) + '</span>' : '';
+      return row('', a.name || 'Account', [read, came].filter(Boolean).join('<i>·</i>'), U.money(a.amount));
+    }).join('') + tr.map(x => row(' mv', 'On its way', U.esc((x.from || 'your account') + (x.to ? ' \u2192 ' + x.to : '') + sinceLabel(x, c).replace(', ', ' \u00b7 ')), '+' + U.money(x.amount))).join('') + '</div>';
   }
   // ", since Sat" once a transfer has been on its way for more than a day
   function sinceLabel(t, c) { const d = sinceOf(t, c), n = U.daysBetween(U.parseKey(d), new Date()); return n < 1 ? '' : ', since ' + (n < 7 ? U.DAY_NAMES[U.parseKey(d).getDay()].slice(0, 3) : U.fmtDateShort(d)); }
@@ -783,7 +788,8 @@
       }
       if (items.length) src = 'From the due days in your plan';
     }
-    items = items.filter(x => !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= today).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
+    const fromReading = !!src && !/plan/.test(src);
+    items = items.filter(x => fromReading || !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= today).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
     items.forEach(x => { x.account = x.account || billAccount(x.name); });
     const short = shortfalls(c, items);
     const sec = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Before payday</span><span class="c num"></span></div><div class="card"></div></div>');
@@ -792,10 +798,11 @@
     sec.querySelector('.c').textContent = U.money(U.sum(items.map(x => x.amount)));
     short.forEach(sf => card.appendChild(h('<div class="acct-short"><b>Move ' + U.money(Math.ceil(sf.gap)) + (sf.from ? ' from ' + U.esc(sf.from) : '') + ' to ' + U.esc(sf.account) + ' by ' + U.esc(byLabel(sf.by)) + '</b><span>' + U.esc(sf.account) + ' has ' + U.money(sf.have, { cents: true }) + (sf.incoming ? ' with ' + U.money(sf.incoming) + ' on its way' : '') + ', and ' + U.esc(sf.bills) + ' need' + (sf.count === 1 ? 's' : '') + ' ' + U.money(sf.need, { cents: true }) + ' ' + U.esc(dueLabel(sf.due)) + '.</span></div>')));
     items.forEach(x => {
-      const soon = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && U.daysBetween(new Date(), U.parseKey(x.due)) <= 1;
+      const soon = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && U.daysBetween(new Date(), U.parseKey(x.due)) <= 1 && x.due >= today;
       const sf = x.account && short.find(y => y.account === x.account && y.names.includes(x.name));
-      const sub = [x.due ? dueLabel(x.due) : '', x.account ? 'from ' + x.account : ''].filter(Boolean).join(' · ');
-      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (sub ? '<small' + (sf ? ' style="color:var(--warn)"' : '') + '>' + U.esc(sub) + (sf ? ' · short' : '') + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
+      const late = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && x.due < today;
+      const sub = [x.due ? dueLabel(x.due) + (late ? ', not out yet' : '') : '', x.account ? 'from ' + x.account : ''].filter(Boolean).join(' · ');
+      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : late ? ';opacity:.55' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (sub ? '<small' + (sf ? ' style="color:var(--warn)"' : '') + '>' + U.esc(sub) + (sf ? ' · short' : '') + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
     });
     if (src) card.appendChild(h('<div class="row" style="min-height:0;padding:8px 0 10px"><span class="tx"><small>' + U.esc(src) + '</small></span></div>'));
     return sec;
