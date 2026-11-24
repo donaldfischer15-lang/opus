@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.38.2': [['growth', 'Listen reads with your own Cassius voice by default. You can still pick another by tapping the player.']],
     '1.38.1': [['food', 'A meal written as one line, like “251 g, from your saved entry”, now shows the food with its amount, and notes in that line no longer show up as a food to tick.']],
     '1.38.0': [['growth', 'Listen: Cassius reads the day’s sitting aloud in a real voice, with your own ElevenLabs account. Tap Listen on the sitting. The first time, paste your ElevenLabs key; it’s kept on your helper, not this phone. The player sits above the tabs: back or forward 15 seconds, speed, and it keeps playing with the screen locked. It remembers where you stopped. Tap its words to pick the voice and see this month’s characters.']],
     '1.37.2': [['growth', 'The Course and the Ledger now show even before Cassius fills them: the five subjects wait with units to come, and the Ledger says what will land there.']],

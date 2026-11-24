@@ -30,7 +30,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.27.0';
+const VERSION = '1.27.1';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -410,7 +410,7 @@ const TOOLS = [
   { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember; one thing per entry, text without the date, dates worked out in the owner\'s time zone; a dated one gets its reminder right away), and store receipts with their line items (receipts; never card, reference, approval, terminal or transaction numbers). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
-const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', course: 'o', talk: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a', changelog: 'a' };
+const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', course: 'o', talk: 'o', voice: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a', changelog: 'a' };
 const SAVE_GROWTH = { name: 'save_growth', description: 'Save the Growth page (growth.json, version 2), as GUIDE.md section 5 describes it. Read it first with read_opus_file file "growth". Send sections: an object with only the top-level parts you change (' + Object.keys(GROWTH_KEYS).join(', ') + '); each one you send replaces that part whole, and every other part stays as it is. Or send file: the whole page, with "format": "opus-growth" and "version": 2. "updated" is set for you. A seal\'s answer never changes once set, so a seal with the same date and question keeps its answer. The owner sees the change the next time Opus opens, with a notification.',
   inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "date": "...", "text": "...", "from": "...", "why": "..." }, "lesson": { ... } }' }, file: { type: 'object', description: 'The whole Growth page instead of sections.' }, change: { type: 'string', description: 'One short line saying what changed, for the history and the notification.' } }, required: ['change'] } };
 const GROK = { key: 'grok', name: 'Grok' }, CASSIUS = { key: 'cassius', name: 'Cassius' };
@@ -455,6 +455,7 @@ async function saveGrowth(G, args) {
     if (k === 'course' && isObj(v)) bad.push(...courseProblems(v));
     if (k === 'changelog' && Array.isArray(v)) v.forEach((x, i) => { if (!isObj(x) || !/^\d{4}-\d{2}-\d{2}$/.test(String(x.date || ''))) bad.push('changelog[' + i + '] needs a date (YYYY-MM-DD)'); else if (x.kind != null && !['entry', 'letter'].includes(x.kind)) bad.push('changelog[' + i + '].kind must be "entry" or "letter"'); });
     if (k === 'talk' && isObj(v) && v.url != null && !/^https:\/\/claude\.ai\//.test(String(v.url))) bad.push('talk.url must be a https://claude.ai/ link');
+    if (k === 'voice' && isObj(v) && v.id != null && !/^[A-Za-z0-9]{8,40}$/.test(String(v.id))) bad.push('voice.id must be an ElevenLabs voice id');
   }
   if (bad.length) return text('Nothing saved. Problems:\n- ' + bad.join('\n- '), true);
   const cur = await G.get(FILES.growth);
@@ -1087,7 +1088,8 @@ async function makeLesson(env, key, b) {
   const gf = await G.get('growth.json'); let g = null; if (!gf.missing) { try { g = JSON.parse(gf.text); } catch (e) {} }
   const text = lessonScript(g, date); if (!text) return { ok: false, code: 'none', error: 'There’s no sitting for that day to read.' };
   const voices = await elVoices(key);
-  const v = voices.find(x => x.id === b.voice) || voices[0]; if (!v) return { ok: false, code: 'fail', error: 'Your ElevenLabs account has no voices to read with.' };
+  const gv = g && g.voice && typeof g.voice.id === 'string' ? g.voice.id : null; // the default voice named in growth.json
+  const v = voices.find(x => x.id === b.voice) || voices.find(x => x.id === gv) || voices.find(x => /^cassius$/i.test(x.name)) || voices[0]; if (!v) return { ok: false, code: 'fail', error: 'Your ElevenLabs account has no voices to read with.' };
   const model = b.fast ? EL_MODELS.fast : EL_MODELS.best;
   const h = await sha10(model + '|' + v.id + '|' + text), file = 'voice/lessons/' + date + '-' + h + '.mp3';
   let { j, sha } = await readVoiceIndex(G);

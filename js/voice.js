@@ -107,7 +107,9 @@
 
   /* the fingerprint of a sitting as it is now: a lesson Cassius edits after it was read is read again */
   const fp = l => [l.date, l.title, String(l.body || '').length, l.question || '', l.takeaway || ''].join('|');
-  const voiceFor = () => S().voiceId || null;
+  /* the default voice is the one named in growth.json ("voice": { "id", "name" }), until a different one is picked here */
+  const defVoice = () => { const v = ((Store.data || {}).growth || {}).voice; return v && typeof v.id === 'string' && v.id ? v.id : null; };
+  const voiceFor = () => S().voiceId || defVoice();
 
   /* play the sitting of l.date. Called from a tap. */
   async function play(l) {
@@ -226,8 +228,9 @@
           const j = await call({ do: 'key', key: k }, 30000);
           inp.value = '';
           if (!j.ok) { say(j.error || 'That key didn’t work.', true); return; }
-          S().voiceReady = true; if (j.voices && j.voices[0] && !S().voiceId) S().voiceId = j.voices[0].id; Store.save();
-          api.close(true); ui.toast('Cassius’s voice is set up' + (j.voices && j.voices[0] ? ': ' + j.voices[0].name : ''));
+          const vs = j.voices || [], pick = vs.find(v => v.id === S().voiceId) || vs.find(v => v.id === defVoice()) || vs.find(v => /^cassius$/i.test(v.name)) || vs[0];
+          S().voiceReady = true; if (pick && !S().voiceId) S().voiceId = pick.id; Store.save();
+          api.close(true); ui.toast('Cassius’s voice is set up' + (pick ? ': ' + pick.name : ''));
           if (then) then();
         } catch (e) { say(e.message, true); }
         finally { btn.disabled = false; btn.textContent = 'Save the key'; }
@@ -264,7 +267,7 @@
           use.querySelector('.v-usetx').textContent = (mine ? mine.toLocaleString() + ' characters on sittings this month.' : 'No sittings read yet this month.') + ' Turn on User (read) on the key to see your plan’s total here.';
         }
         list.innerHTML = '';
-        const cur = S().voiceId || (j.voices[0] && j.voices[0].id);
+        const cur = voiceFor() || ((j.voices.find(v => /^cassius$/i.test(v.name)) || j.voices[0] || {}).id);
         j.voices.slice(0, 24).forEach((v, i) => {
           const r = h('<div class="row tap v-row' + (v.id === cur ? ' on' : '') + '"><span class="v-dot" aria-hidden="true"></span><span class="tx"><b></b><small></small></span>' + (v.preview ? '<button class="lb v-pv" type="button" aria-label="Hear a sample">' + I.play + '</button>' : '') + '</div>');
           r.querySelector('b').textContent = v.name + (v.own ? ' · added by you' : i === 0 || (i && j.voices[i - 1].own) ? ' · suits Cassius' : '');
