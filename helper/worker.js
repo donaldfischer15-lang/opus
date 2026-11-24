@@ -30,7 +30,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.27.1';
+const VERSION = '1.27.2';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -73,12 +73,37 @@ Plan.validate = function (p) {
       if (sids.has(x.id)) errors.push('supplement id "' + x.id + '" is used twice.'); sids.add(x.id);
       if (x.part != null && !PARTS.includes(x.part)) errors.push('supplement "' + x.id + '": part should be morning, workday or evening.');
       if (x.time != null && !TIME.test(x.time)) errors.push('supplement "' + x.id + '": time should look like "07:30" (or null).');
-      if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["mon","thu"].');
+      if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && x.days !== 'asneeded' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff", "asneeded" or a list like ["mon","thu"].');
       if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
       if (x.nutrients != null) { if (typeof x.nutrients !== 'object' || Array.isArray(x.nutrients)) errors.push('supplement "' + x.id + '": nutrients should be an object like { "magnesium": 200 } (per dose), or null.'); else for (const k of Object.keys(x.nutrients)) { if (!MICROS.includes(k)) errors.push('supplement "' + x.id + '": nutrients has "' + k + '"; use ' + MICROS.join(', ') + '.'); else if (x.nutrients[k] != null && !(Number(x.nutrients[k]) >= 0)) errors.push('supplement "' + x.id + '": nutrients.' + k + ' should be a number (or null).'); } }
       if (x.label != null && !(x.label && typeof x.label === 'object' && Array.isArray(x.label.facts) && x.label.facts.every(q => q && typeof q.name === 'string' && q.name.trim() && Number(q.amount) >= 0 && /^(mg|mcg|g|IU)$/.test(q.unit || '')))) errors.push('supplement "' + x.id + '": label should be { "serving": "1 capsule", "servings": 240, "facts": [{ "name": "Magnesium", "amount": 200, "unit": "mg" }] } with unit mg, mcg, g or IU (or null).');
       if (x.supply != null && !(x.supply && typeof x.supply === 'object' && Number(x.supply.left) >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.supply.asOf || '') && (x.supply.perDose == null || Number(x.supply.perDose) > 0))) errors.push('supplement "' + x.id + '": supply should be { "left": 60, "asOf": "2026-11-18", "perDose": 1 } (or null).');
     });
+    const hr = hl && hl.hair;
+    if (hr != null) {
+      if (typeof hr !== 'object' || Array.isArray(hr)) errors.push('health.hair should be an object.');
+      else {
+        if (hr.start != null && !/^\d{4}-\d{2}-\d{2}$/.test(hr.start)) errors.push('health.hair.start should be a date like "2026-11-04".');
+        if (hr.photoDay != null && !(Number.isInteger(hr.photoDay) && hr.photoDay >= 1 && hr.photoDay <= 28)) errors.push('health.hair.photoDay should be a day of the month, 1 to 28.');
+        if (hr.photoTime != null && !TIME.test(hr.photoTime)) errors.push('health.hair.photoTime should look like "18:00" (or null).');
+        if (hr.checkpoints != null && !(Array.isArray(hr.checkpoints) && hr.checkpoints.every(c => /^\d{4}-\d{2}-\d{2}$/.test(c)))) errors.push('health.hair.checkpoints should be a list of dates.');
+        if (hr.core != null && !(Array.isArray(hr.core) && hr.core.every(c => typeof c === 'string'))) errors.push('health.hair.core should be a list of supplement ids.');
+        if (hr.effects != null && !(Array.isArray(hr.effects) && hr.effects.every(c => typeof c === 'string'))) errors.push('health.hair.effects should be a list of short lines.');
+        const hids = new Set();
+        for (const k of ['routine', 'extras']) {
+          const a = hr[k]; if (a == null) continue;
+          if (!Array.isArray(a)) { errors.push('health.hair.' + k + ' should be a list.'); continue; }
+          a.forEach((x, i) => {
+            if (!x || typeof x !== 'object' || !x.id || !x.name) { errors.push('health.hair.' + k + ' item ' + (i + 1) + ' needs "id" and "name".'); return; }
+            if (x.id === 'photos' || hids.has(x.id)) errors.push('hair id "' + x.id + '" is used twice (or is "photos", which is taken).'); hids.add(x.id);
+            if (x.part != null && !PARTS.includes(x.part)) errors.push('hair "' + x.id + '": part should be morning, workday or evening.');
+            if (x.time != null && !TIME.test(x.time)) errors.push('hair "' + x.id + '": time should look like "19:30" (or null).');
+            if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('hair "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["sun"].');
+            if (x.emptied != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.emptied)) errors.push('hair "' + x.id + '": emptied should be the date it ran out (or null).');
+          });
+        }
+      }
+    }
   }
   const f = p.food || {}, meals = f.meals || {};
   ((f.rotation || {}).weeks || []).forEach((w, i) => {
@@ -95,6 +120,7 @@ Plan.validate = function (p) {
         else if (pt.amount != null && !(Number(pt.amount) > 0)) errors.push('meal "' + id + '", part "' + pt.name + '": amount should be a number above 0.');
         if (pt && pt.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = pt.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '", part "' + pt.name + '": macros.' + k + ' should be a number (or null).'); }
         if (pt && pt.micros != null) microErr(pt.micros, 'meal "' + id + '", part "' + pt.name + '"');
+        if (pt && pt.each != null && !(pt.each && typeof pt.each === 'object' && Number.isInteger(pt.each.n) && pt.each.n >= 1 && typeof pt.each.of === 'string' && pt.each.of.trim())) errors.push('meal "' + id + '", part "' + pt.name + '": each should be like { "n": 2, "of": "sandwich" }.');
       });
     }
   }

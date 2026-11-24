@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.39.0': [['food', 'Change a planned meal yourself: open it on Food and tap Edit this meal. Set how much of each food goes in (the sandwich meat is set per sandwich), swap a food for another, take one out or add one. Macros, vitamins and the week’s grocery amounts follow, and amounts written in the meal’s words change with them. It saves into the plan, so Grok sees it too.']],
     '1.38.2': [['growth', 'Listen reads with your own Cassius voice by default. You can still pick another by tapping the player.']],
     '1.38.1': [['food', 'A meal written as one line, like “251 g, from your saved entry”, now shows the food with its amount, and notes in that line no longer show up as a food to tick.']],
     '1.38.0': [['growth', 'Listen: Cassius reads the day’s sitting aloud in a real voice, with your own ElevenLabs account. Tap Listen on the sitting. The first time, paste your ElevenLabs key; it’s kept on your helper, not this phone. The player sits above the tabs: back or forward 15 seconds, speed, and it keeps playing with the screen locked. It remembers where you stopped. Tap its words to pick the voice and see this month’s characters.']],

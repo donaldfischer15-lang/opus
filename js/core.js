@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.38.2';
+  Opus.VERSION = '1.39.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -509,6 +509,7 @@
           else if (pt.amount != null && !(Number(pt.amount) > 0)) errors.push('meal "' + id + '", part "' + pt.name + '": amount should be a number above 0.');
           if (pt && pt.macros) for (const k of ['kcal', 'protein', 'carbs', 'fat']) { const v = pt.macros[k]; if (v != null && !(Number(v) >= 0)) errors.push('meal "' + id + '", part "' + pt.name + '": macros.' + k + ' should be a number (or null).'); }
           if (pt && pt.micros != null) microErr(pt.micros, 'meal "' + id + '", part "' + pt.name + '"');
+          if (pt && pt.each != null && !(pt.each && typeof pt.each === 'object' && Number.isInteger(pt.each.n) && pt.each.n >= 1 && typeof pt.each.of === 'string' && pt.each.of.trim())) errors.push('meal "' + id + '", part "' + pt.name + '": each should be like { "n": 2, "of": "sandwich" }.');
         });
       }
     }
