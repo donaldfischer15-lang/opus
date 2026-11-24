@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.40.1': [['money', 'A transfer marked as landed now stays landed on every phone and every sync, and the free cash sheet says under Grok’s note when one landed after Grok wrote it.']],
     '1.40.0': [['money', 'A transfer between your accounts stops showing as on its way once it lands, and stays that way even if a later reading still lists it. Grok marks it landed when it sees it arrive, or tap It landed on Free cash yourself. Until the account is read again, its balance shows the money that landed. One still on its way after a day says since when.']],
     '1.39.0': [['food', 'Change a planned meal yourself: open it on Food and tap Edit this meal. Set how much of each food goes in (the sandwich meat is set per sandwich), swap a food for another, take one out or add one. Macros, vitamins and the week’s grocery amounts follow, and amounts written in the meal’s words change with them. It saves into the plan, so Grok sees it too.']],
     '1.38.2': [['growth', 'Listen reads with your own Cassius voice by default. You can still pick another by tapping the player.']],

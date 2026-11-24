@@ -133,6 +133,12 @@
     for (const k of SETS) o[k] = mergeSetMap(B && B[k], L[k], R && R[k]);
     for (const [p, key] of KEYED) setp(o, p, mergeKeyed(B && getp(B, p), getp(L, p), R && getp(R, p), key, TOMBS.includes(p) ? o.deleted[p] : null));
     o.prefs = (L && L.prefs) || (R && R.prefs) || {};
+    // lists this version doesn't know yet (from a newer Opus, Grok or Claude) pass through as GitHub has them, so nothing is dropped
+    if (R) {
+      for (const k of Object.keys(R)) if (!(k in o) && k !== 'sync') o[k] = R[k];
+      if (isObj(R.money)) for (const k of Object.keys(R.money)) if (!(k in o.money)) o.money[k] = R.money[k];
+      if (isObj(R.deleted)) for (const k of Object.keys(R.deleted)) if (!(k in o.deleted)) o.deleted[k] = R.deleted[k];
+    }
     return o;
   }
   /* logs that GitHub has and the merge would drop (other than workouts deleted on purpose) */
@@ -212,6 +218,11 @@
         if (x.delete === true) { if (i >= 0 && list[i].by === 'grok') { list.splice(i, 1); r.removed++; if (TOMBS.includes(p)) { d.deleted = d.deleted || {}; (d.deleted[p] = d.deleted[p] || {})[k] = new Date().toISOString(); } } continue; }
         if (!ok(x)) { r.bad.push(p + ' ' + k + ': missing or wrong fields'); continue; }
         const it = Object.assign({}, x, { by: 'grok' });
+        if (p === 'money.landed') { // removed on the phone stays removed; one already there (the owner's own) stays as it is
+          const tomb = ((d.deleted || {})['money.landed'] || {})[k];
+          if (tomb && !(x.at && String(x.at) > String(tomb))) continue;
+          if (i >= 0) continue;
+        }
         if (p === 'receipts') { // read on every sync, so a receipt removed on the phone stays removed, and one changed on the phone stays as changed
           const tomb = ((d.deleted || {}).receipts || {})[k];
           if (tomb && !(x.at && String(x.at) > String(tomb))) continue;
@@ -470,12 +481,12 @@
       }
     }
 
-    // receipts in grok.json are read on every sync: an older Opus may have read the file first and moved past it
+    // receipts and landed transfers in grok.json are read on every sync: an older Opus may have read the file first and moved past it
     if (!rg.missing && !grokFile) {
       let g = null; try { g = parseJSON(rg.text); } catch (e) {}
-      if (g && g.format === 'opus-grok' && Array.isArray(g.receipts) && g.receipts.length) {
+      if (g && g.format === 'opus-grok' && ((Array.isArray(g.receipts) && g.receipts.length) || (isObj(g.money) && Array.isArray(g.money.landed) && g.money.landed.length))) {
         const w2 = U.clone(work); w2.plan = U.clone(mPlan);
-        const rr = applyGrok(w2, g, ['receipts']);
+        const rr = applyGrok(w2, g, ['receipts', 'money.landed']);
         if (rr.added + rr.changed + rr.removed) { work = w2; mPlan = w2.plan; notes.push(rr.added ? 'A receipt was added' : 'A receipt was updated'); S.grokNews = true; }
       }
     }

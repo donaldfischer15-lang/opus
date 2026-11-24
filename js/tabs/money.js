@@ -701,7 +701,10 @@
       b.appendChild(card);
       if (tr.length) b.appendChild(h('<p class="small">Money moving between your own accounts still counts as yours until it lands, so it isn\u2019t taken out of free cash.</p>'));
       if (!computed(c) && typeof c.free === 'number' && typeof c.cash === 'number' && Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free) > 1) b.appendChild(h('<p class="small">Grok’s free cash differs from cash minus what’s listed by ' + U.money(Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free)) + '. Ask Grok what else it held back.</p>'));
-      if (c.note) b.appendChild(h('<div class="g-take"><div class="tag">' + (c.by === 'grok' ? 'Grok’s note' : 'Your note') + '</div><div>' + U.esc(c.note) + '</div></div>'));
+      if (c.note) {
+        const since = landedOf(c).map(o => U.money(o.t.amount) + ' from ' + (o.t.from || 'your account') + ' landed in ' + (o.t.to || 'your account') + ' ' + whenAt({ at: o.m.at, date: tDay(o.m.at) }) + (o.m.by === 'you' ? ', marked by you' : ''));
+        b.appendChild(h('<div class="g-take"><div class="tag">' + (c.by === 'grok' ? 'Grok’s note' : 'Your note') + '</div><div>' + U.esc(c.note) + '</div>' + (since.length ? '<div style="margin-top:8px;font-size:.9em;opacity:.75">Since then: ' + U.esc(since.join('; ')) + '.</div>' : '') + '</div>'));
+      }
       const past = cashList().reverse().slice(1, 8);
       if (past.length) {
         b.appendChild(h('<div class="sh" style="margin-top:6px"><span class="t">Earlier</span></div>'));
