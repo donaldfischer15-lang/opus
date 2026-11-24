@@ -29,7 +29,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.25.0';
+const VERSION = '1.26.0';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -409,11 +409,32 @@ const TOOLS = [
   { name: 'add_to_outbox', description: 'Add or correct entries for Opus, in the grok.json format from GUIDE.md section 4. The sections are ' + OUT_PATHS.join(', ') + ': free cash (cash on hand and what is held back before payday, from the accounts; money moving between the owner\'s own accounts goes in transfers, never in spending), money weeks, debt balance snapshots, weigh-ins, workouts, food the owner ate that is not a planned meal (eaten), blood test results copied from the lab report (labs), pet care done, pet weigh-ins and vet visits (pets), supplements taken (supps), and things for the owner\'s Memory: notes, plans on a date and yearly dates like birthdays (remember; one thing per entry, text without the date, dates worked out in the owner\'s time zone; a dated one gets its reminder right away), and store receipts with their line items (receipts; never card, reference, approval, terminal or transaction numbers). Anything else is refused by name. Send only the new or corrected entries; entries already in grok.json are kept. Same key again corrects an entry; { key, "delete": true } takes one back. Opus copies them into the logs the next time the owner opens it.',
     inputSchema: { type: 'object', properties: { entries: { type: 'object', description: 'Like { "money": { "cash": [...], "weeks": [...], "balances": [...] }, "weights": [...], "workouts": [...], "eaten": [...], "labs": [...], "pets": [...], "supps": [...] }' }, change: { type: 'string' } }, required: ['entries', 'change'] } }
 ];
-const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a' };
+const GROWTH_KEYS = { energy: 'o', lesson: 'o', recall: 'o', seal: 'o', season: 'o', map: 'o', portrait: 'o', creed: 'o', course: 'o', talk: 'o', prompt: 'os', notes: 'a', portraits: 'a', lexicon: 'a', gilded: 'a', constellations: 'a', reading: 'a', made: 'a', lessons: 'a', prompts: 'a', changelog: 'a' };
 const SAVE_GROWTH = { name: 'save_growth', description: 'Save the Growth page (growth.json, version 2), as GUIDE.md section 5 describes it. Read it first with read_opus_file file "growth". Send sections: an object with only the top-level parts you change (' + Object.keys(GROWTH_KEYS).join(', ') + '); each one you send replaces that part whole, and every other part stays as it is. Or send file: the whole page, with "format": "opus-growth" and "version": 2. "updated" is set for you. A seal\'s answer never changes once set, so a seal with the same date and question keeps its answer. The owner sees the change the next time Opus opens, with a notification.',
   inputSchema: { type: 'object', properties: { sections: { type: 'object', description: 'Like { "energy": { "date": "...", "text": "...", "from": "...", "why": "..." }, "lesson": { ... } }' }, file: { type: 'object', description: 'The whole Growth page instead of sections.' }, change: { type: 'string', description: 'One short line saying what changed, for the history and the notification.' } }, required: ['change'] } };
 const GROK = { key: 'grok', name: 'Grok' }, CASSIUS = { key: 'cassius', name: 'Cassius' };
 const toolsFor = as => as.key === 'cassius' ? TOOLS.concat([SAVE_GROWTH]) : TOOLS;
+
+/* the Course: { current: "logic-1", subjects: [{ id, name, question, units: [{ n, title, state, proof, date, covered, mark, piece, teachback }] }] } */
+const UNIT_STATES = ['ahead', 'current', 'solid', 'thin'];
+function courseProblems(c) {
+  const bad = [];
+  if (!Array.isArray(c.subjects)) return ['course.subjects must be a list'];
+  const ids = new Set();
+  c.subjects.forEach((sb, i) => {
+    if (!isObj(sb) || !/^[a-z0-9-]+$/.test(String(sb.id || '')) || !sb.name) { bad.push('course.subjects[' + i + '] needs an id (lowercase letters, digits, hyphens) and a name'); return; }
+    if (!Array.isArray(sb.units)) { bad.push('course.subjects[' + i + '].units must be a list'); return; }
+    sb.units.forEach((u, j) => {
+      const at = 'course.subjects[' + i + '].units[' + j + ']';
+      if (!isObj(u) || !u.title) { bad.push(at + ' needs a title'); return; }
+      if (u.state != null && !UNIT_STATES.includes(u.state)) bad.push(at + '.state must be one of ' + UNIT_STATES.join(', '));
+      if (u.proof != null && !/^writing:\d{4}-\d{2}-\d{2}(:\w+)?(:[\w-]+)?$/.test(String(u.proof))) bad.push(at + '.proof must look like writing:YYYY-MM-DD:kind');
+      ids.add(sb.id + '-' + (Number(u.n) || j + 1));
+    });
+  });
+  if (c.current != null && !ids.has(c.current)) bad.push('course.current must be a unit id like "' + ([...ids][0] || 'logic-1') + '" (subject id, a hyphen, the unit number)');
+  return bad;
+}
 
 async function saveGrowth(G, args) {
   let sec = null, whole = null;
@@ -430,6 +451,9 @@ async function saveGrowth(G, args) {
     if (t === 'a' && !Array.isArray(v)) bad.push(k + ' must be a list or null');
     if (t === 'o' && !isObj(v)) bad.push(k + ' must be an object or null');
     if (t === 'os' && !isObj(v) && typeof v !== 'string') bad.push(k + ' must be an object, text or null');
+    if (k === 'course' && isObj(v)) bad.push(...courseProblems(v));
+    if (k === 'changelog' && Array.isArray(v)) v.forEach((x, i) => { if (!isObj(x) || !/^\d{4}-\d{2}-\d{2}$/.test(String(x.date || ''))) bad.push('changelog[' + i + '] needs a date (YYYY-MM-DD)'); else if (x.kind != null && !['entry', 'letter'].includes(x.kind)) bad.push('changelog[' + i + '].kind must be "entry" or "letter"'); });
+    if (k === 'talk' && isObj(v) && v.url != null && !/^https:\/\/claude\.ai\//.test(String(v.url))) bad.push('talk.url must be a https://claude.ai/ link');
   }
   if (bad.length) return text('Nothing saved. Problems:\n- ' + bad.join('\n- '), true);
   const cur = await G.get(FILES.growth);

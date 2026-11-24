@@ -1109,6 +1109,17 @@ window.OPUS_EXAMPLE_GROWTH = (function () {
     ],
     notes: [
       { date: k(1), text: 'Good work this week. Your sentences are getting shorter and clearer. Keep the point first.' }
+    ],
+    course: { current: 'logic-2', subjects: [
+      { id: 'logic', name: 'Logic', question: 'How do I tell a good reason from a bad one?', units: [
+        { n: 1, title: 'Claims need reasons', state: 'solid', date: k(6), mark: 'You explained it start to finish, in plain words.', covered: 'What an argument is: a claim, and the reasons offered for it.' },
+        { n: 2, title: 'Good and bad evidence', state: 'current', date: k(1) }, { n: 3, title: 'Common traps', state: 'ahead' }] },
+      { id: 'ethics', name: 'Ethics', question: 'What do I owe, and to whom?', units: [{ n: 1, title: 'What makes an act right', state: 'ahead' }, { n: 2, title: 'Character', state: 'ahead' }] },
+      { id: 'people', name: 'People', question: 'Why do people do what they do?', units: [{ n: 1, title: 'Wants and fears', state: 'ahead' }, { n: 2, title: 'Listening', state: 'ahead' }] },
+      { id: 'world', name: 'The world', question: 'How does the world actually run?', units: [{ n: 1, title: 'Money and trade', state: 'ahead' }] },
+      { id: 'why', name: 'The why', question: 'What is a life for?', units: [{ n: 1, title: 'A good life', state: 'ahead' }] }] },
+    changelog: [
+      { date: k(2), kind: 'entry', tried: 'Long letters on the first days.', happened: 'They were read, but the questions got short answers.', changing: 'Shorter sittings, one question each.' }
     ]
   };
 })();

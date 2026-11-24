@@ -272,9 +272,10 @@
     const prompts = opts.prompt ? [opts.prompt] : (Opus.growth && Opus.growth.prompts().length ? Opus.growth.prompts() : (wr.prompts || []));
     const dayNum = Math.floor(U.parseKey(U.key()).getTime() / 864e5);
     let pi = prompts.length ? dayNum % prompts.length : 0;
-    const today = U.key();
+    const today = opts.date || U.key(); // Growth can reopen an earlier day's piece to edit it in place
     if (!opts.prompt && Opus.growth && Opus.growth.todayPrompt()) pi = 0; // Cassius set today's prompt: it comes first
-    const same = w => w.date === today && (w.kind || '') === kind;
+    const ref = opts.unit || opts.on || ''; // a course unit's piece or a reply is filed on that unit or note, one a day each
+    const same = w => w.date === today && (w.kind || '') === kind && (w.unit || w.on || '') === ref;
     const existing = (Store.data.writing || []).find(same);
     if (!opts.prompt && existing && existing.prompt && prompts.includes(existing.prompt)) pi = prompts.indexOf(existing.prompt);
     ui.sheet({
@@ -283,7 +284,7 @@
         const b = api.body;
         const pr = h('<div class="card pad" style="display:flex;gap:12px;align-items:flex-start"><div style="flex:1"><div class="tag">' + U.esc(opts.tag || (kind === 'lesson' ? 'Cassius asks' : 'Today’s prompt')) + '</div><div class="serif-h" style="font-size:22px;margin-top:6px"></div></div><button class="mini" type="button" aria-label="Another prompt">' + ui.I.spark.replace(/^/, '<svg viewBox="0 0 24 24">') + '</svg></button></div>');
         const setP = () => { pr.querySelector('.serif-h').textContent = prompts[pi] || 'Write about anything from today.'; };
-        if (prompts.length < 2) pr.querySelector('button').hidden = true;
+        if (prompts.length < 2) pr.querySelector('button').style.display = 'none';
         setP(); pr.querySelector('button').onclick = () => { pi = (pi + 1) % Math.max(1, prompts.length); setP(); };
         b.appendChild(pr);
         const ta = h('<textarea class="input" id="write-text" style="min-height:40vh;font-family:var(--serif);font-size:19px;line-height:1.5" placeholder="' + U.esc(opts.placeholder || 'Start with one plain sentence.') + '"></textarea>');
@@ -298,6 +299,7 @@
           const text = ta.value.trim(); if (!text) { api.close(); return; }
           const entry = { date: today, text, words: text.split(/\s+/).length, sentences: countSentences(text), prompt: prompts[pi] || '' };
           if (kind) entry.kind = kind;
+          if (opts.unit) entry.unit = opts.unit; else if (opts.on) entry.on = opts.on;
           Store.data.writing = (Store.data.writing || []).filter(w => !same(w)).concat([entry]);
           if (!opts.free && entry.sentences >= need && Plan.kindId('writing')) Plan.setChecked(new Date(), Plan.kindId('writing'), true);
           Store.save(); api.close(); ui.toast(opts.free ? (opts.saved || 'Saved') : entry.sentences >= need ? 'Saved. Writing is done for today.' : 'Saved. ' + (need - entry.sentences) + ' more sentences to finish.'); after && after();

@@ -170,7 +170,16 @@
     if (!isObj(a) || !isObj(b)) return out;
     const t = (x, n) => trunc(x || '', n || 60);
     if (!same(a.energy, b.energy) && b.energy && b.energy.text) out.push('The Lamp is lit' + (b.energy.from ? ': ' + t(b.energy.from, 30) : ''));
-    if (!same(a.lesson, b.lesson) && b.lesson && b.lesson.title) out.push((a.lesson && a.lesson.date === b.lesson.date ? 'Today’s sitting updated: ' : 'Before class: ') + t(b.lesson.title));
+    if (!same(a.lesson, b.lesson) && b.lesson && b.lesson.title) out.push((a.lesson && a.lesson.date === b.lesson.date ? 'Today’s sitting updated: ' : 'The sitting: ') + t(b.lesson.title));
+    if (!same(a.course, b.course) && b.course) {
+      const units = c => arr(c && c.subjects).flatMap(x => arr(x && x.units).map((u, i) => ({ s: x.name, n: Number(u && u.n) || i + 1, id: (x && x.id) + '-' + (Number(u && u.n) || i + 1), state: u && u.state, title: u && u.title })));
+      const was = {}; units(a.course).forEach(u => { was[u.id] = u.state; });
+      const moved = units(b.course).filter(u => u.state && was[u.id] !== u.state && (u.state === 'solid' || u.state === 'thin'));
+      if (moved.length) moved.slice(0, 3).forEach(u => out.push(u.s + ' ' + U.roman(u.n) + ' is ' + u.state + (u.title ? ': ' + t(u.title, 30) : '')));
+      else if (!a.course || (a.course.current !== b.course.current && b.course.current)) { const u = units(b.course).find(x => x.id === b.course.current); out.push(u ? 'New unit: ' + u.s + ' ' + U.roman(u.n) + (u.title ? ', ' + t(u.title, 30) : '') : 'The Course is laid out'); }
+      else out.push('The Course was updated');
+    }
+    { const o = new Set(arr(a.changelog).map(x => x && x.date + (x.kind || ''))); arr(b.changelog).filter(x => x && !o.has(x.date + (x.kind || ''))).forEach(x => out.push(x.kind === 'letter' ? 'A letter in the Ledger' + (x.title ? ': ' + t(x.title, 30) : '') : 'A new entry in his teaching log')); }
     if (!same(a.seal, b.seal) && b.seal && b.seal.question) out.push(a.seal && a.seal.question === b.seal.question ? 'The Seal changed' : 'A new question under seal');
     if (!same(a.season, b.season) && b.season) {
       const wa = new Set(arr(a.season && a.season.weeks).filter(w => w && w.solid).map(w => w.n));
@@ -245,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.37.0': [['growth', 'Growth now shows only what’s in use: the Lamp, the sitting (Before class has a new name), the Course, Talk, the Scroll, the Ledger, and the Library. The Course lays out five subjects as rows of tiles: gold is solid, cracked is thin, the lit one is where you are. Tap a unit for Cassius’s mark, what it covered and what you wrote, and write its piece and teach-back right there. Every note from Cassius has a Write back box under it. Talk opens Claude Duet in one tap, and a small coin waits in the corner when the Talk card is off screen.']],
     '1.36.0': [['food', 'Today on Food is grouped by Breakfast, Lunch, Snack and Dinner, each with its calories and protein. Tap a meal to fold it to one line; the meal you’re on stays open. The same food logged more than once in a meal is one row with the total (tap it to see or change each time). Amounts read plainly, like ⅔ cup or ¾ serving. On a day with no meal plan the big numbers are what you ate. Supplements moved up, and The rotation moved down.']],
     '1.35.1': [['food', 'Supplements on Food, redone: grouped by morning, workday and evening with a check to log each, Took all for a whole group, the dose and the last seven days on the right, the time you took it, what each adds to vitamins and minerals, and a quiet note when a total from supplements is above the general daily upper limit.']],
     '1.35.0': [['food', 'Supplements on Food has Took one today?: tap any supplement to log it for today, tap again to take it back. A supplement can be set to When I take it, for the ones you don’t take every day; those stay off Today and show how often you took them.']],

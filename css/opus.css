@@ -1355,3 +1355,80 @@ button.g-pline:active { color: var(--gold-2); }
 .fd-n:not(.many)::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); opacity: .55; }
 .fd-n.many { height: 22px; border-radius: 999px; border: 1px solid var(--line-strong); font-weight: 600; letter-spacing: .02em; }
 .left-din[hidden] { display: none; } /* nothing left to show: no empty box */
+
+/* ---------- Growth 1.37: the Course (a mosaic of units), replies, Talk, How I've changed ---------- */
+.g-class.g-read .serif-h { font-style: italic; }
+.g-sealwrap { margin-top: 8px; }
+.g-sealwrap .g-seal { margin: 0; }
+/* tesserae: each unit a tile. Gold is solid, cracked is thin, the lit one is now, the empty slot is ahead */
+.g-tile { position: relative; flex: 0 0 auto; width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 4px;
+  font-family: var(--display); font-size: 10px; letter-spacing: .04em; color: var(--faint); border: 1px solid var(--line-soft); background: rgba(255, 232, 200, .025); }
+.g-tile.solid { color: var(--btn-ink); border-color: transparent; background: linear-gradient(140deg, var(--gold-2), var(--gold) 55%, var(--bronze));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), inset 0 -2px 3px rgba(60, 30, 10, .35), 0 2px 6px rgba(0, 0, 0, .35); }
+.g-tile.thin { color: var(--gold-2); border: 1px dashed rgba(214, 163, 94, .6); background: rgba(214, 163, 94, .1); overflow: hidden; }
+.g-tile.thin::after { content: ''; position: absolute; left: 50%; top: -20%; width: 1px; height: 140%; background: rgba(214, 163, 94, .45); transform: rotate(32deg); }
+.g-tile.current { color: var(--gold-2); border: 1.5px solid var(--gold-2); background: #1d150f; box-shadow: 0 0 0 3px rgba(242, 211, 160, .1), 0 0 14px rgba(242, 211, 160, .3); animation: g-lit 4.5s ease-in-out infinite; }
+@keyframes g-lit { 0%, 100% { box-shadow: 0 0 0 3px rgba(242, 211, 160, .08), 0 0 10px rgba(242, 211, 160, .2); } 50% { box-shadow: 0 0 0 3px rgba(242, 211, 160, .14), 0 0 18px rgba(242, 211, 160, .38); } }
+@media (prefers-reduced-motion: reduce) { .g-tile.current { animation: none; } }
+.g-tile.big { width: 44px; height: 44px; font-size: 13px; border-radius: 6px; }
+.g-course { padding-top: 6px; padding-bottom: 12px; }
+.g-subj { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 0; }
+.g-subj + .g-subj { border-top: 1px solid var(--line-soft); }
+.g-sname { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 2px 0; }
+.g-sname .t { font-family: var(--display); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
+.g-sname .small { color: var(--faint); font-variant-numeric: tabular-nums; }
+.g-subj.now .g-sname .t { color: var(--gold-2); }
+.g-tiles { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.g-tnone { color: var(--faint); font-style: italic; }
+.g-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); font-size: 11px; color: var(--dim); }
+.g-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.g-legend .g-tile { width: 12px; height: 12px; border-radius: 2px; animation: none; box-shadow: none; }
+.g-legend .g-tile.current { border-width: 1px; }
+.g-unow { border-color: var(--line-strong); background: linear-gradient(180deg, rgba(242, 211, 160, .06), rgba(242, 211, 160, .015)); }
+.g-unow .serif-h { margin-top: 6px; font-size: 25px; line-height: 1.15; }
+.g-uq { margin-top: 6px; font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 1.35; color: var(--ink-2); }
+.g-pbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.g-pbtn { display: flex; align-items: center; gap: 10px; min-width: 0; text-align: left; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: rgba(255, 232, 200, .03); }
+.g-pbtn i { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--gold); }
+.g-pbtn.done i { background: var(--gold); box-shadow: inset 0 0 0 3px #1d150f; }
+.g-pbtn .tx { display: flex; flex-direction: column; min-width: 0; }
+.g-pbtn b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.g-pbtn small { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-pbtn:active { background: var(--panel-2); }
+.g-squest { font-size: 21px; font-style: italic; color: var(--ink-2); margin-bottom: 14px; }
+.g-urow .g-tile { margin-right: 4px; }
+.g-mark .g-mrow { display: flex; gap: 14px; align-items: center; }
+.g-mark .tx { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.g-msay { font-family: var(--serif); font-size: 18px; line-height: 1.4; color: var(--ink); }
+.g-cov { margin-top: 6px; font-size: 18px; }
+.g-uw { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.g-uw .g-mine { margin-top: 6px; }
+/* replies under his notes */
+.g-reply { margin-top: 10px; }
+.g-ropen { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; padding: 4px 0; }
+.g-ropen svg, .g-out, .g-talkfab svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.g-rmine { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: var(--r-sm); background: rgba(255, 232, 200, .035); border: 1px solid var(--line-soft); }
+.g-rmine .g-prose { display: block; margin-top: 4px; font-size: 17px; color: var(--ink-2); }
+.g-rta { min-height: 84px; resize: none; font-family: var(--serif); font-size: 18px; line-height: 1.45; }
+.g-rrow { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.g-rrow .small { margin-right: auto; color: var(--dim); }
+/* Talk */
+.g-talk { display: flex; align-items: center; gap: 14px; padding: 14px 16px; color: inherit; text-decoration: none; }
+.g-talk img { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong); background: #120d09; }
+.g-talk .tx { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.g-talk b { font-family: var(--serif); font-size: 20px; font-weight: 600; }
+.g-talk small { font-size: 12.5px; color: var(--dim); line-height: 1.35; }
+.g-talk .g-out { color: var(--gold); width: 18px; height: 18px; flex: 0 0 auto; }
+.g-talk:active { background: var(--panel-2); }
+.g-talkfab { position: fixed; z-index: 30; right: max(16px, calc((100vw - 480px) / 2 + 16px), env(safe-area-inset-right, 0px)); bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px) + 14px);
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px 5px 5px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(18, 13, 9, .92);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--gold-2); text-decoration: none; font-family: var(--display); font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .25s var(--ease), transform .25s var(--ease); }
+.g-talkfab img { width: 30px; height: 30px; border-radius: 50%; }
+.g-talkfab.show { opacity: 1; transform: none; pointer-events: auto; }
+/* How I've changed */
+.g-log .serif-h { margin-top: 6px; font-size: 21px; }
+.g-lrow { margin-top: 12px; }
+.g-lrow .g-prose { margin-top: 3px; font-size: 17px; }
+.g-ltext { margin-top: 12px; font-size: 17px; }
+.g-log + .g-log, .g-log + .g-letter, .g-letter + .g-log { margin-top: 8px; }

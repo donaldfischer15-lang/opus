@@ -59,7 +59,7 @@
     ['money.balances', w => w.date],
     ['money.cash', c => c.date],
     ['reviews', r => r.weekOf],
-    ['writing', w => (w.kind ? w.date + ':' + w.kind : w.date)],
+    ['writing', w => (w.kind ? w.date + ':' + w.kind + (w.unit || w.on ? ':' + (w.unit || w.on) : '') : w.date)], // a unit's piece or a reply is one a day per unit or note
     ['reading', r => r.id],
     ['kept', k => k.id || k.date], // Lamps you kept and lines from your books; older entries have no id and are one per day
     ['glimpses', g => g.id],

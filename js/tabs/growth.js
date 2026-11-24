@@ -1,6 +1,8 @@
-/* Growth tab: Cassius's room. The Lamp at the top, then Before class, the Seal, his notes, the Season, the Map,
-   the Scroll (your words), Glimpses, the Portrait with your creed, the Library and what you've made.
-   Cassius writes growth.json. The phone only reads it; what you do here goes in the logs (writing, glimpses, kept, reading).
+/* Growth tab: Cassius's room. Only the parts in use show, top to bottom: the Lamp, the sitting (with Back again),
+   his notes, the Course, Talk, the Scroll (your words), The Ledger, and the Library.
+   Everything but conversation happens here: answering, the unit's piece and teach-back, replies to his notes, pages, kept lines.
+   Cassius writes growth.json. The phone only reads it; what you do here goes in the logs (writing, kept, reading).
+   The Season, Map, Glimpses, Lexicon, Made, Portrait and creed stay in the file but aren't shown.
    Nothing here counts streaks or scores: only what you write or log shows, and a blank stays blank. */
 (function () {
   'use strict';
@@ -56,7 +58,10 @@
   /* the kind of writing a sitting asks for decides where the answer is filed in the logs */
   const FORM_KIND = { 'teach-back': 'teachback', teachback: 'teachback', workshop: 'workshop', walk: 'walk', seal: 'seal' };
   const kindFor = l => FORM_KIND[String((l && l.form) || '').toLowerCase()] || 'lesson';
-  const KIND_NAME = { lesson: 'Answer', recall: 'Explained again', teachback: 'Teach-back', workshop: 'Workshop', walk: 'From the Walk', seal: 'Sealed question', '': 'Writing' };
+  const KIND_NAME = { lesson: 'Answer', recall: 'Explained again', teachback: 'Teach-back', workshop: 'Workshop', walk: 'From the Walk', seal: 'Sealed question', piece: 'The unit’s piece', reply: 'Reply to Cassius', '': 'Writing' };
+  // a Thought (Friday) and a Quiet day are there to read; they never ask anything of you
+  const readOnly = l => /^(thought|quiet)/i.test(String((l && l.form) || ''));
+  const asks = l => !!(l && l.question && !readOnly(l));
   const answerTo = (kind, q) => q ? writing().filter(w => (w.kind || '') === kind && w.prompt === q).sort((a, b) => b.date.localeCompare(a.date))[0] || null : null;
 
   /* ---------- notes from Cassius: each can be "on" something ("lesson:DATE", "glimpse:ID", "book:ID", "seal:DATE" ...) ---------- */
@@ -72,7 +77,47 @@
   const dot = n => (unread.has(noteKey(n)) ? '<i class="g-unread" aria-label="New"></i>' : '');
   function noteBox(n, label) {
     const el = h('<div class="g-take g-noteon"><div class="tag">' + dot(n) + U.esc(label) + '</div><div></div></div>');
-    el.lastChild.textContent = n.text; return el;
+    el.children[1].textContent = n.text; el.appendChild(replyBox(noteRef(n), n.text)); return el;
+  }
+
+  /* ---------- replies: a box under each of his notes. A reply goes in logs writing as kind "reply", on that note ---------- */
+  const noteRef = n => 'note:' + (n.id ? n.id : n.date + (n.on ? ':' + n.on : ''));
+  const replyTo = ref => writing().filter(w => w.kind === 'reply' && w.on === ref).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const sentences = t => Math.max(1, (String(t).match(/[.!?…]+(\s|$)/g) || []).length);
+  function replyBox(ref, about) {
+    const box = h('<div class="g-reply"></div>');
+    ['click', 'pointerdown'].forEach(e => box.addEventListener(e, ev => ev.stopPropagation()));
+    const draw = editing => {
+      const r = replyTo(ref); box.innerHTML = '';
+      if (!editing) {
+        if (r) {
+          const m = h('<button class="g-rmine" type="button"><span class="tag"></span><span class="g-prose"></span></button>');
+          set(m, '.tag', 'You wrote back · ' + ago(r.date)); m.querySelector('.g-prose').innerHTML = prose(r.text);
+          m.onclick = () => draw(true); box.appendChild(m);
+        } else { const b = h('<button class="g-ropen" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 6 6v1"/></svg>Write back</button>'); b.onclick = () => draw(true); box.appendChild(b); }
+        return;
+      }
+      const ta = h('<textarea class="input g-rta" rows="3" placeholder="Write back. He reads it next time he writes."></textarea>');
+      ta.value = r ? r.text : '';
+      const row = h('<div class="g-rrow"><span class="small num"></span><button class="link" type="button">Cancel</button><button class="btn sm" type="button">Save</button></div>');
+      const cnt = row.querySelector('.small'), upd = () => { cnt.textContent = words(ta.value) ? words(ta.value) + ' words' : ''; };
+      ta.addEventListener('input', () => { upd(); ta.style.height = 'auto'; ta.style.height = Math.min(320, ta.scrollHeight + 2) + 'px'; }); upd();
+      row.children[1].onclick = () => draw(false);
+      row.children[2].onclick = () => {
+        const t = ta.value.trim(); if (!t) { ta.focus(); return; }
+        saveWriting({ date: r ? r.date : today(), kind: 'reply', on: ref, prompt: String(about || '').replace(/\s+/g, ' ').trim().slice(0, 160), text: t, words: words(t), sentences: sentences(t) });
+        ui.buzz(10); ui.toast('Saved. Cassius reads it when he next writes.'); draw(false);
+      };
+      box.appendChild(ta); box.appendChild(row); setTimeout(() => ta.focus(), 60);
+    };
+    draw(false);
+    return box;
+  }
+  /* one piece of writing per day, kind and the thing it's on: saving again that day replaces it */
+  function saveWriting(entry) {
+    const ref = w => w.on || w.unit || '';
+    Store.data.writing = arr(Store.data.writing).filter(w => !(w.date === entry.date && (w.kind || '') === (entry.kind || '') && ref(w) === ref(entry))).concat([entry]);
+    Store.save();
   }
   function take(label, text, cls) {
     const el = h('<div class="g-take' + (cls ? ' ' + cls : '') + '"><div class="tag"></div><div></div></div>');
@@ -97,16 +142,16 @@
   }
 
   /* what Listen reads for a sitting: the title, the letter, what to take with you, and the question */
-  const listenTo = l => ({ who: 'Cassius', title: l.title || 'Before class', pieces: [l.title, l.body, l.takeaway ? 'Take with you. ' + l.takeaway : null, l.question ? 'Cassius asks. ' + l.question : null] });
+  const listenTo = l => ({ who: 'Cassius', title: l.title || 'The sitting', pieces: [l.title, l.body, l.takeaway ? 'Take with you. ' + l.takeaway : null, asks(l) ? 'Cassius asks. ' + l.question : null] });
   function lessonSheet(l, after) {
     const kind = kindFor(l), ans = answerTo(kind, l.question);
     ui.sheet({
-      title: l.title || 'Before class', kicker: [l.form || 'Before class', ago(l.date) === 'today' ? null : ago(l.date), readMins(l) + ' min'].filter(Boolean).join(' · '), foot: true,
+      title: l.title || 'The sitting', kicker: [l.form || 'The sitting', ago(l.date) === 'today' ? null : ago(l.date), readMins(l) + ' min'].filter(Boolean).join(' · '), foot: true,
       render(api) {
         const b = api.body;
         b.appendChild(h('<div class="g-prose">' + (prose(l.body) || '<p class="note">Cassius left a title and nothing more today. Some days that is the lesson.</p>') + '</div>'));
         if (l.takeaway) b.appendChild(take('Take with you', l.takeaway));
-        if (l.question) {
+        if (asks(l)) {
           const q = h('<div class="card pad g-ask"><div class="tag">Cassius asks</div><div class="serif-h"></div>' + (ans ? '<div class="small" style="margin-top:8px"></div>' : '') + '</div>');
           set(q, '.serif-h', l.question); if (ans) set(q, '.small', 'You answered ' + ago(ans.date) + ' · ' + ans.words + ' words');
           b.appendChild(q);
@@ -114,18 +159,18 @@
         }
         const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans)); if (n) b.appendChild(noteBox(n, ans ? 'Cassius on your answer' : 'Cassius on this'));
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
-        const btns = h('<div class="btns"><button class="btn quiet" type="button">Talk it through</button>' + (l.question ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
-        btns.children[0].onclick = () => talk(l);
-        if (l.question) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'Before class', tag: 'Cassius asks' }); };
+        const btns = h('<div class="btns"><button class="btn quiet" type="button">Talk it through</button>' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
+        btns.children[0].onclick = () => talk();
+        if (asks(l)) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'The sitting', tag: 'Cassius asks' }); };
         api.foot.appendChild(btns);
       }
     });
   }
-  /* the real conversation happens with Cassius himself; this hands you the opening line */
-  function talk(l) {
-    ui.copy('Cassius, about today’s sitting, “' + (l.title || 'Before class') + '”: ');
-    ui.toast('Copied. Paste it to Cassius and say what’s on your mind.');
-  }
+  /* the real conversation happens with Cassius himself, in Claude Duet: one tap from anywhere on the tab.
+     growth.json "talk": { "url" } can point it at his own chat; anything not on claude.ai falls back to the app's front door */
+  const TALK = 'https://claude.ai/messages';
+  const talkUrl = () => { const u = ((G() || {}).talk || {}).url; return typeof u === 'string' && /^https:\/\/claude\.ai\/[\w\-\/.?=&#%]*$/.test(u) ? u : TALK; };
+  function talk() { const a = document.createElement('a'); a.href = talkUrl(); a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
 
   function writingSheet(w) {
     ui.sheet({ title: U.fmtDateShort(w.date), kicker: KIND_NAME[w.kind || ''] || 'Writing', render(api) {
@@ -197,30 +242,32 @@
     set(s, '.sh .t', title); return s;
   }
 
-  /* Before class: today's sitting, named for the room Dr. N asked him to come to before class */
-  function beforeClass(g, num, sn) {
+  /* The sitting: today's lesson, ready by lunch, then Back again, and the Seal while it waits on you */
+  function sitting(g, num, sn) {
     const l = g && g.lesson, past = arr(g && g.lessons).length;
-    const s = sec(num, 'Before class', past ? '<button class="c" type="button">Earlier</button>' : '');
+    const s = sec(num, 'The sitting', past ? '<button class="c" type="button">Earlier</button>' : '');
     const pb = s.querySelector('button.c'); if (pb) pb.onclick = pastLessons;
     if (!l || !l.title) {
       const opens = sn && sn.before ? longDay(sn.s.start) : null;
       s.appendChild(h('<div class="card pad g-class empty-c"><div class="serif-h"></div><p class="g-first"></p></div>'));
       set(s, '.serif-h', opens ? 'The room opens ' + opens + '.' : 'Nothing waiting yet.');
       set(s, '.g-first', opens ? 'Every day at lunch there will be something here. The first day is a letter and one task.' : 'Today’s sitting is set before dawn and waiting by 11:45.');
+      const sl = sealCard(g); if (sl) s.appendChild(sl);
       return s;
     }
-    const kind = kindFor(l), ans = answerTo(kind, l.question), old = l.date !== today();
-    const c = h('<div class="card pad g-class tap' + (ans ? ' answered' : '') + '">' +
+    const kind = kindFor(l), ask = asks(l), ans = ask ? answerTo(kind, l.question) : null, old = l.date !== today();
+    const u = unitById(g, l.unit);
+    const c = h('<div class="card pad g-class tap' + (ans ? ' answered' : '') + (readOnly(l) ? ' g-read' : '') + '">' +
       '<div class="g-meta"><span class="tag"></span><span class="small num"></span></div><div class="serif-h" style="margin-top:6px"></div>' +
-      (firstPara(l.body) ? '<p class="g-first"></p>' : '') + (l.question ? '<div class="g-q"><span class="tag">Cassius asks</span><div></div></div>' : '') +
+      (firstPara(l.body) ? '<p class="g-first"></p>' : '') + (ask ? '<div class="g-q"><span class="tag">Cassius asks</span><div></div></div>' : '') +
       '<div class="g-cfoot"><span class="g-state small"></span>' + (l.why ? '<button class="link g-whyb" type="button">Why this, today?</button>' : '') + '</div>' +
       (l.why ? '<p class="g-whyt" hidden></p>' : '') + '</div>');
-    set(c, '.g-meta .tag', l.form || 'Before class');
-    set(c, '.g-meta .small', readMins(l) + ' min' + (old ? ' · ' + ago(l.date) : ''));
+    set(c, '.g-meta .tag', l.form || 'The sitting');
+    set(c, '.g-meta .small', [u ? u.subject.name + ' ' + U.roman(u.n) : null, readMins(l) + ' min', old ? ago(l.date) : null].filter(Boolean).join(' · '));
     set(c, '.serif-h', l.title);
     if (firstPara(l.body)) set(c, '.g-first', firstPara(l.body));
-    if (l.question) set(c, '.g-q div', l.question);
-    set(c, '.g-state', ans ? 'Answered · ' + ans.words + ' words' : l.question ? 'Tap to sit down' : 'Tap to read');
+    if (ask) set(c, '.g-q div', l.question);
+    set(c, '.g-state', ans ? 'Answered · ' + ans.words + ' words' : ask ? 'Tap to sit down' : /^quiet/i.test(l.form || '') ? 'Nothing asked of you today' : 'Tap to read');
     if (l.why) {
       const wb = c.querySelector('.g-whyb'), wt = c.querySelector('.g-whyt'); wt.textContent = l.why;
       wb.onclick = ev => { ev.stopPropagation(); wt.hidden = !wt.hidden; wb.textContent = wt.hidden ? 'Why this, today?' : 'Hide the why'; };
@@ -243,6 +290,7 @@
         s.appendChild(rc);
       }
     }
+    const sl = sealCard(g); if (sl) s.appendChild(sl);
     return s;
   }
   function lessonByRef(g, ref) {
@@ -280,10 +328,13 @@
 
   /* the Seal: a question with Cassius's own answer locked inside. It opens on its date or once you've answered */
   const SEAL = '<svg class="g-wax" viewBox="0 0 64 64" aria-hidden="true"><path class="wx" d="M32 4c5 0 7 3 11 4s8 0 10 4-1 7 1 11 5 6 4 11-5 6-6 10 1 8-3 11-8 1-12 3-6 5-11 5-7-3-11-4-8 0-10-4 1-7-1-11-5-6-4-11 5-6 6-10-1-8 3-11 8-1 12-3 6-5 11-5z"/><circle cx="32" cy="32" r="15"/><path d="M38 25.5a9 9 0 1 0 0 13"/><path class="ck" d="M30 4.6 33 22l-6 9 7 9-3 19.4"/></svg>';
-  function sealCard(g, num) {
+  function sealCard(g) {
     const sl = g && g.seal; if (!sl || !sl.question) return null;
     const mine = answerTo('seal', sl.question), open = !!mine || (isDate(sl.opens) && sl.opens <= today());
-    const s = sec(num(), 'The Seal');
+    // the Seal shows only while it's live: waiting on your answer, or for a week after it breaks
+    const broke = mine ? mine.date : isDate(sl.opens) ? sl.opens : null;
+    if (open && (!broke || U.daysBetween(U.parseKey(broke), new Date()) > 7)) return null;
+    const s = h('<div class="g-sealwrap"></div>');
     const c = h('<div class="card pad g-seal' + (open ? ' open' : '') + '">' + SEAL + '<div class="tag"></div><div class="serif-h"></div><div class="g-sealb"></div></div>');
     set(c, '.tag', 'Cassius sealed his answer ' + ago(sl.date));
     set(c, '.serif-h', sl.question);
@@ -304,7 +355,7 @@
   }
 
   /* From Cassius: notes that aren't about one thing on the page. A letter shows as folded paper; a piece of his story is marked */
-  const elsewhere = n => /^(writing|lesson|recall|teachback|workshop|walk|seal|glimpse|book|made):/.test(n.on || '') || n.on === 'writing';
+  const elsewhere = n => /^(writing|lesson|recall|teachback|workshop|walk|seal|glimpse|book|made|unit|piece|reply|changelog):/.test(n.on || '') || n.on === 'writing';
   function fromCassius(g, num) {
     const all = notes().filter(n => !elsewhere(n)).sort((a, b) => b.date.localeCompare(a.date));
     const list = all.filter(n => U.daysBetween(U.parseKey(n.date), new Date()) <= 14 || unread.has(noteKey(n)));
@@ -319,12 +370,14 @@
       const c = h('<button class="g-letter" type="button"><span class="g-fold" aria-hidden="true"></span><span class="tag"></span><span class="serif-h"></span><span class="small">Tap to unfold</span></button>');
       c.querySelector('.tag').innerHTML = dot(n) + 'A letter · ' + U.esc(ago(n.date));
       set(c, '.serif-h', n.title || (((Plan.p && Plan.p.profile && Plan.p.profile.firstName) || (Plan.p && Plan.p.profile && Plan.p.profile.name) || '').split(' ')[0] || 'A letter') + (n.title ? '' : '.'));
-      c.onclick = () => ui.sheet({ title: n.title || 'A letter', kicker: 'From Cassius · ' + U.fmtDateShort(n.date), render(api) { api.body.appendChild(h('<div class="g-prose g-paper">' + prose(n.text) + '</div>')); } });
+      c.onclick = () => ui.sheet({ title: n.title || 'A letter', kicker: 'From Cassius · ' + U.fmtDateShort(n.date), render(api) { api.body.appendChild(h('<div class="g-prose g-paper">' + prose(n.text) + '</div>')); api.body.appendChild(replyBox(noteRef(n), n.title || n.text)); } });
+      if (replyTo(noteRef(n))) c.querySelector('.small').textContent = 'Tap to unfold · you wrote back';
       return c;
     }
     const c = h('<div class="card pad g-note2' + (n.kind === 'story' ? ' story' : '') + '"><div class="tag"></div><div class="g-ntext g-prose"></div></div>');
     c.querySelector('.tag').innerHTML = dot(n) + (n.kind === 'story' ? 'From his life' : 'A note') + ' · ' + U.esc(ago(n.date));
     c.querySelector('.g-ntext').innerHTML = prose(n.text);
+    c.appendChild(replyBox(noteRef(n), n.text));
     return c;
   }
   function allNotes(list) {
@@ -413,6 +466,176 @@
     } });
   }
 
+  /* ---------- the Course: five subjects, each a row of tiles laid like a mosaic. Gold is solid, cracked is thin, the lit one is now ---------- */
+  function courseOf(g) {
+    const c = g && g.course; if (!c || !Array.isArray(c.subjects)) return null;
+    const subjects = c.subjects.filter(x => x && x.id && x.name).map(sb => {
+      const o = Object.assign({}, sb);
+      o.units = arr(sb.units).filter(u => u && u.title).map((u, i) => Object.assign({}, u, { n: Number(u.n) || i + 1, id: sb.id + '-' + (Number(u.n) || i + 1), subject: o }));
+      return o;
+    });
+    if (!subjects.length) return null;
+    const all = subjects.flatMap(x => x.units);
+    const cur = all.find(u => u.id === c.current) || all.find(u => u.state === 'current') || null;
+    all.forEach(u => { u.st = u.state === 'solid' || u.state === 'thin' ? u.state : cur && u.id === cur.id ? 'current' : 'ahead'; });
+    return { subjects, all, cur };
+  }
+  function unitById(g, id) { const c = id && courseOf(g); return c ? c.all.find(u => u.id === id) || null : null; }
+  const ST_NAME = { solid: 'Solid', thin: 'Thin', current: 'Now', ahead: 'Ahead' };
+  const ST_SAY = { solid: 'You can explain it start to finish.', thin: 'Some of it holds. It comes back around.', current: 'The unit you’re on.', ahead: 'Not yet. It opens when you get there.' };
+  const PIECES = [
+    { kind: 'piece', name: 'The piece', verb: 'Write the piece', ask: u => u.piece || 'Write what “' + u.title + '” comes to, in your own words.' },
+    { kind: 'teachback', name: 'Teach-back', verb: 'Teach it back', ask: u => u.teachback || 'Teach “' + u.title + '” to someone who wasn’t there, start to finish.' }
+  ];
+  const pieceOf = (u, kind) => writing().filter(w => w.unit === u.id && w.kind === kind).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const proofOf = ref => { const m = /^writing:(\d{4}-\d{2}-\d{2})(?::(\w+))?(?::([\w-]+))?$/.exec(ref || ''); return m ? writing().find(x => x.date === m[1] && (!m[2] || (x.kind || '') === m[2]) && (!m[3] || x.unit === m[3])) || null : null; };
+  function writeUnit(u, p, after) {
+    const mine = pieceOf(u, p.kind);
+    Opus.today.writeSheet(after || (() => Opus.refresh()), { free: true, prompt: p.ask(u), kind: p.kind, unit: u.id, date: mine ? mine.date : null,
+      title: p.name, kicker: u.subject.name + ' ' + U.roman(u.n), tag: p.kind === 'teachback' ? 'Teach it back' : 'The piece',
+      placeholder: p.kind === 'teachback' ? 'Explain it as if to someone who wasn’t there. Start at the beginning.' : 'Plain sentences. Say what you think, then why.',
+      saved: 'Saved with ' + u.subject.name + ' ' + U.roman(u.n) + '.' });
+  }
+  const pieceBtn = (u, p) => {
+    const mine = pieceOf(u, p.kind);
+    const b = h('<button class="g-pbtn' + (mine ? ' done' : '') + '" type="button"><i aria-hidden="true"></i><span class="tx"><b></b><small></small></span></button>');
+    set(b, 'b', mine ? p.name : p.verb); set(b, 'small', mine ? mine.words + ' words · ' + ago(mine.date) : p.kind === 'teachback' ? 'From memory' : 'In your own words');
+    b.onclick = ev => { ev.stopPropagation(); writeUnit(u, p); };
+    return b;
+  };
+  function tile(u, big) {
+    const t = h('<button class="g-tile ' + u.st + (big ? ' big' : '') + '" type="button"><span>' + U.roman(u.n) + '</span></button>');
+    t.setAttribute('aria-label', u.subject.name + ' ' + u.n + ': ' + u.title + ', ' + ST_NAME[u.st].toLowerCase());
+    t.onclick = () => unitSheet(u);
+    return t;
+  }
+  function courseCard(g, num) {
+    const c = courseOf(g); if (!c) return null;
+    const solid = c.all.filter(u => u.st === 'solid').length;
+    const s = sec(num(), 'The Course', '<span class="c"></span>'); set(s, '.sh .c', solid ? solid + ' of ' + c.all.length + ' solid' : c.all.length + ' units');
+    const u = c.cur;
+    if (u) {
+      const now = h('<div class="card pad g-unow tap"><div class="g-meta"><span class="tag"></span><span class="small"></span></div><div class="serif-h"></div><p class="g-uq"></p><div class="g-pbtns"></div></div>');
+      set(now, '.tag', 'Now · ' + u.subject.name + ' ' + U.roman(u.n));
+      set(now, '.g-meta .small', isDate(u.date) ? 'since ' + U.fmtDateShort(u.date) : '');
+      set(now, '.serif-h', u.title);
+      if (u.subject.question) set(now, '.g-uq', u.subject.question); else now.querySelector('.g-uq').remove();
+      PIECES.forEach(p => now.querySelector('.g-pbtns').appendChild(pieceBtn(u, p)));
+      now.onclick = () => unitSheet(u);
+      s.appendChild(now);
+    }
+    const m = h('<div class="card pad g-course"></div>');
+    c.subjects.forEach(sb => {
+      const row = h('<div class="g-subj' + (u && u.subject.id === sb.id ? ' now' : '') + '"><button class="g-sname" type="button"><span class="t"></span><span class="small"></span></button><div class="g-tiles" role="list"></div></div>');
+      set(row, '.t', sb.name);
+      const so = sb.units.filter(x => x.st === 'solid').length;
+      set(row, '.small', sb.units.length ? so + '/' + sb.units.length : '');
+      row.querySelector('.g-sname').onclick = () => subjectSheet(sb);
+      sb.units.forEach(x => { const t = tile(x); t.setAttribute('role', 'listitem'); row.querySelector('.g-tiles').appendChild(t); });
+      if (!sb.units.length) row.querySelector('.g-tiles').appendChild(h('<span class="small g-tnone">Units to come</span>'));
+      m.appendChild(row);
+    });
+    m.appendChild(h('<div class="g-legend" aria-hidden="true"><span><i class="g-tile solid"></i>Solid</span><span><i class="g-tile thin"></i>Thin</span><span><i class="g-tile current"></i>Now</span><span><i class="g-tile ahead"></i>Ahead</span></div>'));
+    s.appendChild(m);
+    return s;
+  }
+  function subjectSheet(sb) {
+    ui.sheet({ title: sb.name, kicker: sb.units.length + (sb.units.length === 1 ? ' unit' : ' units'), render(api) {
+      const b = api.body;
+      if (sb.question) set(b.appendChild(h('<div class="serif-h g-squest"></div>')), null, sb.question);
+      const card = h('<div class="card"></div>');
+      sb.units.forEach(u => {
+        const r = h('<div class="row tap g-urow"><span class="g-tile ' + u.st + '"><span>' + U.roman(u.n) + '</span></span><span class="tx"><b></b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>');
+        set(r, 'b', u.title); set(r, 'small', ST_NAME[u.st] + (isDate(u.date) ? ' · ' + U.fmtDateShort(u.date) : ''));
+        r.onclick = () => unitSheet(u); card.appendChild(r);
+      });
+      if (!sb.units.length) card.appendChild(h('<p class="empty" style="padding:16px">Cassius hasn’t laid out these units yet.</p>'));
+      b.appendChild(card);
+    } });
+  }
+  /* a unit, whole: Cassius's mark, what it covered, and everything you wrote for it */
+  function unitSheet(u) {
+    const g = G();
+    ui.sheet({ title: u.title, kicker: u.subject.name + ' ' + U.roman(u.n) + ' · ' + ST_NAME[u.st], render(api) {
+      const b = api.body;
+      const mk = h('<div class="card pad g-mark ' + u.st + '"><div class="g-mrow"><span class="g-tile ' + u.st + ' big"><span>' + U.roman(u.n) + '</span></span><span class="tx"><span class="tag"></span><span class="g-msay"></span></span></div></div>');
+      set(mk, '.tag', 'Cassius’s mark · ' + ST_NAME[u.st] + (isDate(u.date) && u.st !== 'ahead' ? ' · ' + U.fmtDateShort(u.date) : ''));
+      set(mk, '.g-msay', u.mark || ST_SAY[u.st]);
+      b.appendChild(mk);
+      const un = noteFor('unit:' + u.id); if (un) b.appendChild(noteBox(un, 'Cassius on this unit'));
+      // what it covered: his summary, then the sittings that belonged to it
+      const sits = arr(g && g.lessons).concat(g && g.lesson ? [g.lesson] : []).filter(l => l && l.unit === u.id && l.title).sort((a, z) => String(a.date).localeCompare(String(z.date)));
+      if (u.covered || sits.length) {
+        b.appendChild(h('<div class="sh" style="margin-top:16px"><span class="t">What it covered</span></div>'));
+        if (u.covered) b.appendChild(h('<div class="g-prose g-cov">' + prose(u.covered) + '</div>'));
+        if (sits.length) {
+          const card = h('<div class="card" style="margin-top:8px"></div>');
+          sits.forEach(l => { const r = h('<div class="row tap"><span class="tx"><b></b><small></small></span>' + ui.icon('chev', 'chev ico') + '</div>'); set(r, 'b', l.title); set(r, 'small', [U.fmtDateShort(l.date), l.form].filter(Boolean).join(' · ') + (asks(l) && answerTo(kindFor(l), l.question) ? ' · answered' : '')); r.onclick = () => lessonSheet(l, () => Opus.refresh()); card.appendChild(r); });
+          b.appendChild(card);
+        }
+      } else if (u.st !== 'ahead') b.appendChild(h('<p class="note" style="margin-top:12px">Cassius hasn’t written up what this unit covered yet.</p>'));
+      // your writing for it
+      const proof = proofOf(u.proof);
+      const mine = writing().filter(w => w.unit === u.id && w.kind !== 'reply').concat(proof && proof.unit !== u.id ? [proof] : []).sort((a, z) => z.date.localeCompare(a.date));
+      if (u.st !== 'ahead' || mine.length) {
+        b.appendChild(h('<div class="sh" style="margin-top:18px"><span class="t">Your writing for it</span></div>'));
+        if (u.st !== 'ahead') { const pb = h('<div class="g-pbtns" style="margin-top:6px"></div>'); PIECES.forEach(p => { const x = pieceBtn(u, p); x.onclick = () => { api.close(true); writeUnit(u, p, () => { Opus.refresh(); unitSheet(Object.assign(u, {})); }); }; pb.appendChild(x); }); b.appendChild(pb); }
+        mine.forEach(w => {
+          const c = h('<div class="g-uw"><div class="g-meta"><span class="tag"></span><span class="small"></span></div><div class="g-mine g-prose"></div></div>');
+          set(c, '.tag', (KIND_NAME[w.kind || ''] || 'Writing') + (proof && w === proof ? ' · his proof' : ''));
+          set(c, '.small', U.fmtDateShort(w.date) + ' · ' + w.words + ' words');
+          c.querySelector('.g-prose').innerHTML = prose(w.text);
+          b.appendChild(c);
+          const n = noteOnWriting(w); if (n) b.appendChild(noteBox(n, 'Cassius on this'));
+        });
+      }
+      const tb = h('<div class="btns" style="margin-top:18px"><button class="btn quiet" type="button">Talk it through</button></div>');
+      tb.firstChild.onclick = talk; b.appendChild(tb);
+    } });
+  }
+
+  /* ---------- Talk: the conversation lives in Claude Duet. One tap here, and a quiet coin at the corner once you scroll past ---------- */
+  function talkCard(g, num, v) {
+    const s = sec(num(), 'Talk');
+    const a = h('<a class="card g-talk" target="_blank" rel="noopener"><img src="icons/cassius.svg" alt=""><span class="tx"><b>Talk with Cassius</b><small>Opens Claude Duet. Questions, pushback, anything that needs a back and forth.</small></span><svg class="g-out" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>');
+    a.href = talkUrl(); s.appendChild(a);
+    const fab = h('<a class="g-talkfab" target="_blank" rel="noopener" aria-label="Talk with Cassius"><img src="icons/cassius.svg" alt=""><span>Talk</span></a>');
+    fab.href = talkUrl(); v.appendChild(fab);
+    // the coin waits in the corner whenever the Talk card itself isn't in view
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => fab.classList.toggle('show', e.intersectionRatio < 0.5)), { threshold: [0, 0.5, 1] }); io.observe(a); }
+    else fab.classList.add('show');
+    return s;
+  }
+
+  /* ---------- The Ledger: Cassius's teaching log, kept honestly, and his monthly letters ---------- */
+  const changelog = g => arr(g && g.changelog).filter(x => x && isDate(x.date) && (x.text || x.tried || x.happened || x.changing)).sort((a, b) => b.date.localeCompare(a.date));
+  const clRef = x => 'changelog:' + x.date + ':' + (x.kind === 'letter' ? 'letter' : 'entry');
+  function changeCard(x) {
+    if (x.kind === 'letter') {
+      const c = h('<button class="g-letter" type="button"><span class="g-fold" aria-hidden="true"></span><span class="tag"></span><span class="serif-h"></span><span class="small"></span></button>');
+      set(c, '.tag', 'His letter · ' + U.MONTHS[U.parseKey(x.date).getMonth()]); set(c, '.serif-h', x.title || 'How the month went');
+      set(c, '.small', replyTo(clRef(x)) ? 'Tap to unfold · you wrote back' : 'Tap to unfold');
+      c.onclick = () => ui.sheet({ title: x.title || 'A letter', kicker: 'From Cassius · ' + U.fmtDateShort(x.date), render(api) { api.body.appendChild(h('<div class="g-prose g-paper">' + prose(x.text || '') + '</div>')); api.body.appendChild(replyBox(clRef(x), x.title || x.text)); } });
+      return c;
+    }
+    const c = h('<div class="card pad g-log"><div class="g-meta"><span class="tag"></span></div></div>');
+    set(c, '.tag', 'Teaching log · ' + ago(x.date));
+    if (x.title) set(c.appendChild(h('<div class="serif-h"></div>')), null, x.title);
+    [['tried', 'I tried'], ['happened', 'What happened'], ['changing', 'What I’m changing']].forEach(([k, lab]) => {
+      if (!x[k]) return; const r = h('<div class="g-lrow"><span class="tag"></span><div class="g-prose"></div></div>'); set(r, '.tag', lab); r.querySelector('.g-prose').innerHTML = prose(x[k]); c.appendChild(r);
+    });
+    if (x.text) c.appendChild(h('<div class="g-prose g-ltext">' + prose(x.text) + '</div>'));
+    c.appendChild(replyBox(clRef(x), x.title || x.changing || x.text));
+    return c;
+  }
+  function changedCard(g, num) {
+    const list = changelog(g); if (!list.length) return null;
+    const s = sec(num(), 'The Ledger', list.length > 3 ? '<button class="c" type="button">All</button>' : '');
+    const more = s.querySelector('button.c'); if (more) more.onclick = () => ui.sheet({ title: 'The Ledger', kicker: 'Cassius’s teaching log · ' + list.length, render(api) { list.forEach(x => { const c = changeCard(x); c.style.marginBottom = '10px'; api.body.appendChild(c); }); } });
+    list.slice(0, 3).forEach(x => s.appendChild(changeCard(x)));
+    return s;
+  }
+
   /* ---------- the Scroll: every word you write, as a scroll that grows ---------- */
   const ownedWords = g => { // a taught word turns gold the first time you use it in your own writing, unprompted
     const ws = writing().slice().sort((a, b) => a.date.localeCompare(b.date));
@@ -447,7 +670,6 @@
       col.dataset.band = start1 && d >= start1 ? 's1' : 's0';
       if (age === 0) col.classList.add('wet');
       if (gilded.some(x => x.date === d)) col.appendChild(h('<i class="gold" aria-hidden="true"></i>'));
-      if (owned.some(x => x.owned === d)) col.appendChild(h('<i class="own" aria-hidden="true"></i>'));
       const before = run; run += n;
       books.forEach(b => { if (before < b.words && run >= b.words) { passed.push({ b, d }); col.appendChild(h('<i class="mile" aria-hidden="true"></i>')); } });
       col.setAttribute('aria-label', longDay(d) + ': ' + n + ' words');
@@ -460,12 +682,10 @@
     const marks = c.querySelector('.g-smarks');
     const mark = (cls, text) => { const m = h('<span class="g-mk"><i class="' + cls + '"></i><span></span></span>'); set(m, 'span span', text); marks.appendChild(m); };
     if (gilded.length) mark('gold', gilded.length + ' gilded');
-    if (lex.length) mark('own', owned.length + ' of ' + lex.length + ' words yours');
     if (passed.length) mark('mile', 'Longer than ' + passed[passed.length - 1].b.title);
     if (!marks.children.length) marks.remove();
     const bt = c.querySelector('.g-sbtns');
     const wb = h('<button class="btn quiet" type="button">Write</button>'); wb.onclick = () => Opus.today.writeSheet(() => Opus.refresh()); bt.appendChild(wb);
-    if (lex.length) { const lb = h('<button class="btn ghost" type="button">Lexicon</button>'); lb.onclick = () => lexiconSheet(lex); bt.appendChild(lb); }
     // press and hold the scroll to see it in seasonal bands
     const sc = c.querySelector('.g-scroll');
     hold(sc, () => { sc.classList.toggle('bands'); ui.buzz(10); ui.toast(sc.classList.contains('bands') ? (start1 ? 'Seasons: before Cassius, then ' + seasonName(sn.s) : 'One season so far') : 'Back to ink'); }, 600);
@@ -755,14 +975,15 @@
     fresh.forEach(k => unread.add(k));
     if (fresh.length) { Store.data.settings.notesSeen = all.map(noteKey).slice(-80); Store.save(); }
     let n = 0; const num = () => U.roman(++n);
-    const where = !sn ? 'with Cassius' : sn.before ? 'before the first season' : sn.fallow ? seasonName(sn.s) + ' · fallow' : sn.wk ? seasonName(sn.s) + ' · week ' + U.roman(sn.wk.n) : 'with Cassius';
+    const cu = (courseOf(g) || {}).cur, where = cu ? cu.subject.name + ' ' + U.roman(cu.n) : 'with Cassius';
     const top = h('<div class="top"><div><div class="eyebrow"></div><div class="title">Growth</div></div><button class="g-medal" type="button" aria-label="Cassius"><img src="icons/cassius.svg" alt=""></button></div>');
     set(top, '.eyebrow', U.DAY_NAMES[d.getDay()] + ' · ' + where);
     top.querySelector('.g-medal').onclick = cassiusSheet;
     v.appendChild(top);
     v.appendChild(lamp(g));
-    v.appendChild(beforeClass(g, num(), sn));
-    [sealCard(g, num), fromCassius(g, num), seasonCard(g, num, sn), mapCard(g, num), scrollCard(g, num, sn), glimpsesCard(g, num), portraitCard(g, num, sn), libraryCard(g, num), madeCard(g, num, sn)].forEach(x => { if (x) v.appendChild(x); });
+    v.appendChild(sitting(g, num(), sn));
+    // the parts in use, in order. The Season, Seal (but while it's live), Map, Glimpses, Portrait, creed and Made are kept in the file, not shown
+    [fromCassius(g, num), courseCard(g, num), talkCard(g, num, v), scrollCard(g, num, sn), changedCard(g, num), libraryCard(g, num)].forEach(x => { if (x) v.appendChild(x); });
 
     const foot = h('<div class="g-foot"><div class="rule"></div><p class="small"></p></div>');
     const up = g && g.updated ? new Date(g.updated) : null;
