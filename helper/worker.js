@@ -30,7 +30,7 @@
     TIME_ZONE     the owner's time zone (default America/New_York)
 */
 const DEFAULT_REPO = 'donaldfischer15-lang/opus-data';
-const VERSION = '1.27.4';
+const VERSION = '1.27.5';
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const PARTS = ['morning', 'workday', 'evening'];
 const Plan = {};
@@ -73,7 +73,7 @@ Plan.validate = function (p) {
       if (sids.has(x.id)) errors.push('supplement id "' + x.id + '" is used twice.'); sids.add(x.id);
       if (x.part != null && !PARTS.includes(x.part)) errors.push('supplement "' + x.id + '": part should be morning, workday or evening.');
       if (x.time != null && !TIME.test(x.time)) errors.push('supplement "' + x.id + '": time should look like "07:30" (or null).');
-      if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && x.days !== 'asneeded' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff", "asneeded" or a list like ["mon","thu"].');
+      if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && x.days !== 'asneeded' && !(Array.isArray(x.days) && x.days.every(d => DAYS.includes(d)))) errors.push('supplement "' + x.id + '": days should be "all", "workdays", "daysoff", "asneeded" or a list like ["mon","thu"].');
       if (x.since != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.since)) errors.push('supplement "' + x.id + '": since should be the date it was started, like "2026-11-18" (or null).');
       if (x.nutrients != null) { if (typeof x.nutrients !== 'object' || Array.isArray(x.nutrients)) errors.push('supplement "' + x.id + '": nutrients should be an object like { "magnesium": 200 } (per dose), or null.'); else for (const k of Object.keys(x.nutrients)) { if (!MICROS.includes(k)) errors.push('supplement "' + x.id + '": nutrients has "' + k + '"; use ' + MICROS.join(', ') + '.'); else if (x.nutrients[k] != null && !(Number(x.nutrients[k]) >= 0)) errors.push('supplement "' + x.id + '": nutrients.' + k + ' should be a number (or null).'); } }
       if (x.label != null && !(x.label && typeof x.label === 'object' && Array.isArray(x.label.facts) && x.label.facts.every(q => q && typeof q.name === 'string' && q.name.trim() && Number(q.amount) >= 0 && /^(mg|mcg|g|IU)$/.test(q.unit || '')))) errors.push('supplement "' + x.id + '": label should be { "serving": "1 capsule", "servings": 240, "facts": [{ "name": "Magnesium", "amount": 200, "unit": "mg" }] } with unit mg, mcg, g or IU (or null).');
@@ -98,7 +98,7 @@ Plan.validate = function (p) {
             if (x.id === 'photos' || hids.has(x.id)) errors.push('hair id "' + x.id + '" is used twice (or is "photos", which is taken).'); hids.add(x.id);
             if (x.part != null && !PARTS.includes(x.part)) errors.push('hair "' + x.id + '": part should be morning, workday or evening.');
             if (x.time != null && !TIME.test(x.time)) errors.push('hair "' + x.id + '": time should look like "19:30" (or null).');
-            if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => U.DAYS.includes(d)))) errors.push('hair "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["sun"].');
+            if (x.days != null && x.days !== 'all' && x.days !== 'workdays' && x.days !== 'daysoff' && !(Array.isArray(x.days) && x.days.every(d => DAYS.includes(d)))) errors.push('hair "' + x.id + '": days should be "all", "workdays", "daysoff" or a list like ["sun"].');
             if (x.emptied != null && !/^\d{4}-\d{2}-\d{2}$/.test(x.emptied)) errors.push('hair "' + x.id + '": emptied should be the date it ran out (or null).');
           });
         }
