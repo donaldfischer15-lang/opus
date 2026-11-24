@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.41.2': [['growth', 'Fixed: Answer in writing on the sitting did nothing when Listen was there. It opens the answer sheet again.']],
     '1.41.1': [['settings', 'Fixed: plan changes from Grok and Cassius failed to save since Monday night. They save again.']],
     '1.41.0': [['money', 'Tap a bill in Before payday to say it already came out, from one of your accounts or another way, like a card or Apple Cash. Opus stops holding it back right away, and Grok can mark one the same way.']],
     '1.40.2': [['money', 'Free cash lists your accounts as a small ledger: each balance on its own line with when it was read, money on its way in gold, and money that landed shown on the account it landed in. Before payday now lists what’s still held back even after its due day, until it comes out.']],

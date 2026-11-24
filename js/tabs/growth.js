@@ -160,9 +160,11 @@
         const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans)); if (n) b.appendChild(noteBox(n, ans ? 'Cassius on your answer' : 'Cassius on this'));
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
         const btns = h('<div class="btns">' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
+        // keep hold of the answer button itself: Listen and Talk go in front of it, so its place in the row moves
+        const wb = btns.firstElementChild;
         btns.insertBefore(talkLink('btn quiet', 'Talk it through'), btns.firstChild);
         if (Opus.voice && l.body) btns.insertBefore(Opus.voice.button(l, 'btn quiet', 'Listen'), btns.firstChild);
-        if (asks(l)) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'The sitting', tag: 'Cassius asks' }); };
+        if (wb) wb.onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'The sitting', tag: 'Cassius asks' }); };
         api.foot.appendChild(btns);
       }
     });
