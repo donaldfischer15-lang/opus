@@ -147,7 +147,46 @@
       const all = cashList(), i = all.indexOf(c);
       for (let j = (i < 0 ? all.length : i) - 1; j >= 0; j--) if (Array.isArray(all[j].held)) { l = all[j].held.filter(x => !x || !x.due || !/^\d{4}-\d{2}-\d{2}$/.test(x.due) || x.due >= c.date); break; }
     }
-    return (Array.isArray(l) ? l : []).filter(x => x && typeof x.amount === 'number');
+    return (Array.isArray(l) ? l : []).filter(x => x && typeof x.amount === 'number' && !clearedOf(x, c));
+  }
+  // a held bill the owner (or Grok) says already came out, from one of the accounts or from somewhere else (money.cleared)
+  const nameKey = x => String(x && x.name || '').trim().toLowerCase();
+  const clearedList = () => (Store.data.money.cleared || []).filter(m => m && !m.delete && m.name && m.at && !isNaN(tTime(m.at)));
+  function clearedOf(x, c) {
+    if (!c) return null;
+    const latest = c === latestCash();
+    return clearedList().filter(m => nameKey(m) === nameKey(x) && (typeof m.amount !== 'number' || Math.abs(m.amount - x.amount) < 1) &&
+      (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? (m.due ? m.due === x.due : Math.abs(U.daysBetween(U.parseKey(x.due), U.parseKey(tDay(m.at)))) <= 10) : Math.abs(U.daysBetween(U.parseKey(c.date), U.parseKey(tDay(m.at)))) <= 10) &&
+      (latest || tTime(m.at) <= readAt(c))).sort((a, b) => tTime(b.at) - tTime(a.at))[0] || null;
+  }
+  // bills this reading still held that have since come out
+  function clearedFrom(c) {
+    let l = c && c.held;
+    if (c && l == null) { const all = cashList(), i = all.indexOf(c); for (let j = (i < 0 ? all.length : i) - 1; j >= 0; j--) if (Array.isArray(all[j].held)) { l = all[j].held; break; } }
+    return (Array.isArray(l) ? l : []).filter(x => x && typeof x.amount === 'number').map(x => ({ x, m: clearedOf(x, c) })).filter(o => o.m);
+  }
+  function markPaid(x, from, after) {
+    const mo = Store.data.money, at = new Date().toISOString();
+    const m = { id: 'paid-' + at.slice(0, 16).replace(/[^0-9]/g, '') + '-' + nameKey(x).replace(/[^a-z0-9]+/g, '-').slice(0, 24), name: x.name, amount: x.amount, due: x.due || null, from: from || null, at, by: 'you' };
+    mo.cleared = (mo.cleared || []).concat([m]); Store.save();
+    ui.toast((x.name || 'It') + ' came out', { label: 'Undo', run: () => {
+      mo.cleared = (mo.cleared || []).filter(y => y.id !== m.id);
+      const d = Store.data.deleted = Store.data.deleted || {}; (d['money.cleared'] = d['money.cleared'] || {})[m.id] = new Date().toISOString();
+      Store.save(); after && after();
+    } });
+    after && after();
+  }
+  function paidSheet(x, after) {
+    const c = latestCash(), ac = accountsOf(c);
+    ui.sheet({ title: x.name || 'Held back', kicker: U.money(x.amount, { cents: true }) + (x.due ? ' · ' + dueLabel(x.due) : ''), render(api) {
+      const b = api.body;
+      b.appendChild(h('<p class="small">Already came out? Say where from, and Opus stops holding it back.</p>'));
+      const card = h('<div class="card"></div>');
+      const opt = (label, sub, from) => { const r = h('<button class="row" type="button" style="width:100%;text-align:left"><span class="tx"><b>' + U.esc(label) + '</b><small>' + U.esc(sub) + '</small></span></button>'); r.onclick = () => { api.close(true); markPaid(x, from, after); }; card.appendChild(r); };
+      ac.forEach(a => opt('From ' + (a.name || 'that account'), 'Its balance drops by ' + U.money(x.amount, { cents: true }) + ' until it is read again', a.name));
+      opt('Paid another way', 'A card, Apple Cash or anything outside these accounts. Free cash goes up by ' + U.money(x.amount, { cents: true }), 'elsewhere');
+      b.appendChild(card);
+    } });
   }
   // money on its way between the owner's own accounts: it has left one and not landed in the other, so it still counts as cash.
   // It stops being on its way once a landed mark (money.landed: from Grok, or the owner's tap) matches it, even if a later reading still lists it.
@@ -197,10 +236,16 @@
       if (a) { a.amount = Math.round((a.amount + t.amount) * 100) / 100; a.landed = (a.landed || 0) + t.amount; a.landedAt = m.at; }
       else own.push({ name: t.to || 'Account', amount: t.amount, landed: t.amount, landedAt: m.at, at: null });
     }
+    for (const { x, m } of clearedFrom(c)) {
+      if (!m.from || m.from === 'elsewhere') continue;
+      const a = own.find(y => String(y.name || '').toLowerCase() === String(m.from).trim().toLowerCase());
+      if (!a || (a.at && new Date(a.at).getTime() >= tTime(m.at))) continue;
+      a.amount = Math.round((a.amount - x.amount) * 100) / 100; a.paid = (a.paid || 0) + x.amount;
+    }
     return own;
   }
   // worked out from the accounts when money is on its way or an account was carried over; Grok's own numbers otherwise
-  const computed = c => !!c && (transitOf(c).length > 0 || landedOf(c).length > 0 || accountsOf(c).some(a => a.carried) || (typeof c.cash !== 'number' && accountsOf(c).length > 0));
+  const computed = c => !!c && (transitOf(c).length > 0 || landedOf(c).length > 0 || clearedFrom(c).length > 0 || accountsOf(c).some(a => a.carried) || (typeof c.cash !== 'number' && accountsOf(c).length > 0));
   function cashOf(c) {
     if (!c) return null;
     if (computed(c)) return U.sum(accountsOf(c).map(a => a.amount)) + U.sum(transitOf(c).map(x => x.amount));
@@ -668,7 +713,8 @@
       const old = a.at ? (Date.now() - new Date(a.at).getTime()) / 36e5 > 36 : !a.landed;
       const read = a.at || !a.landed ? '<span' + (old ? ' class="old"' : '') + '>' + U.esc(whenAcct(a)) + '</span>' : '';
       const came = a.landed ? '<span class="in">+' + U.esc(U.money(a.landed)) + ' landed ' + U.esc(whenAt({ at: a.landedAt, date: tDay(a.landedAt) })) + '</span>' : '';
-      return row('', a.name || 'Account', [read, came].filter(Boolean).join('<i>·</i>'), U.money(a.amount));
+      const went = a.paid ? '<span>\u2212' + U.esc(U.money(a.paid)) + ' paid since</span>' : '';
+      return row('', a.name || 'Account', [read, came, went].filter(Boolean).join('<i>·</i>'), U.money(a.amount));
     }).join('') + tr.map(x => row(' mv', 'On its way', U.esc((x.from || 'your account') + (x.to ? ' \u2192 ' + x.to : '') + sinceLabel(x, c).replace(', ', ' \u00b7 ')), '+' + U.money(x.amount))).join('') + '</div>';
   }
   // ", since Sat" once a transfer has been on its way for more than a day
@@ -708,6 +754,7 @@
       if (!computed(c) && typeof c.free === 'number' && typeof c.cash === 'number' && Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free) > 1) b.appendChild(h('<p class="small">Grok’s free cash differs from cash minus what’s listed by ' + U.money(Math.abs(c.cash - U.sum(held.map(x => x.amount)) - c.free)) + '. Ask Grok what else it held back.</p>'));
       if (c.note) {
         const since = landedOf(c).map(o => U.money(o.t.amount) + ' from ' + (o.t.from || 'your account') + ' landed in ' + (o.t.to || 'your account') + ' ' + whenAt({ at: o.m.at, date: tDay(o.m.at) }) + (o.m.by === 'you' ? ', marked by you' : ''));
+        clearedFrom(c).forEach(o => since.push(o.x.name + ' came out' + (o.m.from && o.m.from !== 'elsewhere' ? ' of ' + o.m.from : o.m.from === 'elsewhere' ? ', paid another way' : '') + ' ' + whenAt({ at: o.m.at, date: tDay(o.m.at) })));
         b.appendChild(h('<div class="g-take"><div class="tag">' + (c.by === 'grok' ? 'Grok’s note' : 'Your note') + '</div><div>' + U.esc(c.note) + '</div>' + (since.length ? '<div style="margin-top:8px;font-size:.9em;opacity:.75">Since then: ' + U.esc(since.join('; ')) + '.</div>' : '') + '</div>'));
       }
       const past = cashList().reverse().slice(1, 8);
@@ -794,7 +841,7 @@
     const short = shortfalls(c, items);
     const sec = h('<div class="sec"><div class="sh"><span class="r">I</span><span class="t">Before payday</span><span class="c num"></span></div><div class="card"></div></div>');
     const card = sec.querySelector('.card');
-    if (!items.length) { card.appendChild(h('<p class="empty">Grok lists what has to come out before payday when it updates your free cash.</p>')); return sec; }
+    if (!items.length) { const done = c && (Array.isArray(c.held) || clearedFrom(c).length); card.appendChild(h('<p class="empty">' + (done ? 'Nothing left to come out before payday.' : 'Grok lists what has to come out before payday when it updates your free cash.') + '</p>')); return sec; }
     sec.querySelector('.c').textContent = U.money(U.sum(items.map(x => x.amount)));
     short.forEach(sf => card.appendChild(h('<div class="acct-short"><b>Move ' + U.money(Math.ceil(sf.gap)) + (sf.from ? ' from ' + U.esc(sf.from) : '') + ' to ' + U.esc(sf.account) + ' by ' + U.esc(byLabel(sf.by)) + '</b><span>' + U.esc(sf.account) + ' has ' + U.money(sf.have, { cents: true }) + (sf.incoming ? ' with ' + U.money(sf.incoming) + ' on its way' : '') + ', and ' + U.esc(sf.bills) + ' need' + (sf.count === 1 ? 's' : '') + ' ' + U.money(sf.need, { cents: true }) + ' ' + U.esc(dueLabel(sf.due)) + '.</span></div>')));
     items.forEach(x => {
@@ -802,9 +849,10 @@
       const sf = x.account && short.find(y => y.account === x.account && y.names.includes(x.name));
       const late = x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) && x.due < today;
       const sub = [x.due ? dueLabel(x.due) + (late ? ', not out yet' : '') : '', x.account ? 'from ' + x.account : ''].filter(Boolean).join(' · ');
-      card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : late ? ';opacity:.55' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (sub ? '<small' + (sf ? ' style="color:var(--warn)"' : '') + '>' + U.esc(sub) + (sf ? ' · short' : '') + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
+      const rw = card.appendChild(h('<div class="row"><span class="tag" style="min-width:44px' + (soon ? ';color:var(--warn)' : late ? ';opacity:.55' : '') + '">' + (x.due && /^\d{4}-\d{2}-\d{2}$/.test(x.due) ? U.esc(U.DAY_NAMES[U.parseKey(x.due).getDay()].slice(0, 3)) : '—') + '</span><span class="tx"><b>' + U.esc(x.name || 'Held back') + '</b>' + (sub ? '<small' + (sf ? ' style="color:var(--warn)"' : '') + '>' + U.esc(sub) + (sf ? ' · short' : '') + '</small>' : '') + '</span><span class="num">' + U.money(x.amount, { cents: true }) + '</span></div>'));
+      if (fromReading) { rw.setAttribute('role', 'button'); rw.tabIndex = 0; rw.style.cursor = 'pointer'; rw.onclick = () => paidSheet(x, () => Opus.refresh && Opus.refresh()); }
     });
-    if (src) card.appendChild(h('<div class="row" style="min-height:0;padding:8px 0 10px"><span class="tx"><small>' + U.esc(src) + '</small></span></div>'));
+    if (src) card.appendChild(h('<div class="row" style="min-height:0;padding:8px 0 10px"><span class="tx"><small>' + U.esc(src) + (fromReading ? ' · tap one that already came out' : '') + '</small></span></div>'));
     return sec;
   }
   const days0 = d => U.daysBetween(new Date(), d) === 0;
