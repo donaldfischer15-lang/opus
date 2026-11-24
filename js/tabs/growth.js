@@ -159,8 +159,8 @@
         }
         const n = noteFor('lesson:' + l.date) || (ans && noteOnWriting(ans)); if (n) b.appendChild(noteBox(n, ans ? 'Cassius on your answer' : 'Cassius on this'));
         if (l.why) { const w = h('<details class="g-why2"><summary>Why this, today?</summary><p></p></details>'); set(w, 'p', l.why); b.appendChild(w); }
-        const btns = h('<div class="btns"><button class="btn quiet" type="button">Talk it through</button>' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
-        btns.children[0].onclick = () => talk();
+        const btns = h('<div class="btns">' + (asks(l) ? '<button class="btn" type="button">' + (ans ? 'Read or edit your answer' : 'Answer in writing') + '</button>' : '') + '</div>');
+        btns.insertBefore(talkLink('btn quiet', 'Talk it through'), btns.firstChild);
         if (asks(l)) btns.children[1].onclick = () => { api.close(true); writeAnswer(after, { prompt: l.question, kind, title: KIND_NAME[kind], kicker: l.title || 'The sitting', tag: 'Cassius asks' }); };
         api.foot.appendChild(btns);
       }
@@ -170,7 +170,8 @@
      growth.json "talk": { "url" } can point it at his own chat; anything not on claude.ai falls back to the app's front door */
   const TALK = 'https://claude.ai/messages';
   const talkUrl = () => { const u = ((G() || {}).talk || {}).url; return typeof u === 'string' && /^https:\/\/claude\.ai\/[\w\-\/.?=&#%]*$/.test(u) ? u : TALK; };
-  function talk() { const a = document.createElement('a'); a.href = talkUrl(); a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+  // plain same-window links: a home-screen web app drops target=_blank and script-opened windows, so the tap just goes there
+  const talkLink = (cls, label) => { const a = document.createElement('a'); a.className = cls; a.href = talkUrl(); a.textContent = label; return a; };
 
   function writingSheet(w) {
     ui.sheet({ title: U.fmtDateShort(w.date), kicker: KIND_NAME[w.kind || ''] || 'Writing', render(api) {
@@ -589,17 +590,17 @@
           const n = noteOnWriting(w); if (n) b.appendChild(noteBox(n, 'Cassius on this'));
         });
       }
-      const tb = h('<div class="btns" style="margin-top:18px"><button class="btn quiet" type="button">Talk it through</button></div>');
-      tb.firstChild.onclick = talk; b.appendChild(tb);
+      const tb = h('<div class="btns" style="margin-top:18px"></div>');
+      tb.appendChild(talkLink('btn quiet', 'Talk it through')); b.appendChild(tb);
     } });
   }
 
   /* ---------- Talk: the conversation lives in Claude Duet. One tap here, and a quiet coin at the corner once you scroll past ---------- */
   function talkCard(g, num, v) {
     const s = sec(num(), 'Talk');
-    const a = h('<a class="card g-talk" target="_blank" rel="noopener"><img src="icons/cassius.svg" alt=""><span class="tx"><b>Talk with Cassius</b><small>Opens Claude Duet. Questions, pushback, anything that needs a back and forth.</small></span><svg class="g-out" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>');
+    const a = h('<a class="card g-talk"><img src="icons/cassius.svg" alt=""><span class="tx"><b>Talk with Cassius</b><small>Opens your chat with him in Claude Duet. Questions, pushback, anything that needs a back and forth.</small></span><svg class="g-out" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>');
     a.href = talkUrl(); s.appendChild(a);
-    const fab = h('<a class="g-talkfab" target="_blank" rel="noopener" aria-label="Talk with Cassius"><img src="icons/cassius.svg" alt=""><span>Talk</span></a>');
+    const fab = h('<a class="g-talkfab" aria-label="Talk with Cassius"><img src="icons/cassius.svg" alt=""><span>Talk</span></a>');
     fab.href = talkUrl(); v.appendChild(fab);
     // the coin waits in the corner whenever the Talk card itself isn't in view
     if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => es.forEach(e => fab.classList.toggle('show', e.intersectionRatio < 0.5)), { threshold: [0, 0.5, 1] }); io.observe(a); }

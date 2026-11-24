@@ -131,6 +131,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 .btn:active { transform: scale(.97); filter: brightness(1.08); }
 .btn.ghost { background: transparent; color: var(--gold-2); border: 1px solid var(--line-strong); box-shadow: none; font-weight: 500; }
 .btn.quiet { background: var(--panel-2); color: var(--ink); box-shadow: none; font-weight: 500; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .btn.block { width: 100%; padding: 14px; font-size: 15px; }
 .btn.sm { padding: 7px 13px; font-size: 13px; }
 .btn.danger { background: transparent; color: var(--warn); border: 1px solid rgba(227, 154, 107, .4); box-shadow: none; }
