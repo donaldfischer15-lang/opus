@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.43.0': [['today', 'Opus V2 is now Opus. Up next follows the clock, Not today takes something off the day, rows swipe, Still open and the Tomorrow card keep you ahead, and every lift, meal, bill and supplement has its own page. Your data, sync, reminders and Grok carry on as before.']],
     '1.42.0': [['growth', 'The sitting opens with Your task: the question, about how long it takes, and one plain line on what to do. Cassius’s letter follows, and your answer sits at the bottom once you’ve written it.']],
     '1.41.2': [['growth', 'Fixed: Answer in writing on the sitting did nothing when Listen was there. It opens the answer sheet again.']],
     '1.41.1': [['settings', 'Fixed: plan changes from Grok and Cassius failed to save since Monday night. They save again.']],

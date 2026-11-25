@@ -108,6 +108,7 @@
     const cur = currentBlock(s);
 
     b.appendChild(headerCard(s, cur));
+    { const ln = Opus.v2 && Opus.v2.lastNote && !s.logged.length ? Opus.v2.lastNote(s) : null; if (ln) b.appendChild(ln); }
     { const wl = s.date === U.key() && Opus.whoop && Opus.whoop.trainLine(new Date(), s, () => renderLogger(api)); if (wl) b.appendChild(wl); }
     if ((w.warmup || []).length) b.appendChild(checklist('Warm-up', w.warmup, s.warm));
 

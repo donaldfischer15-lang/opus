@@ -20,6 +20,7 @@
   const FLOW = { workout: 'Start', writing: 'Write', review: 'Begin', money: 'Open', prep: 'Open', weigh: 'Log', foodlog: 'Log' };
 
   function updateArch(root, items, d) {
+    if (Opus.v2) items = Opus.v2.live(items, d); // "not today" takes an item out of the day's count
     const n = items.length, filled = items.filter(it => Plan.isChecked(d, it.id)).length;
     const hero = root.querySelector('.hero');
     hero.querySelector('.n').textContent = filled;
@@ -27,7 +28,7 @@
     const lit = new Set(order.slice(0, filled));
     hero.querySelectorAll('.st').forEach((s, i) => { s.style.opacity = lit.has(i) ? 1 : .13; s.style.filter = lit.has(i) ? 'drop-shadow(0 0 3px rgba(242,211,160,.5))' : ''; });
     hero.classList.toggle('complete', n > 0 && filled === n);
-    hero.querySelector('.lede').textContent = n > 0 && filled === n ? 'Keystone set. The day is built.' : (Plan.p.profile || {}).motto || '';
+    hero.querySelector('.lede').textContent = n > 0 && filled === n ? 'Keystone set. The day is built.' : (Opus.v2 && Opus.v2.lede && Opus.v2.lede(d)) || (Plan.p.profile || {}).motto || '';
     root.querySelectorAll('.sec[data-part]').forEach(sec => {
       const ids = items.filter(it => it.part === sec.dataset.part).map(it => it.id);
       sec.querySelector('.c').textContent = ids.filter(id => Plan.isChecked(d, id)).length + ' / ' + ids.length;
@@ -48,6 +49,7 @@
       else if (nx.open) nx.open(() => refreshInPlace(root));
       else { Plan.setChecked(d, nx.id, true); ui.buzz(10); refreshInPlace(root); }
     };
+    if (Opus.v2) Opus.v2.dressNext(el, nx, d);
     if (old) old.replaceWith(el); else return el;
   }
 
@@ -67,8 +69,9 @@
     v.appendChild(top);
     const sw = Opus.sync && Opus.sync.noticeEl && Opus.sync.noticeEl(); if (sw) v.appendChild(sw);
 
-    const filled = items.filter(it => Plan.isChecked(d, it.id)).length;
-    const hero = h('<div class="hero">' + ui.arch(items.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + items.length + ' DONE</div></div><div class="lede"></div></div>');
+    const liveItems = Opus.v2 ? Opus.v2.live(items, d) : items;
+    const filled = liveItems.filter(it => Plan.isChecked(d, it.id)).length;
+    const hero = h('<div class="hero">' + ui.arch(liveItems.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + liveItems.length + ' DONE</div></div><div class="lede"></div></div>');
     v.appendChild(hero);
     const whc = Opus.whoop && Opus.whoop.todayCard(d); if (whc) v.appendChild(whc);
     const mc = Opus.memory && Opus.memory.todayCard(d); if (mc) v.appendChild(mc);
@@ -77,6 +80,7 @@
     if (rv && rv.change && U.daysBetween(U.parseKey(rv.weekOf), d) < 8) v.appendChild(h('<div class="change-line">This week’s change: <b>' + U.esc(rv.change) + '</b></div>'));
 
     v.appendChild(nextCard(v, items, d));
+    if (Opus.v2) Opus.v2.afterNext(v, d);
 
     const numerals = { morning: 'I', workday: 'II', evening: 'III' };
     for (const part of Plan.PARTS) {
@@ -98,12 +102,14 @@
         row.querySelector('.ck').onclick = e => { e.stopPropagation(); toggle(); };
         row.onclick = () => (meal ? Opus.food.eatSheet(d, it) : multi ? Opus.supps.takeSheet(d, it, () => refreshInPlace(v)) : it.open ? it.open(() => refreshInPlace(v)) : flow ? openFlow(it, () => refreshInPlace(v)) : toggle());
         row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); } };
+        if (Opus.v2) Opus.v2.dressRow(row, it, d);
         card.appendChild(row);
       }
       v.appendChild(sec);
     }
     if (!items.length) v.appendChild(h('<div class="card pad empty"><div class="serif-h">A clear day</div>Nothing is planned for today. Add routine items in your plan file.</div>'));
 
+    if (Opus.v2) Opus.v2.beforeWeek(v, d);
     // the week
     const isRvDay = (p.review || {}).day === U.dayKey(d);
     const ws = U.key(U.weekStart(d));
@@ -126,6 +132,7 @@
     const trRow = h('<div class="row tap" style="flex-direction:column;align-items:stretch;gap:10px"><div style="display:flex;align-items:center;gap:14px"><span class="tx"><b>Trends</b><small>Body weight, lifts and debt over time</small></span>' + ui.icon('chev', 'chev ico') + '</div>' + tr + '</div>');
     trRow.onclick = () => trendsSheet();
     wc.appendChild(trRow);
+    if (Opus.v2 && Opus.v2.annalsRow) wc.appendChild(Opus.v2.annalsRow());
     v.appendChild(week);
     if (Opus.sync && Opus.sync.line()) {
       const sl = h('<p class="syncln" role="status"><i></i><span></span></p>');
@@ -222,7 +229,9 @@
     return { pct: total ? Math.round(done / total * 100) : null, planned, wk, missed: top, weight: ww.length ? ww[ww.length - 1].lb : null, prevW: prevW ? prevW.lb : null };
   }
   function reviewSheet(after) {
-    const ws = U.weekStart(new Date()), wsk = U.key(ws);
+    let ws = U.weekStart(new Date());
+    if (U.key(ws) === U.key() && (Plan.p.review || {}).day === U.dayKey(new Date())) ws = U.addDays(ws, -7); // reviewing on the week's first day looks back at the week that ended
+    const wsk = U.key(ws);
     const qs = (Plan.p.review || {}).questions || ['What worked?', 'What slipped?', 'One change for next week'];
     const prev = (Store.data.reviews || []).filter(r => r.weekOf < wsk).sort((a, b) => b.weekOf.localeCompare(a.weekOf))[0];
     ui.sheet({

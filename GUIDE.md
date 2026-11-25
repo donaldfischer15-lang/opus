@@ -613,6 +613,7 @@ Training shows on the Body tab (its id is still `train`), under WHOOP's recovery
 - `rounds`, `work`, `rest` (seconds) on conditioning turn on the interval timer.
 - `base` on an exercise (a number, lb) is what a plate-loaded machine weighs with no plates on it. It turns on plate math for that exercise in the logger: weights are logged as the total, and Opus shows the plates per side. Barbell lifts use `bar` and need no `base`.
 - Exercises the owner adds in the logger are saved into `exercises` with an id made from the name (e.g. `suitcase-march`). Keep them.
+- `adjust` changes one dated session without touching the workout: `"adjust": { "2026-11-26": { "by": "Duet", "why": "Short sleep and low recovery", "sets": { "back-squat": -1 }, "note": "Keep the weights, drop a set." } }`. `sets` adds (positive) or takes off (negative) sets per exercise id; a block keeps at least one set. The logger applies it when that day's session starts and says who changed it and why; the owner can tap Use the full session. Remove dates that have passed.
 
 Workouts and weigh-ins the owner tells you about go in the outbox `workouts` and `weights` (section 4).
 

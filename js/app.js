@@ -30,6 +30,7 @@
     if (!registry[id] || !enabledTabs().includes(id)) id = 'today';
     const changed = id !== current;
     current = id;
+    if (Opus.v2) Opus.v2.light();
     try { if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id); } catch (e) {}
     const v = view();
     v.innerHTML = '';
