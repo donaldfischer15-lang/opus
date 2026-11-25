@@ -24,11 +24,12 @@
     ['money', 'Money check-in', 'At check-in time'],
     ['review', 'Week ahead and review', 'Sunday morning’s week ahead, and the weekly review'],
     ['growth', 'Writing and lessons', 'At writing time'],
+    ['oneoffs', 'One-offs', 'At each step that has a time, and when a step’s timer is up'],
     ['day', 'Everything else on your day', 'Any other item that has a time'],
     ['changes', 'Changes from Grok and Cassius', 'Right when they save one']
   ];
   const KIND_OF = { meal: 'meals', prep: 'meals', workout: 'workouts', supp: 'supps', weigh: 'weigh', home: 'home', pet: 'pets', money: 'money', review: 'review', writing: 'growth', lesson: 'growth' };
-  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'train', needling: 'train', hairphotos: 'train', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', day: 'today', calendar: 'today' };
+  const TAB_OF = { meals: 'food', workouts: 'train', supps: 'today', weigh: 'train', needling: 'train', hairphotos: 'train', home: 'home', pets: 'home', bills: 'money', money: 'money', review: 'today', growth: 'growth', oneoffs: 'today', day: 'today', calendar: 'today' };
 
   const st = () => { const s = Store.data.settings; s.notify = s.notify || { on: false, kinds: {} }; s.notify.kinds = s.notify.kinds || {}; return s.notify; };
   const kindOn = k => st().kinds[k] !== false; // every kind is on until switched off
@@ -61,6 +62,8 @@
     }
     // the hair routine's rest-day reminder and the monthly photo day
     if (Opus.hair) { try { Opus.hair.events(now, add); } catch (e) {} }
+    // one-off steps at their times
+    if (Opus.oneoffs) { try { Opus.oneoffs.events(now, add); } catch (e) {} }
     // bills the evening before, payday in the morning, pet care at 6 PM, the week ahead on its morning
     if (Opus.weekAhead) {
       const w = Opus.weekAhead.gather(now), w2 = Opus.weekAhead.gather(U.addDays(now, 7));

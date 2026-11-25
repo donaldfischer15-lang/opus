@@ -96,6 +96,7 @@
 
     const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
     let n = 2;
+    if (Opus.oneoffs) Opus.oneoffs.section(v, ROMAN[n++]);
     if (Opus.pets) Opus.pets.list().forEach(p => Opus.pets.section(v, ROMAN[n++], p));
 
     const all = items();

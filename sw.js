@@ -1,10 +1,10 @@
 /* Opus service worker: opens Opus from this phone first, so it opens at once even with no signal.
    Bump VERSION when files change: the new version downloads in the background and Opus switches to it. */
-const VERSION = 'opus-1.43.0';
+const VERSION = 'opus-1.44.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/opus.css',
   'js/core.js', 'js/training.js', 'js/ui.js', 'js/example-plan.js', 'js/app.js', 'js/changes.js', 'js/weekahead.js', 'js/notify.js', 'js/desk.js',
-  'js/body.js', 'js/pets.js', 'js/supps.js', 'js/tabs/today.js', 'js/foodsearch.js', 'js/snap.js', 'js/receipts.js', 'js/whoop.js', 'js/breath.js', 'js/hair.js', 'js/memory.js', 'js/listen.js', 'js/voice.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/growth.js', 'js/tabs/settings.js', 'js/sync.js', 'js/v2.js', 'js/v2b.js', 'js/v2c.js', 'js/v2d.js', 'js/v2e.js', 'js/v2f.js', 'js/v2g.js',
+  'js/body.js', 'js/pets.js', 'js/supps.js', 'js/tabs/today.js', 'js/foodsearch.js', 'js/snap.js', 'js/receipts.js', 'js/whoop.js', 'js/breath.js', 'js/hair.js', 'js/memory.js', 'js/oneoffs.js', 'js/listen.js', 'js/voice.js', 'js/tabs/food.js', 'js/tabs/train.js', 'js/tabs/money.js', 'js/tabs/home.js', 'js/tabs/growth.js', 'js/tabs/settings.js', 'js/sync.js', 'js/v2.js', 'js/v2b.js', 'js/v2c.js', 'js/v2d.js', 'js/v2e.js', 'js/v2f.js', 'js/v2g.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/cassius.svg'
 ];
 self.addEventListener('install', e => {

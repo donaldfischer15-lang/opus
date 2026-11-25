@@ -18,7 +18,7 @@ This first part (the core) is the rules every helper needs. Each tab has its own
 | 8. WHOOP | `"whoop"` | sleep, recovery and strain |
 | 9. Food | `"food"` | meals, portions, macros, saved foods, food eaten |
 | 10. Training | `"training"` | workouts, exercises, progression, plate math |
-| 11. Home and pets | `"home"` | home jobs, pets and pet care |
+| 11. Home and pets | `"home"`, `"oneoffs"` | home jobs, pets and pet care, one-offs (step-by-step lists for things done once) |
 | 12. Health | `"health"` | supplements, blood tests, daily amounts |
 | 13. Good requests | `"requests"` | examples of what the owner asks and what to do |
 
@@ -127,6 +127,7 @@ Don't save guesses. If one detail is missing (an amount, a date), save what you 
   "training": { ... },
   "money":    { ... },
   "home":     { "items": [ ... ] },
+  "oneoffs":  [ ... ],
   "mind":     { "writing": { ... } },
   "review":   { ... }
 }
@@ -648,6 +649,35 @@ Each pet gets its own section on Home and a profile. Everything except `id` and 
 - **Pet care (`pets`)**: `id` is exactly `date:pet:care`, using ids from `home.pets`. Weigh-ins use care `"weight"` with `lb`; vet visits use `"vet"` with a one-line `note`. If the owner mentions a care job the pet doesn't have yet, add it to that pet's `care` in the plan first.
 
 ---
+
+### One-offs (`oneoffs`)
+
+A one-off is anything the owner does once and wants laid out step by step: a recipe for one night, a move, a trip, a repair, a form to get through. They live in the plan as `oneoffs`, a list. Each part with a date shows on the Today tab that day (and for up to three days after, while it still has open steps); a part with no date shows on Today until it is done. Once every step is ticked, it drops off Today. The Home tab lists them all, and the owner can add or edit one there.
+
+```json
+"oneoffs": [
+  { "id": "fix-the-fence", "title": "Fix the back fence",
+    "note": "optional line shown at the top",
+    "since": "2026-11-25",
+    "lists": [ { "id": "buy", "title": "What to buy", "items": ["4 posts", "Concrete mix: 2 bags"] } ],
+    "parts": [
+      { "id": "sat", "label": "Saturday: posts", "date": "2026-11-28", "time": "09:00", "note": "optional",
+        "steps": [
+          { "id": "dig", "when": "9:00 am", "time": "09:00", "text": "Dig out the two broken posts.", "sub": ["Keep the brackets."] },
+          { "id": "set", "text": "Set the new posts and pour the mix.", "amount": "2 bags", "timer": 20, "note": "optional" }
+        ] }
+    ],
+    "notes": ["Anything worth keeping in mind."] }
+]
+```
+
+- `id`s are short and stable: ticks are saved against `oneoff:<one-off id>:<part or list id>:<step id or item number>`, so keep ids when you edit, or the owner's ticks are lost. Ticks sit in logs `checks` under the part's `date` (lists and undated parts use `since`, or the earliest part date).
+- `lists` are plain tick lists (what to buy, what to pack). Leave it out if there is none.
+- A part's `date` is optional; `time` ("HH:MM", 24-hour) is optional too.
+- A step needs `text`. `when` is shown exactly as written ("7:00–7:30 am", "~2:30 pm", "after lunch"). `time` ("HH:MM") is the clock time used to order steps and to send a notification at that time; set it only when the source gives a clock time. `sub` is a list of smaller steps under it. `amount` is a short quantity shown before the text. `timer` is minutes, for a step the source gives a duration; the owner taps it to start a countdown.
+- `done: true` puts a one-off away; the owner can bring it back.
+- Write steps from the source exactly; never invent times, temperatures or amounts it doesn't give.
+- In the app the owner writes steps one per line: `[when] text {N min}`, a line starting `-` is a sub-step, `>` is a note, `amount | text` gives an amount.
 
 ## 12. Health
 

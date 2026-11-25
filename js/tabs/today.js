@@ -81,6 +81,7 @@
 
     v.appendChild(nextCard(v, items, d));
     if (Opus.v2) Opus.v2.afterNext(v, d);
+    if (Opus.oneoffs) Opus.oneoffs.todayCard(v, d);
 
     const numerals = { morning: 'I', workday: 'II', evening: 'III' };
     for (const part of Plan.PARTS) {

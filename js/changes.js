@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.44.0': [['home', 'One-offs: anything you do once, laid out step by step. A recipe, a move, a trip. Each part shows on Today on its day with the next step and a tick, and drops away once it is done. Steps can carry a time, a timer and sub-steps, and a list to tick off. Add or edit one under Home.']],
     '1.43.0': [['today', 'Opus V2 is now Opus. Up next follows the clock, Not today takes something off the day, rows swipe, Still open and the Tomorrow card keep you ahead, and every lift, meal, bill and supplement has its own page. Your data, sync, reminders and Grok carry on as before.']],
     '1.42.0': [['growth', 'The sitting opens with Your task: the question, about how long it takes, and one plain line on what to do. Cassius’s letter follows, and your answer sits at the bottom once you’ve written it.']],
     '1.41.2': [['growth', 'Fixed: Answer in writing on the sitting did nothing when Listen was there. It opens the answer sheet again.']],
