@@ -1661,3 +1661,10 @@ span.v2-seal.off { width: 42px; height: 42px; margin: 2px; flex: none; border-ra
   body[data-light="night"] .atmo .glow { animation: v2-lamp 7s ease-in-out infinite; }
   .v2-under.armed .r svg { animation: v2-pop .25s var(--ease); }
 }
+
+/* ===== Opus V2: what Grok adds ===== */
+.v2-notice { font-family: var(--serif); font-size: 19px; font-weight: 500; line-height: 1.25; }
+.v2-suprow .tx { gap: 6px; }
+.v2-bar { display: block; height: 6px; border-radius: 3px; background: rgba(214, 163, 94, .14); overflow: hidden; }
+.v2-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #9a6a3e, #f2d3a0); box-shadow: 0 0 6px rgba(242, 211, 160, .35); }
+.v2-low { background: none; color: var(--warn); border: 1px solid rgba(227, 154, 107, .6); box-shadow: none; }

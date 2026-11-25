@@ -202,19 +202,20 @@
   }
   function augurSheet() {
     ui.sheet({ title: 'The Augur', kicker: 'What the record says is coming', full: true, render(api) {
-      const b = api.body, rs = readings(), a = rs.filter(r => r.sealed), u = rs.filter(r => !r.sealed), nm = ['I', 'II', 'III']; let n = 0;
+      const b = api.body, rs = Opus.v2.readings(), a = rs.filter(r => r.sealed), u = rs.filter(r => !r.sealed), nm = ['I', 'II', 'III']; let n = 0;
       const sec = (t, c) => h('<div class="sec"><div class="sh"><span class="r">' + nm[n++] + '</span><span class="t">' + t + '</span><span class="c num">' + c + '</span></div></div>');
       if (a.length) { const s = sec('Sealed', a.length); a.forEach(r => s.appendChild(readingCard(r))); b.appendChild(s); }
       if (u.length) { const s = sec('Not yet read', u.length); u.forEach(r => s.appendChild(readingCard(r))); b.appendChild(s); }
-      const op = opened(), s3 = sec('The record', op.length ? op.filter(x => x.hit).length + ' of ' + op.length + ' came true' : '');
-      if (op.length) { const c = h('<div class="card"></div>'); op.forEach(x => c.appendChild(h('<div class="row v2-rec">' + seal(true, x.hit ? '✓' : '×') + '<span class="tx"><b>' + esc(x.name + ': ' + x.line) + '</b><small>Sealed ' + U.fmtDateShort(x.from) + ', opened ' + U.fmtDateShort(x.date) + ' with ' + esc(x.got) + '. ' + (x.hit ? 'It came true.' : 'It did not.') + '</small></span></div>'))); s3.appendChild(c); }
+      const op = Opus.v2.opened(), s3 = sec('The record', op.length ? op.filter(x => x.hit).length + ' of ' + op.length + ' came true' : '');
+      if (op.length) { const c = h('<div class="card"></div>'); op.forEach(x => c.appendChild(h('<div class="row v2-rec">' + seal(true, x.hit ? '✓' : '×') + '<span class="tx"><b>' + esc(x.name + ': ' + x.line) + '</b><small>' + (x.from ? 'Sealed ' + U.fmtDateShort(x.from) + ', opened ' : 'Opened ') + U.fmtDateShort(x.date) + ' with ' + esc(x.got) + '. ' + (x.hit ? 'It came true.' : 'It did not.') + '</small></span></div>'))); s3.appendChild(c); }
       else s3.appendChild(h('<div class="card pad"><p class="small">None opened yet. A reading is sealed when it is made and opened on its day, right or wrong. Both kinds are kept here.</p></div>'));
       b.appendChild(s3);
+      if (Opus.v2.noticedInto) Opus.v2.noticedInto(b);
       b.appendChild(h('<p class="small" style="padding:0 4px">Tap a lift to open its page. Nothing here is a promise. It is only what your own numbers point to.</p>'));
     } });
   }
   function augur(v) {
-    const rs = readings(), a = rs.filter(r => r.sealed), top = a[0];
+    const rs = Opus.v2.readings(), a = rs.filter(r => r.sealed), top = a[0];
     const s = h('<div class="sec v2-aug"><div class="sh"><span class="r">✦</span><span class="t">The Augur</span><span class="c">' + (a.length ? a.length + ' sealed' : 'listening') + '</span></div></div>');
     const c = h('<button type="button" class="card v2-reading tap">' + seal(!!top, top && top.mark) + '<div class="tx"><div class="vk"><span class="k">' + esc(top ? top.k : 'Nothing read yet') + '</span><span class="w">' + esc(top ? top.state : '') + '</span></div><div class="serif-h">' + esc(top ? top.line : 'The record is still short') + '</div>' + (top && top.draw ? top.draw.split('<div class="v2-plates">')[0] : '') + '<small>' + (a.length > 1 ? esc(a.slice(1).map(r => r.k + ': ' + r.line.replace(/^Debt-free /, '')).join(' · ')) : 'Readings appear as your logs grow.') + '</small></div></button>');
     c.onclick = () => augurSheet();
