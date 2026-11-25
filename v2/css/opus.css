@@ -1590,3 +1590,14 @@ span.v2-seal.off { width: 42px; height: 42px; margin: 2px; flex: none; border-ra
 .v2-home { color: var(--gold-2); }
 .v2-home svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(242, 211, 160, .45)); }
 .v2-days14 i { width: 15px; height: 15px; }
+
+/* ===== Opus V2: the small things ===== */
+.v2-first { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-family: var(--display); font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--btn-ink); background: linear-gradient(180deg, #f2d3a0, #c98a4c); vertical-align: 2px; box-shadow: 0 0 8px rgba(242, 211, 160, .35); }
+.v2-lastnote { display: flex; flex-direction: column; gap: 6px; background: linear-gradient(160deg, rgba(242, 211, 160, .08), rgba(242, 211, 160, .02) 60%); }
+.v2-aq { padding: 12px 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.v2-aq::-webkit-scrollbar { display: none; }
+.v2-aq .run { display: flex; width: max-content; min-width: 100%; justify-content: flex-end; padding: 0 10px; }
+.v2-aq .wk { width: 132px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.v2-aq svg { width: 132px; height: auto; display: block; }
+.v2-aq path[data-k] { cursor: pointer; }
+.v2-aq .wk span { font-family: var(--display); font-size: 10px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }

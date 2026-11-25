@@ -24,6 +24,7 @@
         const sets = w.sets.filter(x => x.ex === ex), rec = Opus.whoop && Opus.whoop.rec(w.date), dy = Opus.whoop && Opus.whoop.day(w.date);
         const bits = [w.name, rec ? 'recovery ' + rec.score + '%' : null, dy && dy.sleep && dy.sleep.asleep != null ? 'slept ' + Opus.whoop.hm(dy.sleep.asleep) : null].filter(Boolean).join(' · ');
         const row = h('<div class="row tap v2-story"><span class="tag wa-d">' + U.fmtDateShort(w.date) + '</span><span class="tx"><b class="num">' + esc(setsText(sets)) + '</b><small>' + esc(bits) + '</small>' + (w.note ? '<small class="v2-note">“' + esc(String(w.note).split('\n')[0]) + '”</small>' : '') + '</span>' + ui.icon('chev', 'chev ico') + '</div>');
+        if (V.firstIn && V.firstIn(w, ex)) row.querySelector('b').insertAdjacentHTML('beforeend', V.firstTag());
         row.onclick = () => dayPage(w.date);
         card.appendChild(row);
       }
@@ -52,7 +53,7 @@
       else if (f.weight) { sec('Body', '').appendChild(row('Weighed ' + U.wt(f.weight.lb) + ' lb', '', '')); }
       if (f.workouts.length) {
         const c = sec('Training', f.workouts.map(x => x.name).join(', '));
-        for (const wo of f.workouts) { const exs = [...new Set(wo.sets.map(s => s.ex))]; for (const ex of exs) c.appendChild(row(Plan.exercise(ex).name, setsText(wo.sets.filter(s => s.ex === ex)), '', () => liftPage(ex))); if (wo.note) c.appendChild(h('<div class="row"><span class="tx"><small class="v2-note">“' + esc(String(wo.note).split('\n')[0]) + '”</small></span></div>')); }
+        for (const wo of f.workouts) { const exs = [...new Set(wo.sets.map(s => s.ex))]; for (const ex of exs) { const r = row(Plan.exercise(ex).name, setsText(wo.sets.filter(s => s.ex === ex)), '', () => liftPage(ex)); if (V.firstIn && V.firstIn(wo, ex)) r.querySelector('b').insertAdjacentHTML('beforeend', V.firstTag()); c.appendChild(r); } if (wo.note) c.appendChild(h('<div class="row"><span class="tx"><small class="v2-note">“' + esc(String(wo.note).split('\n')[0]) + '”</small></span></div>')); }
       }
       const meals = f.items.filter(it => it.kind === 'meal' && it.meal), extras = f.eaten.filter(e => e.extra);
       if (meals.length || extras.length) {
@@ -79,6 +80,7 @@
         const days = []; for (let x = new Date(first); U.key(x) <= U.key(today); x = U.addDays(x, 1)) days.push(U.key(x));
         const facts = days.map(dayFacts), tr = facts.reduce((n, f) => n + f.workouts.length, 0);
         b.appendChild(h('<div class="stats"><div class="stat"><span class="v">' + days.length + '</span><span class="k">Days kept</span></div><div class="stat"><span class="v">' + tr + '</span><span class="k">Sessions</span></div><div class="stat"><span class="v">' + facts.reduce((n, f) => n + f.done, 0) + '</span><span class="k">Things done</span></div></div>'));
+        if (V.works) b.appendChild(V.works(dayPage));
         const head = h('<div class="v2-calh"><button type="button" class="icon-btn" aria-label="Earlier month">‹</button><span class="eyebrow">' + U.MONTHS[month.getMonth()] + ' ' + month.getFullYear() + '</span><button type="button" class="icon-btn" aria-label="Later month">›</button></div>');
         const [pv, nx] = head.querySelectorAll('button');
         pv.disabled = month <= new Date(first.getFullYear(), first.getMonth(), 1); nx.disabled = month >= new Date(today.getFullYear(), today.getMonth(), 1);
@@ -110,5 +112,5 @@
     const r = h('<div class="row tap"><span class="tx"><b>The Annals</b><small>Every day you’ve logged, and a page for every lift</small></span>' + ui.icon('chev', 'chev ico') + '</div>');
     r.onclick = () => annals(); return r;
   }
-  Object.assign(V, { liftPage, dayPage, annals, annalsRow });
+  Object.assign(V, { liftPage, dayPage, annals, annalsRow, dayFacts, firstDay });
 })();

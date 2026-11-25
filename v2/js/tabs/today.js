@@ -28,7 +28,7 @@
     const lit = new Set(order.slice(0, filled));
     hero.querySelectorAll('.st').forEach((s, i) => { s.style.opacity = lit.has(i) ? 1 : .13; s.style.filter = lit.has(i) ? 'drop-shadow(0 0 3px rgba(242,211,160,.5))' : ''; });
     hero.classList.toggle('complete', n > 0 && filled === n);
-    hero.querySelector('.lede').textContent = n > 0 && filled === n ? 'Keystone set. The day is built.' : (Plan.p.profile || {}).motto || '';
+    hero.querySelector('.lede').textContent = n > 0 && filled === n ? 'Keystone set. The day is built.' : (Opus.v2 && Opus.v2.lede && Opus.v2.lede(d)) || (Plan.p.profile || {}).motto || '';
     root.querySelectorAll('.sec[data-part]').forEach(sec => {
       const ids = items.filter(it => it.part === sec.dataset.part).map(it => it.id);
       sec.querySelector('.c').textContent = ids.filter(id => Plan.isChecked(d, id)).length + ' / ' + ids.length;
