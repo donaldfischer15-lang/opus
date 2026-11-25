@@ -1601,3 +1601,15 @@ span.v2-seal.off { width: 42px; height: 42px; margin: 2px; flex: none; border-ra
 .v2-aq svg { width: 132px; height: auto; display: block; }
 .v2-aq path[data-k] { cursor: pointer; }
 .v2-aq .wk span { font-family: var(--display); font-size: 10px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+
+/* ===== Opus V2: WHOOP wherever its numbers matter ===== */
+.v2-wh { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
+.v2-wh .wr-line { margin: 0; }
+.v2-adj { border-color: var(--line-strong); background: linear-gradient(160deg, rgba(242, 211, 160, .1), rgba(242, 211, 160, .02) 60%); }
+.v2-adj b { font-weight: 600; color: var(--gold-2); }
+.v2-adj em { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--ink-2); }
+.v2-cal .cd { position: relative; }
+.v2-cal .cd[class*="rb-"]::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(10, 8, 7, .6); }
+.v2-cal .cd.rb-green::after { background: #cfe0a0; }
+.v2-cal .cd.rb-yellow::after { background: #e8c56a; width: 5px; height: 5px; }
+.v2-cal .cd.rb-red::after { background: #e39a6b; border-radius: 1px; }

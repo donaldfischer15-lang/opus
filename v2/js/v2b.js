@@ -94,7 +94,8 @@
           const dt = new Date(month.getFullYear(), month.getMonth(), n), k = U.key(dt), inRange = k >= U.key(first) && k <= U.key(today);
           if (!inRange) { g.appendChild(h('<span class="cd off"><b>' + n + '</b></span>')); continue; }
           const f = dayFacts(k), lvl = f.share >= .85 ? 4 : f.share >= .6 ? 3 : f.share >= .3 ? 2 : f.share > 0 ? 1 : 0;
-          const c = h('<button type="button" class="cd l' + lvl + (k === U.key(today) ? ' now' : '') + '" aria-label="' + U.fmtDateShort(dt) + ', ' + f.done + ' of ' + f.items.length + ' done"><b>' + n + '</b><i>' + (f.workouts.length ? '<u class="t"></u>' : '') + (f.weight ? '<u></u>' : '') + (f.writing.length ? '<u></u>' : '') + '</i></button>');
+          const rc = Opus.whoop && Opus.whoop.rec(k), bd = rc ? Opus.whoop.band(rc.score) : '';
+          const c = h('<button type="button" class="cd l' + lvl + (k === U.key(today) ? ' now' : '') + (bd ? ' rb-' + bd : '') + '" aria-label="' + (rc ? 'recovery ' + rc.score + ' percent, ' : '') + U.fmtDateShort(dt) + ', ' + f.done + ' of ' + f.items.length + ' done"><b>' + n + '</b><i>' + (f.workouts.length ? '<u class="t"></u>' : '') + (f.weight ? '<u></u>' : '') + (f.writing.length ? '<u></u>' : '') + '</i></button>');
           c.onclick = () => dayPage(k); g.appendChild(c);
         }
         b.appendChild(g);
