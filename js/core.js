@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const Opus = (window.Opus = window.Opus || {});
-  Opus.VERSION = '1.44.0';
+  Opus.VERSION = '1.45.0';
 
   /* ---------- utilities ---------- */
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -410,7 +410,7 @@
       return { kind: 'sleep', title: 'Wind down', detail: 'That is the day. Lights out at ' + U.fmtTimeAP(s.lightsOut) + '.', time: s.lightsOut };
     }
   };
-  function lower1(s) { s = String(s || ''); return s && s[0] === s[0].toUpperCase() && !/^[A-Z]{2}/.test(s) ? s[0].toLowerCase() + s.slice(1) : s; }
+  function lower1(s) { s = String(s || ''); return s && s[0] === s[0].toUpperCase() && !/^[A-Z]{2}/.test(s) && !/^\w+ [A-Z]\b/.test(s) ? s[0].toLowerCase() + s.slice(1) : s; }
   function workoutSummary(w) {
     const b = (w.blocks || [])[0]; if (!b) return w.focus || '';
     const ex = Plan.exercise(b.ex);
@@ -432,6 +432,7 @@
     if (p.version !== 1) errors.push('"version" must be 1.');
     const s = p.schedule || {};
     for (const k of ['wake', 'lightsOut', 'workStart', 'workEnd', 'dayOffMidday', 'dayOffEvening']) if (s[k] != null && !TIME.test(s[k])) errors.push('schedule.' + k + ' should look like "05:00".');
+    if (s.daysOff != null && !(Array.isArray(s.daysOff) && s.daysOff.every(k => /^\d{4}-\d{2}-\d{2}$/.test(k)))) errors.push('schedule.daysOff should be a list of dates like "2026-11-27".');
     (s.workdays || []).forEach(d => { if (!DAYS.includes(d)) errors.push('schedule.workdays has "' + d + '"; use sun, mon, tue, wed, thu, fri, sat.'); });
     const ids = new Set();
     (p.routine || []).forEach((r, i) => {

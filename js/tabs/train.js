@@ -607,9 +607,9 @@
     v.appendChild(hs);
 
     // program overview
-    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">' + R() + '</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
+    const pg = h('<details class="fold sec"><summary class="sh"><span class="r">' + R() + '</span><span class="t">The program</span><span class="c">' + Object.keys(t.workouts || {}).filter(id => !id.startsWith('catch-up-')).length + ' sessions</span></summary><div class="card" style="margin-top:6px"></div></details>');
     const sched = t.schedule || {};
-    Object.entries(t.workouts || {}).forEach(([id, w]) => {
+    Object.entries(t.workouts || {}).filter(([id]) => !id.startsWith('catch-up-')).forEach(([id, w]) => {
       const days = Object.keys(sched).filter(k => sched[k] === id).map(k => U.DAY_NAMES[U.DAYS.indexOf(k)].slice(0, 3)).join(', ');
       pg.querySelector('.card').appendChild(h('<div class="row" style="align-items:flex-start"><span class="tx"><b>' + U.esc(w.name) + ' · ' + U.esc(w.focus || '') + '</b><small>' + (w.blocks || []).map(b => U.esc(Plan.exercise(b.ex).name) + ' ' + b.sets + '×' + repStr(b.reps)).join(' · ') + (w.conditioning ? ' · then ' + U.esc(w.conditioning.name.toLowerCase()) : '') + '</small></span><span class="tm">' + days + '</span></div>'));
     });
@@ -627,7 +627,7 @@
       api.body.appendChild(chips); api.body.appendChild(hint); sync();
       const c = h('<div class="card"></div>');
       const sched = (Plan.p.training || {}).schedule || {};
-      Object.keys((Plan.p.training || {}).workouts || {}).forEach(id => {
+      Object.keys((Plan.p.training || {}).workouts || {}).filter(id => !id.startsWith('catch-up-')).forEach(id => {
         const w = Plan.workout(id);
         const days = Object.keys(sched).filter(k => sched[k] === id).map(k => U.DAY_NAMES[U.DAYS.indexOf(k)].slice(0, 3)).join(', ');
         const r = h('<div class="row tap"><span class="tx"><b>' + U.esc(w.name) + (w.focus ? ': ' + U.esc(w.focus.toLowerCase()) : '') + '</b><small>' + (w.blocks || []).length + ' exercises' + (days ? ' · ' + days : '') + '</small></span>' + ui.icon('chev', 'chev ico') + '</div>');

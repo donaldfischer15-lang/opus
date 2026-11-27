@@ -254,6 +254,7 @@
 
   /* what's new in an Opus update, shown once on the tabs it touches */
   const RELEASES = {
+    '1.45.0': [['today', 'Days off: the button at the top left of Today marks any workday as off, today or weeks ahead. That day drops the workday plan.'], ['money', 'A day off comes off your next check: Money shows what the check should be, and why.'], ['train', 'Catch-up session: lifts that didn’t get logged in the last few days come back as one session on your next free day, leaving leg work out when squats are close. Not today skips it.']],
     '1.44.0': [['home', 'One-offs: anything you do once, laid out step by step. A recipe, a move, a trip. Each part shows on Today on its day with the next step and a tick, and drops away once it is done. Steps can carry a time, a timer and sub-steps, and a list to tick off. Add or edit one under Home.']],
     '1.43.0': [['today', 'Opus V2 is now Opus. Up next follows the clock, Not today takes something off the day, rows swipe, Still open and the Tomorrow card keep you ahead, and every lift, meal, bill and supplement has its own page. Your data, sync, reminders and Grok carry on as before.']],
     '1.42.0': [['growth', 'The sitting opens with Your task: the question, about how long it takes, and one plain line on what to do. Cassius’s letter follows, and your answer sits at the bottom once you’ve written it.']],

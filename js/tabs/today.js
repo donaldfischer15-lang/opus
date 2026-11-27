@@ -66,6 +66,7 @@
 
     const top = h('<div class="top"><span style="width:40px"></span><div class="eyebrow">' + dateLine + '</div><button class="icon-btn" type="button" aria-label="Settings">' + ui.icon('gear') + '</button></div>');
     top.querySelector('button').onclick = () => Opus.openSettings();
+    if (Opus.daysOff) Opus.daysOff.topButton(top, d);
     v.appendChild(top);
     const sw = Opus.sync && Opus.sync.noticeEl && Opus.sync.noticeEl(); if (sw) v.appendChild(sw);
 
@@ -73,6 +74,7 @@
     const filled = liveItems.filter(it => Plan.isChecked(d, it.id)).length;
     const hero = h('<div class="hero">' + ui.arch(liveItems.length, filled) + '<div class="big"><div class="n num">' + filled + '</div><div class="l">OF ' + liveItems.length + ' DONE</div></div><div class="lede"></div></div>');
     v.appendChild(hero);
+    if (Opus.daysOff) Opus.daysOff.todayLine(v, d);
     const whc = Opus.whoop && Opus.whoop.todayCard(d); if (whc) v.appendChild(whc);
     const mc = Opus.memory && Opus.memory.todayCard(d); if (mc) v.appendChild(mc);
 

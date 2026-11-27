@@ -570,6 +570,7 @@
     const until = t.payToday ? 'until next payday' : 'until payday ' + U.DAY_NAMES[t.pay.getDay()];
     card.appendChild(h('<div class="figure"><div class="v num"' + (short ? ' style="color:var(--warn);background:none;-webkit-text-fill-color:currentColor"' : '') + '>' + (short ? '−' + U.money(-v) : U.money(v)) + '</div><div class="k">Yours this week</div><div class="sub">' +
       (short ? 'Short ' + until + '. Hold off on extras.' : 'Spend it on anything, or put extra on debt. It covers you ' + until + '.') + '</div></div>'));
+    { const nc = Opus.daysOff && Opus.daysOff.checkLine(); if (nc) card.appendChild(nc); }
     if (!short && t.days > 1) card.appendChild(h('<div class="fc-chips" style="margin-top:2px"><span>about ' + U.money(t.yours / t.days) + ' a day</span><span>' + t.days + ' days left</span></div>'));
     const rows = h('<div style="margin-top:8px"></div>');
     const kv = (k, val, cls) => rows.appendChild(h('<div class="kv ' + (cls || '') + '"><span>' + k + '</span><span class="num">' + val + '</span></div>'));

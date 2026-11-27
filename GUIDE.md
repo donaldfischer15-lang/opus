@@ -142,6 +142,7 @@ Each tab's part of the plan is described in that tab's part of this guide: `food
 | `workdays` | list of day keys that are work days |
 | `workStart`, `workEnd` | on workdays, Part II (Workday) starts at `workStart`, Part III (Evening) at `workEnd` |
 | `dayOffMidday`, `dayOffEvening` | on days off, when Part II (Midday) and Part III start |
+| `daysOff` | optional list of dates (`"2026-11-27"`) the owner isn't working on a usual workday. A day in it is a day off everywhere: Today drops the workday plan (pack lunch, Part II becomes Midday), a missed lift can be caught up that day (section 10), and Money takes it off the next check (section 2). The owner marks them with the Days off button at the top left of Today. Add one when the owner tells you about a day off; dates more than 45 days old are dropped. |
 
 ### routine (the daily checklist on Today)
 Each item: `{ "id", "title", "part", "time", "days", "kind", "meal", "detail", "daysOff" }`
@@ -202,6 +203,7 @@ Opus also adds these to Today by itself: home items due that day, food prep on `
 - `oneOff` marks single purchases the owner chose to leave out of the average week, keyed `week_ending|store in lower case|amount with 2 decimals` (for example `2026-11-12|hardware store|42.50`). The owner sets these on the phone; don't add or remove them.
 - Take-home on Money is the average of the last 4 logged paychecks. The debt-free date and each debt's payoff month follow the owner's pace: the average of `debtPayments` (to counted debts, not bills) over the last 4 logged weeks, or `plannedDebtPerWeek` until 2 weeks are logged. So log every debt payment in the money week, named as the debt is named here.
 - `cushion`: cash to keep before any extra debt payment (the owner's rule). Money shows when extra can go to debt.
+- **Next check**: when a workday in the week a check pays for is in `schedule.daysOff`, Money shows the next check lowered. A check pays for the Monday-to-Sunday week before payday's week; set `"payCovers": "this-week"` if it pays for payday's own week. Each day off comes off at `dayOffValue` (a number, dollars a day) if set, or the usual take-home split evenly across `schedule.workdays`. It is an estimate; the logged paycheck is what counts.
 - **Yours this week** (Money, section III) = today's Free cash − food until payday (the top of `food.budgetPerWeek`, per day) − this week's `plannedDebtPerWeek` (less any `debtPayments` already in the current money week). It is what the owner can spend on anything, or put toward debt as extra.
 - The plan's average week (shown under it) = take-home − bills (weekly share) − `plannedDebtPerWeek` − normal spending (average of the last 4 imported weeks; the grocery budget until then).
 - `dueDay` (optional) is the day of the month a bill comes out. Give it whenever you know it: the week ahead on Today lists bills by due day (dated `held` items in the latest `money.cash` come first), and it says when no bill has one.
@@ -614,6 +616,8 @@ Training shows on the Body tab (its id is still `train`), under WHOOP's recovery
 - `rounds`, `work`, `rest` (seconds) on conditioning turn on the interval timer.
 - `base` on an exercise (a number, lb) is what a plate-loaded machine weighs with no plates on it. It turns on plate math for that exercise in the logger: weights are logged as the total, and Opus shows the plates per side. Barbell lifts use `bar` and need no `base`.
 - Exercises the owner adds in the logger are saved into `exercises` with an id made from the name (e.g. `suitcase-march`). Keep them.
+- `legs: true` on an exercise marks it as loading the legs (squats, lunges, carries, calf raises). The catch-up session leaves these out when a session with a `legs` exercise comes within two days.
+- **Catch-up session**: on a free day (not a workday, days off included, and no planned session), sessions planned in the 6 days before that weren't logged are offered as one session: each missed session's first block, then the rest, then one conditioning piece. Its id is `catch-up-YYYY-MM-DD`. The owner can tap Not today. To write one by hand for a date, add `workouts["catch-up-YYYY-MM-DD"]` (same shape as any workout, plus an optional `why` line); it shows on that date as written, and is left out of the program list. Remove it once the date has passed.
 - `adjust` changes one dated session without touching the workout: `"adjust": { "2026-11-26": { "by": "Duet", "why": "Short sleep and low recovery", "sets": { "back-squat": -1 }, "note": "Keep the weights, drop a set." } }`. `sets` adds (positive) or takes off (negative) sets per exercise id; a block keeps at least one set. The logger applies it when that day's session starts and says who changed it and why; the owner can tap Use the full session. Remove dates that have passed.
 
 Workouts and weigh-ins the owner tells you about go in the outbox `workouts` and `weights` (section 4).
