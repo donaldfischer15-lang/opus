@@ -2,7 +2,9 @@
    day that's neither a workday nor a training day) offers one longer session that covers them.
    - Each missed workout's main lift comes first, then the rest of its work, then one conditioning piece.
    - If a leg day is coming within two days, anything marked "legs": true on the exercise is left out, so the legs stay fresh.
-   - A hand-written session for a date wins: plan training.workouts["catch-up-YYYY-MM-DD"] shows on that date as is.
+   - A hand-written session for a date wins: plan training.workouts["catch-up-YYYY-MM-DD"] shows on that date as is,
+     even on a training day, where it replaces the scheduled session for that one date.
+   - { "skip": true } under that id means no catch-up that date (the scheduled session, if any, stays).
    The session's id is "catch-up-" + its date, so the logger and history can always find it again. */
 (function () {
   'use strict';
@@ -65,16 +67,18 @@
   /* a free day: not a workday (days off count), no planned session */
   const free = d => !Plan.isWorkday(d) && !scheduled(d);
 
+  const ownRaw = d => (T().workouts || {})[PREFIX + U.key(d)];
+  function own(d) { const o = ownRaw(d); return o && !o.skip && (o.blocks || []).length ? Object.assign({ id: PREFIX + U.key(d), name: o.name || 'Catch-up' }, o) : null; }
+
   function forDate(d) {
-    const k = U.key(d), own = (T().workouts || {})[PREFIX + k];
-    if (own) return Object.assign({ id: PREFIX + k, name: own.name || 'Catch-up' }, own);
-    if (!free(d) || skipped(d)) return null;
+    const o = own(d); if (o) return o;
+    if (ownRaw(d) || !free(d) || skipped(d)) return null;
     return build(d);
   }
 
   // Train, Today and the lock screen all ask Plan which session a day has, and the logger asks by id
   const workoutFor0 = Plan.workoutFor, workout0 = Plan.workout;
-  Plan.workoutFor = function (d) { return workoutFor0.call(this, d) || forDate(d); };
+  Plan.workoutFor = function (d) { return own(d) || workoutFor0.call(this, d) || forDate(d); };
   Plan.workout = function (id) {
     const w = workout0.call(this, id); if (w) return w;
     if (String(id).startsWith(PREFIX)) { const k = String(id).slice(PREFIX.length); if (/^\d{4}-\d{2}-\d{2}$/.test(k)) return build(U.parseKey(k)); }
@@ -86,11 +90,10 @@
   function dress(v) {
     const d = new Date(), w = Plan.workoutFor(d);
     if (!w || !isCatch(w.id)) return;
-    const card = [...v.querySelectorAll('.next')].find(c => /Catch-up/.test((c.querySelector('.k') || {}).textContent || ''));
+    const card = [...v.querySelectorAll('.next')].find(c => ((c.querySelector('.k') || {}).textContent || '').toLowerCase().includes(String(w.name).toLowerCase()));
     if (!card) return;
     if (w.why) card.querySelector('.body').appendChild(h('<div class="s cu-why">' + U.esc(w.why) + '</div>'));
-    const own = !!(T().workouts || {})[w.id];
-    if (!own) {
+    if (!ownRaw(d)) {
       const sk = h('<button class="link cu-skip" type="button">Not today</button>');
       sk.onclick = () => { Plan.setChecked(d, 'catch-up-skip', true); ui.toast('Catch-up skipped'); Opus.refresh(); };
       card.appendChild(sk);
